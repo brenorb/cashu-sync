@@ -10,6 +10,7 @@ import { canonicalJson } from "src/sync/validation";
 
 export interface SnapshotRelay {
   queryCurrent(): Promise<Event | null>;
+  queryRecent(limit: number): Promise<Event[]>;
   publish(event: Event): Promise<RelayPublishResult>;
 }
 
@@ -100,6 +101,7 @@ export type SnapshotSyncCoordinatorOptions = {
 
 /** Coordinates opaque relay CAS with one atomic local snapshot repository. */
 export class SnapshotSyncCoordinator {
+  private static readonly RETAINED_HISTORY_LIMIT = 8;
   private readonly relay: SnapshotRelay;
   private readonly repository: SnapshotRepository;
   private readonly crypto: SnapshotCrypto;
@@ -149,7 +151,10 @@ export class SnapshotSyncCoordinator {
       );
     }
 
-    const current = await this.relay.queryCurrent();
+    const recent = await this.relay.queryRecent(
+      SnapshotSyncCoordinator.RETAINED_HISTORY_LIMIT
+    );
+    const current = recent[0] ?? null;
     if (current === null) {
       if (!isPristine(local)) {
         throw new SnapshotSyncCoordinatorError(
@@ -159,15 +164,82 @@ export class SnapshotSyncCoordinator {
       }
       return { status: "empty" };
     }
-    return this.applyIncoming(current, local, mode);
+    let decrypted: SnapshotV0 | undefined;
+    if (mode === "normal" && !isPristine(local)) {
+      const incoming = this.decryptRemote(current);
+      decrypted = incoming;
+      if (incoming.revision > local.revision + 1) {
+        this.verifyRetainedPath(recent, local, current, incoming);
+        await this.applyLocal(incoming, current.id);
+        return {
+          status: "applied",
+          mode: "child",
+          eventId: current.id,
+          revision: incoming.revision,
+        };
+      }
+    }
+    return this.applyIncoming(current, local, mode, decrypted);
+  }
+
+  private verifyRetainedPath(
+    recent: Event[],
+    local: SnapshotV0,
+    current: Event,
+    incoming: SnapshotV0
+  ): void {
+    const byId = new Map(recent.map((event) => [event.id, event]));
+    let event = current;
+    let snapshot = incoming;
+
+    while (snapshot.previous_event_id !== local.previous_event_id) {
+      if (snapshot.revision <= local.revision + 1) {
+        throw new SnapshotSyncCoordinatorError(
+          "branch",
+          "retained relay history does not extend the remembered local head"
+        );
+      }
+      const predecessor = byId.get(snapshot.previous_event_id);
+      if (predecessor === undefined) {
+        throw new SnapshotSyncCoordinatorError(
+          "revision-gap",
+          "the remembered predecessor is no longer in retained relay history"
+        );
+      }
+      const predecessorSnapshot = this.decryptRemote(predecessor);
+      if (
+        predecessor.id !== snapshot.previous_event_id ||
+        predecessorSnapshot.revision !== snapshot.revision - 1
+      ) {
+        throw new SnapshotSyncCoordinatorError(
+          "invalid-remote",
+          "retained relay history has a broken revision chain"
+        );
+      }
+      event = predecessor;
+      snapshot = predecessorSnapshot;
+    }
+
+    if (
+      snapshot.revision !== local.revision + 1 ||
+      event.id === local.previous_event_id
+    ) {
+      throw new SnapshotSyncCoordinatorError(
+        snapshot.revision > local.revision + 1
+          ? "revision-gap"
+          : "invalid-remote",
+        "retained relay history does not advance exactly from local state"
+      );
+    }
   }
 
   private async applyIncoming(
     event: Event,
     local: SnapshotV0,
-    mode: "normal" | "bootstrap"
+    mode: "normal" | "bootstrap",
+    decrypted?: SnapshotV0
   ): Promise<PullOutcome> {
-    const incoming = this.decryptRemote(event);
+    const incoming = decrypted ?? this.decryptRemote(event);
 
     if (event.id === local.previous_event_id) {
       if (incoming.revision !== local.revision) {

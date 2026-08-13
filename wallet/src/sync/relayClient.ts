@@ -62,9 +62,12 @@ export type SyncRelayClientOptions = {
   webSocketFactory?: RelayWebSocketFactory;
 };
 
-type Operation = { type: "query" } | { type: "publish"; event: Event };
+type Operation =
+  | { type: "query" }
+  | { type: "query-recent"; limit: number }
+  | { type: "publish"; event: Event };
 
-type OperationResult = Event | null | RelayPublishResult;
+type OperationResult = Event | Event[] | null | RelayPublishResult;
 
 export class SyncRelayClient {
   private readonly relayUrl: string;
@@ -108,6 +111,16 @@ export class SyncRelayClient {
     return this.run({ type: "query" }) as Promise<Event | null>;
   }
 
+  queryRecent(limit: number): Promise<Event[]> {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new SyncRelayClientError(
+        "configuration",
+        "retained-history limit must be between 1 and 100"
+      );
+    }
+    return this.run({ type: "query-recent", limit }) as Promise<Event[]>;
+  }
+
   publish(event: Event): Promise<RelayPublishResult> {
     if (!isExactSyncEvent(event, this.syncPublicKey)) {
       throw new SyncRelayClientError(
@@ -126,6 +139,8 @@ export class SyncRelayClient {
       let authEventId: string | null = null;
       let activeSubscriptionId: string | null = null;
       let publishSent = false;
+      const recentEvents: Event[] = [];
+      const recentEventIds = new Set<string>();
 
       const finish = (result: OperationResult): void => {
         if (settled) return;
@@ -197,14 +212,14 @@ export class SyncRelayClient {
             authors: [this.syncPublicKey],
             kinds: [SYNC_EVENT_KIND_V0],
             "#d": [SYNC_EVENT_D_TAG_V0],
-            limit: 1,
+            limit: operation.type === "query-recent" ? operation.limit : 1,
           },
         ]);
       };
 
       const afterAuthentication = (): void => {
         closeSubscription();
-        if (operation.type === "query") {
+        if (operation.type !== "publish") {
           requestCurrent();
           return;
         }
@@ -270,7 +285,7 @@ export class SyncRelayClient {
           }
           case "EVENT": {
             if (
-              operation.type !== "query" ||
+              operation.type === "publish" ||
               !authenticated ||
               envelope[1] !== activeSubscriptionId
             ) {
@@ -286,16 +301,25 @@ export class SyncRelayClient {
               );
               return;
             }
+            if (operation.type === "query-recent") {
+              if (!recentEventIds.has(event.id)) {
+                recentEventIds.add(event.id);
+                recentEvents.push(event);
+              }
+              return;
+            }
             finish(event);
             return;
           }
           case "EOSE":
             if (
-              operation.type === "query" &&
+              operation.type !== "publish" &&
               authenticated &&
               envelope[1] === activeSubscriptionId
             ) {
-              finish(null);
+              finish(
+                operation.type === "query-recent" ? recentEvents : null
+              );
             }
             return;
           case "CLOSED": {

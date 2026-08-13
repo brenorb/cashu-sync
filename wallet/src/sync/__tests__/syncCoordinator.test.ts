@@ -74,9 +74,13 @@ class FakeRepository implements SnapshotRepository {
 
 class FakeRelay implements SnapshotRelay {
   current: Event | null = null;
+  recent: Event[] | null = null;
   publishResult: RelayPublishResult = { status: "accepted", reason: "stored" };
   readonly published: Event[] = [];
   queryCurrent = vi.fn(async (): Promise<Event | null> => this.current);
+  queryRecent = vi.fn(async (): Promise<Event[]> =>
+    this.recent ?? (this.current === null ? [] : [this.current])
+  );
   publish = vi.fn(async (next: Event): Promise<RelayPublishResult> => {
     this.published.push(next);
     return this.publishResult;
@@ -158,6 +162,43 @@ describe("SnapshotSyncCoordinator pull", () => {
     });
   });
 
+  it("verifies a retained chain before applying a head several revisions ahead", async () => {
+    const value = fixture(snapshot(1, HEAD_A));
+    const middle = event(HEAD_B, HEAD_A);
+    const current = event(HEAD_C, HEAD_B);
+    value.relay.current = current;
+    value.relay.recent = [current, middle];
+    value.crypto.decrypted.set(HEAD_B, snapshot(2, HEAD_A));
+    value.crypto.decrypted.set(HEAD_C, snapshot(3, HEAD_B));
+
+    await expect(value.coordinator.pull()).resolves.toEqual({
+      status: "applied",
+      mode: "child",
+      eventId: HEAD_C,
+      revision: 3,
+    });
+    expect(value.relay.queryRecent).toHaveBeenCalledWith(8);
+    expect(value.crypto.decryptEvent).toHaveBeenCalledTimes(2);
+    expect(value.repository.applied).toHaveLength(1);
+    expect(value.repository.state).toMatchObject({
+      revision: 3,
+      previous_event_id: HEAD_C,
+    });
+  });
+
+  it("rejects a gap when the remembered predecessor is no longer retained", async () => {
+    const value = fixture(snapshot(1, HEAD_A));
+    const current = event(HEAD_C, HEAD_B);
+    value.relay.current = current;
+    value.relay.recent = [current];
+    value.crypto.decrypted.set(HEAD_C, snapshot(3, HEAD_B));
+
+    await expect(value.coordinator.pull()).rejects.toMatchObject({
+      code: "revision-gap",
+    });
+    expect(value.repository.applied).toHaveLength(0);
+  });
+
   it("treats the exact validated head as an idempotent no-op", async () => {
     const value = fixture(snapshot(2, HEAD_B));
     value.relay.current = event(HEAD_B, HEAD_A);
@@ -237,6 +278,7 @@ describe("SnapshotSyncCoordinator pull", () => {
       }
       const relay: SnapshotRelay = {
         queryCurrent: async () => remote,
+        queryRecent: async () => [remote],
         publish: async () => ({ status: "accepted", reason: "unused" }),
       };
       const coordinator = new SnapshotSyncCoordinator({
@@ -285,6 +327,7 @@ describe("SnapshotSyncCoordinator pull", () => {
     remote.created_at += 1;
     const relay: SnapshotRelay = {
       queryCurrent: async () => remote,
+      queryRecent: async () => [remote],
       publish: async () => ({ status: "accepted", reason: "unused" }),
     };
     const coordinator = new SnapshotSyncCoordinator({
@@ -461,8 +504,8 @@ describe("SnapshotSyncCoordinator publish", () => {
 
   it("serializes concurrent calls on one coordinator", async () => {
     const value = fixture();
-    let release!: (event: Event | null) => void;
-    value.relay.queryCurrent.mockImplementationOnce(
+    let release!: (events: Event[]) => void;
+    value.relay.queryRecent.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           release = resolve;
@@ -474,10 +517,10 @@ describe("SnapshotSyncCoordinator publish", () => {
     await vi.waitFor(() => expect(release).toBeTypeOf("function"));
     expect(value.relay.publish).not.toHaveBeenCalled();
 
-    release(null);
+    release([]);
     await pull;
     await publish;
-    expect(value.relay.queryCurrent.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(value.relay.queryRecent.mock.invocationCallOrder[0]).toBeLessThan(
       value.relay.publish.mock.invocationCallOrder[0]
     );
   });

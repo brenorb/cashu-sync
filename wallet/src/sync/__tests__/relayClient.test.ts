@@ -175,6 +175,45 @@ describe("SyncRelayClient", () => {
     expect(invalidSocket.closed).toBe(true);
   });
 
+  it("collects a bounded newest-first retained history through EOSE", async () => {
+    const { client, sockets } = fixture();
+    const query = client.queryRecent(8);
+    const socket = sockets[0];
+    socket.open();
+    authenticate(socket);
+
+    const request = sentEnvelope(socket, 3);
+    expect(request).toEqual([
+      "REQ",
+      expect.any(String),
+      {
+        authors: [getSyncPublicKey(secret)],
+        kinds: [SYNC_EVENT_KIND_V0],
+        "#d": [SYNC_EVENT_D_TAG_V0],
+        limit: 8,
+      },
+    ]);
+    const subscriptionId = request[1];
+    const genesis = syncEvent();
+    const child = syncEvent(genesis.id);
+    socket.receive(["EVENT", subscriptionId, child]);
+    socket.receive(["EVENT", subscriptionId, genesis]);
+    socket.receive(["EVENT", subscriptionId, child]);
+    socket.receive(["EOSE", subscriptionId]);
+
+    await expect(query).resolves.toEqual(
+      JSON.parse(JSON.stringify([child, genesis]))
+    );
+    expect(socket.closed).toBe(true);
+  });
+
+  it("rejects invalid retained-history limits before opening a socket", () => {
+    const { client, sockets } = fixture();
+    expect(() => client.queryRecent(0)).toThrow(/limit/i);
+    expect(() => client.queryRecent(101)).toThrow(/limit/i);
+    expect(sockets).toHaveLength(0);
+  });
+
   it("publishes only its own valid event and waits for the matching OK", async () => {
     const { client, sockets } = fixture();
     const event = syncEvent();
