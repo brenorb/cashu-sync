@@ -37,9 +37,9 @@ CI jobs on one host can isolate concurrent fixtures by setting `CASHU_SYNC_NUTSH
 
 ## Recovery contract
 
-Nutshell provides the mint-side NUT-09 restore endpoint and NUT-07 state checks. The wallet owns NUT-13 deterministic derivation. For current version `01` keysets it uses HMAC-SHA256; it retains legacy BIP32 for version `00` keysets. Recovery scans 100 counters at a time until three consecutive NUT-09 responses contain no restored signatures, then sets the next counter to one after the highest successful counter.
+Nutshell provides the mint-side NUT-09 restore endpoint and NUT-07 state checks. The wallet owns NUT-13 deterministic derivation. For current version `01` keysets it uses HMAC-SHA256; it retains legacy BIP32 for version `00` keysets. The v0 operation journal uses NUT-09 only for the exact blinded outputs prepared before an interrupted mint submission. A broad mnemonic-only counter scan is deferred roadmap work.
 
-NUT-19 stores successful responses for an exact mint or melt request. The local one-hour TTL helps recover an interrupted response, but cache expiry is never evidence that an operation did not happen. Quote lookup, NUT-07, and NUT-09 remain the durable reconciliation mechanisms. The pending-operation journal therefore stores the complete ordered request, not only a hash.
+NUT-19 stores successful responses for an exact mint or melt request. The local one-hour TTL helps recover an interrupted response, but cache expiry is never evidence that an operation did not happen. The current journal reconciles through quote lookup and exact-output NUT-09 restoration; NUT-07 remains available for later broader proof recovery. The pending-operation journal therefore stores the complete ordered request, not only a hash.
 
 NUT-17 is likewise an optimization. A subscription first reports current state and then changes, but clients reconcile over REST whenever notifications may have been missed.
 

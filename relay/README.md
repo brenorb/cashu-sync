@@ -1,6 +1,6 @@
 # Cashu Sync v0 relay
 
-A private Nostr-compatible relay for Cashu Sync wallet snapshots. It stores signed,
+A private, purpose-built Nostr-compatible relay operated by Silent Link for Cashu Sync wallet snapshots. It stores signed,
 opaque ciphertext events and atomically advances one head per wallet public key. It
 does not decrypt snapshots, interpret wallet state, contact a mint, or resolve stale
 writes.
@@ -34,8 +34,9 @@ once, not each device.
 `open` mode is only for local end-to-end tests and refuses wildcard, LAN, and public
 bind addresses. `allowlist` mode admits only listed NIP-42 pubkeys and fixes Khatru's
 authentication origin to `CASHU_SYNC_SERVICE_URL`; forwarded host headers cannot
-change it. A static GitHub Pages client needs no server secret: it generates its key
-locally and exposes only the sync public key for operator enrollment.
+change it. A static GitHub Pages client needs no server secret: it generates its sync
+key locally. Production still requires an explicit operator workflow to obtain and
+enroll that public key; the current Pages build does not provide that workflow.
 
 The process creates the database directory when needed. `GET /healthz` returns
 `200 ok` only while SQLite is ready. SIGINT and SIGTERM stop the HTTP server and

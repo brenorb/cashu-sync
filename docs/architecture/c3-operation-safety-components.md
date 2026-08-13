@@ -1,12 +1,12 @@
 # C3 — Mint/melt safety components
 
-Status: **V0 accepted**
+Status: **V0 implemented**
 
 ## Diagram
 
 ```mermaid
 C4Component
-  title C3 Components - Recoverable mint and melt operations
+  title C3 Components - One-user recoverable USD Bolt11 mint and melt operations
 
   Container_Boundary(walletClient, "Silent Link PWA Wallet") {
     Component(operationCoordinator, "Operation Coordinator", "Application service", "Runs prepare, reserve, execute, and finalize phases")
@@ -16,8 +16,8 @@ C4Component
   }
 
   ContainerDb_Ext(localStore, "Local Wallet Store", "IndexedDB", "Persists requests, responses, proofs, and counters")
-  Container_Ext(syncRelay, "CAS Nostr Relay", "Go / Khatru", "Rejects stale snapshot children")
-  System_Ext(nutshellMint, "Nutshell Mint", "Cashu mint", "Executes operations and decides monetary state")
+  Container_Ext(syncRelay, "Silent Link-operated CAS Nostr Relay", "Go / Khatru", "Rejects stale snapshot children")
+  System_Ext(nutshellMint, "USD Nutshell Mint", "Cashu mint", "Executes Bolt11 operations and decides monetary state")
 
   Rel(operationCoordinator, operationJournal, "Creates and advances operation state", "In-process call")
   Rel(operationJournal, localStore, "Persists before network boundaries", "Dexie transaction")
@@ -43,4 +43,6 @@ local prepared journal
 
 A relay conflict before the Nutshell request is a clean retry. A crash or conflict after the request requires reconciliation; the wallet preserves all request, counter, response, and proof material until the result is known.
 
-An unresolved operation does not expire automatically and blocks a new operation across paired wallets. The next wallet uses quote state and NUT-07, plus wallet-side NUT-13 regeneration and mint-side NUT-09 restoration, to finish or safely clear it. The reference profile's one-hour NUT-19 cache permits exact-request replay but is not a durable source of truth after expiry.
+An unresolved operation does not expire automatically and blocks a new operation across paired wallets. The next wallet uses quote state, plus the already journaled wallet-side NUT-13 material and mint-side NUT-09 restoration for exact prepared mint outputs, to finish or safely clear it. The reference profile's one-hour NUT-19 cache permits exact-request replay but is not a durable source of truth after expiry.
+
+Both PWA installations belong to one user and operate one wallet. The journal coordinates those installations; it is not a peer-to-peer send or receive protocol.

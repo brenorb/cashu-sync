@@ -1,8 +1,8 @@
-# Cashu Sync v0 design documents
+# Cashu Sync v0
 
-Status: implementation-ready v0 specification.
+Status: implemented v0 product and protocol boundary.
 
-Cashu Sync lets one user operate the same Silent Link Cashu wallet from multiple paired clients. V0 is deliberately narrow: one USD Nutshell mint, mint and melt only, one encrypted whole-wallet snapshot, and one minimal Nostr-compatible relay that atomically advances the snapshot head.
+Cashu Sync lets one user control the same Silent Link wallet from paired PWA installations. V0 is deliberately narrow: one configured USD Nutshell mint, Bolt11 mint and melt accounting only, one encrypted whole-wallet snapshot, and one purpose-built Silent Link-operated Nostr relay that atomically advances the snapshot head. There is no peer-to-peer payment path.
 
 ## Normative v0 documents
 
@@ -14,20 +14,23 @@ Cashu Sync lets one user operate the same Silent Link Cashu wallet from multiple
 - [ADR-0002 — Revisioned encrypted snapshots](./decisions/0002-v0-revisioned-snapshot.md)
 - [Wallet base evaluation](./research/wallet-base.md)
 - [Nutshell reference mint](./research/nutshell-reference.md)
+- [Local two-wallet and recovery tutorial](./tutorial.md)
 
 ## V0 in one minute
 
-1. The first Silent Link PWA creates or imports a Cashu master seed and a random dedicated sync secret.
-2. An existing wallet pairs another wallet through an end-to-end encrypted QR/deeplink flow. Every paired wallet receives full seed and sync authority.
-3. Wallets communicate directly with one configured USD [Nutshell](https://github.com/cashubtc/nutshell) mint for mint, melt, proof-state, and restore operations.
+1. A configured Silent Link PWA creates a twelve-word Cashu master seed and a random dedicated sync secret.
+2. A joining PWA displays QR 1, an ephemeral request with no wallet secret. The existing PWA returns QR 2, an encrypted full-authority response. This two-QR exchange does not use a peer-payment or relay transport.
+3. Paired wallets communicate directly with one configured USD [Nutshell](https://github.com/cashubtc/nutshell) mint through Bolt11 quote, mint, melt, proof-state, and operation-recovery APIs.
 4. Wallets sign and NIP-44-encrypt a complete revisioned snapshot locally, then publish it to the Silent Link relay.
 5. The relay stores opaque events and atomically accepts a new snapshot only when its `prev` tag names the current head.
 6. Before contacting the mint, a wallet must first reserve the single pending-operation slot through a successful relay compare-and-swap. A losing concurrent wallet makes no mint call.
-7. The user can export an encrypted full-recovery bundle. The twelve-word seed alone remains a funds-recovery fallback, but cannot recover a random sync secret or synchronized history.
+7. The user can export a passphrase-encrypted full-recovery bundle containing the mnemonic, sync secret, configured endpoints, schema, and remembered relay head. A fresh PWA imports it and then pulls the encrypted snapshot from the relay.
 
 ## Explicit v0 exclusions
 
 - peer-to-peer Cashu send or receive;
+- Cashu token import, export, redeem, P2PK, payment requests, or Nostr peer flows;
+- Bolt12, on-chain, LNURL, Lightning-address, multi-part, or batch-mint flows;
 - user-visible proof swaps;
 - more than one mint;
 - snapshot merging or a multiwriter event graph;
