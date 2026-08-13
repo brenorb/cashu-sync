@@ -130,6 +130,10 @@ export class SnapshotSyncCoordinator {
     return this.serialize(() => this.publishUnlocked());
   }
 
+  publishCandidate(candidate: SnapshotV0): Promise<PublishOutcome> {
+    return this.serialize(() => this.publishUnlocked(candidate));
+  }
+
   private serialize<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.queue.then(operation, operation);
     this.queue = result.then(
@@ -307,7 +311,9 @@ export class SnapshotSyncCoordinator {
     };
   }
 
-  private async publishUnlocked(): Promise<PublishOutcome> {
+  private async publishUnlocked(
+    suppliedCandidate?: SnapshotV0
+  ): Promise<PublishOutcome> {
     const local = await this.repository.exportSnapshot();
     this.assertLocalBaseline(local);
     if (local.revision >= Number.MAX_SAFE_INTEGER) {
@@ -316,11 +322,20 @@ export class SnapshotSyncCoordinator {
         "local revision cannot be incremented safely"
       );
     }
-    const candidate: SnapshotV0 = {
+    const candidate: SnapshotV0 = suppliedCandidate ?? {
       ...local,
       revision: local.revision + 1,
       previous_event_id: local.previous_event_id,
     };
+    if (
+      candidate.revision !== local.revision + 1 ||
+      candidate.previous_event_id !== local.previous_event_id
+    ) {
+      throw new SnapshotSyncCoordinatorError(
+        "invalid-local",
+        "candidate must be the next revision extending the local head"
+      );
+    }
 
     let event: Event;
     try {

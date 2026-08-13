@@ -78,8 +78,9 @@ class FakeRelay implements SnapshotRelay {
   publishResult: RelayPublishResult = { status: "accepted", reason: "stored" };
   readonly published: Event[] = [];
   queryCurrent = vi.fn(async (): Promise<Event | null> => this.current);
-  queryRecent = vi.fn(async (): Promise<Event[]> =>
-    this.recent ?? (this.current === null ? [] : [this.current])
+  queryRecent = vi.fn(
+    async (): Promise<Event[]> =>
+      this.recent ?? (this.current === null ? [] : [this.current])
   );
   publish = vi.fn(async (next: Event): Promise<RelayPublishResult> => {
     this.published.push(next);
@@ -372,6 +373,46 @@ describe("SnapshotSyncCoordinator publish", () => {
       eventId: HEAD_C,
       revision: 5,
     });
+  });
+
+  it("publishes an exact caller-built final candidate without rebuilding its state", async () => {
+    const value = fixture(snapshot(4, HEAD_A));
+    const candidate = snapshot(5, HEAD_A);
+    candidate.history.push({
+      id: "mint:quote-1",
+      direction: "mint",
+      quote: "quote-1",
+      amount: 25,
+      request: "lnbc1invoice",
+      memo: "",
+      date: "2026-08-13T00:00:00.000Z",
+      status: "paid",
+      mint: MINT,
+      unit: "usd",
+    });
+
+    await expect(
+      value.coordinator.publishCandidate(candidate)
+    ).resolves.toEqual({
+      status: "accepted",
+      resolution: "direct",
+      eventId: HEAD_C,
+      revision: 5,
+    });
+    expect(value.crypto.createEvent).toHaveBeenCalledWith(candidate);
+    expect(value.repository.applied[0]?.snapshot).toEqual(candidate);
+  });
+
+  it("rejects a stale caller-built candidate before relay publication", async () => {
+    const value = fixture(snapshot(4, HEAD_A));
+    await expect(
+      value.coordinator.publishCandidate(snapshot(6, HEAD_A))
+    ).rejects.toMatchObject({ code: "invalid-local" });
+    await expect(
+      value.coordinator.publishCandidate(snapshot(5, HEAD_B))
+    ).rejects.toMatchObject({ code: "invalid-local" });
+    expect(value.relay.publish).not.toHaveBeenCalled();
+    expect(value.repository.applied).toHaveLength(0);
   });
 
   it("validates the winner once on conflict without republishing or replacing local operation state", async () => {
