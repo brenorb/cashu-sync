@@ -14,6 +14,11 @@ export type WelcomeState = {
   ecashRestoreCompleted: boolean;
 };
 
+export function walletHomeUrl(basePath = "/", search = "") {
+  const normalizedBase = basePath.endsWith("/") ? basePath : `${basePath}/`;
+  return `${normalizedBase}${search}#/`;
+}
+
 // Define the Pinia store
 export const useWelcomeStore = defineStore("welcome", {
   state: (): WelcomeState => ({
@@ -87,7 +92,10 @@ export const useWelcomeStore = defineStore("welcome", {
      */
     initializeWelcome() {
       if (!this.showWelcome) {
-        window.location.href = "/";
+        window.location.href = walletHomeUrl(
+          process.env.VUE_ROUTER_BASE,
+          window.location.search
+        );
       }
     },
 
@@ -99,8 +107,10 @@ export const useWelcomeStore = defineStore("welcome", {
       // Reset the slide to the beginning for next time (if welcome is ever shown again)
       this.currentSlide = 0;
       // Redirect to home or desired route
-      window.location.href =
-        "/" + window.location.search + window.location.hash;
+      window.location.href = walletHomeUrl(
+        process.env.VUE_ROUTER_BASE,
+        window.location.search
+      );
     },
     setPath(path: "new" | "recover") {
       this.onboardingPath = path;

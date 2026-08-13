@@ -11,6 +11,8 @@
     "dev": "quasar dev",
     "build": "quasar build",
     "build:pwa": "quasar build -m pwa",
+    "build:pwa:pages": "PUBLIC_PATH=/cashu-sync/ quasar build -m pwa",
+    "smoke:pwa:pages": "PUBLIC_PATH=/cashu-sync/ node scripts/smoke-pages-build.mjs",
     "build:electron": "quasar build -m electron",
     "quasar": "quasar",
     "lint": "eslint --ext .js,.vue,.ts ./",

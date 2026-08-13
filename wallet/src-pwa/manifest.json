@@ -6,14 +6,12 @@
   "orientation": "portrait",
   "background_color": "#000000",
   "theme_color": "#000000",
+  "start_url": "./",
+  "scope": "./",
   "protocol_handlers": [
     {
-      "protocol": "web+cashu",
-      "url": "/?token=%s"
-    },
-    {
       "protocol": "web+lightning",
-      "url": "/?lightning=%s"
+      "url": "./?lightning=%s#/"
     }
   ],
   "icons": [
@@ -56,28 +54,28 @@
   ],
   "screenshots": [
     {
-      "src": "/screenshots/narrow-1.png",
+      "src": "screenshots/narrow-1.png",
       "form_factor": "narrow",
       "sizes": "542x942",
       "type": "image/png",
       "label": "fullscreen view"
     },
     {
-      "src": "/screenshots/narrow-2.png",
+      "src": "screenshots/narrow-2.png",
       "form_factor": "narrow",
       "sizes": "542x942",
       "type": "image/png",
       "label": "fullscreen view"
     },
     {
-      "src": "/screenshots/wide-1.png",
+      "src": "screenshots/wide-1.png",
       "form_factor": "wide",
       "sizes": "1910x932",
       "type": "image/png",
       "label": "fullscreen view"
     },
     {
-      "src": "/screenshots/wide-2.png",
+      "src": "screenshots/wide-2.png",
       "form_factor": "wide",
       "sizes": "1910x932",
       "type": "image/png",

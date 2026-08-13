@@ -25,7 +25,16 @@ function resolveGitCommit() {
   }
 }
 
+function resolvePublicPath(value = process.env.PUBLIC_PATH) {
+  if (!value) return "/";
+  if (!value.startsWith("/") || !value.endsWith("/") || value.includes("..")) {
+    throw new Error("PUBLIC_PATH must be an absolute path ending in '/'");
+  }
+  return value;
+}
+
 module.exports = configure(function (/* ctx */) {
+  const publicPath = resolvePublicPath();
   return {
     eslint: {
       // fix: true,
@@ -67,7 +76,8 @@ module.exports = configure(function (/* ctx */) {
         node: "node16",
       },
 
-      vueRouterMode: "history", // available values: 'hash', 'history'
+      vueRouterMode: "hash", // GitHub Pages has no SPA fallback.
+      publicPath,
       // vueRouterBase,
       // vueDevtools,
       // vueOptionsAPI: false,
@@ -93,6 +103,21 @@ module.exports = configure(function (/* ctx */) {
           "@agicash/qr-scanner",
           "@cashu/cashu-ts",
         ];
+        viteConf.plugins = viteConf.plugins || [];
+        viteConf.plugins.push({
+          name: "cashu:scope-favicon-links",
+          enforce: "post",
+          transformIndexHtml: {
+            enforce: "post",
+            transform(html) {
+              return html.replace(
+                /href=(["']?)\/icons\/(128x128|96x96|32x32|16x16)\.png\1/g,
+                (_, quote, size) =>
+                  `href=${quote}${publicPath}icons/favicon-${size}.png${quote}`
+              );
+            },
+          },
+        });
       },
       // viteVuePluginOptions: {},
 
@@ -171,8 +196,14 @@ module.exports = configure(function (/* ctx */) {
       manifestFilename: "manifest.json",
       useCredentialsForManifestTag: false,
       workboxOptions: {
-        skipWaiting: true,
-        clientsClaim: true,
+        // A waiting update must not take control during a wallet operation.
+        skipWaiting: false,
+        clientsClaim: false,
+      },
+      extendGenerateSWOptions(options) {
+        // Quasar 1.11 defaults both to true after merging workboxOptions.
+        options.skipWaiting = false;
+        options.clientsClaim = false;
       },
       // useFilenameHashes: true,
       // extendGenerateSWOptions (cfg) {}
