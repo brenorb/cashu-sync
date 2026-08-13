@@ -12,6 +12,7 @@
     "build": "quasar build",
     "build:pwa": "quasar build -m pwa",
     "build:pwa:pages": "PUBLIC_PATH=/cashu-sync/ quasar build -m pwa",
+    "build:pwa:e2e": "PUBLIC_PATH=${CASHU_SYNC_E2E_BASE_PATH:-/cashu-sync-e2e/} quasar build -m pwa",
     "smoke:pwa:pages": "PUBLIC_PATH=/cashu-sync/ node scripts/smoke-pages-build.mjs",
     "build:electron": "quasar build -m electron",
     "quasar": "quasar",
@@ -19,7 +20,9 @@
     "format": "prettier --write .",
     "checkformat": "prettier --check .",
     "test": "vitest",
-    "test:ci": "vitest run"
+    "test:ci": "vitest run",
+    "test:e2e": "npm run build:pwa:e2e && playwright test",
+    "test:e2e:live": "CASHU_SYNC_E2E_REQUIRE_LIVE=1 npm run test:e2e"
   },
   "dependencies": {
     "@agicash/qr-scanner": "^0.1.2",
@@ -58,6 +61,7 @@
     "@capacitor/ios": "^6.0.0",
     "@electron/packager": "^18.4.4",
     "@google/design.md": "0.4.0",
+    "@playwright/test": "^1.58.1",
     "@quasar/app-vite": "^1.11.0",
     "@quasar/icongenie": "^4.0.0",
     "@types/node": "^20.12.11",
