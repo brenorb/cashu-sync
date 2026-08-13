@@ -152,7 +152,7 @@ test.describe("v0 live paired wallet acceptance", () => {
     await expect(deviceB.locator(".v0-quote-summary")).toContainText("$1.00");
     await deviceB.locator('[data-v0-action="pay-melt-quote"]').click();
     await expect(
-      deviceB.getByText("Invoice paid and synchronized.")
+      deviceB.getByText("eSIM top-up paid and synchronized.")
     ).toBeVisible({
       timeout: 20_000,
     });

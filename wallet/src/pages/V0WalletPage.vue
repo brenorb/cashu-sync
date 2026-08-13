@@ -28,8 +28,8 @@
         no-caps
         outline
         :disable="!activeMintUrl || !walletReady"
-        aria-label="Pay a Lightning invoice"
-        label="Pay invoice"
+        aria-label="Top up eSIM with wallet credits"
+        label="Top up eSIM"
         @click="showMeltDialog = true"
       />
       <router-link to="/settings/sync" class="v0-sync-link">
@@ -150,10 +150,11 @@
     <q-dialog v-model="showMeltDialog">
       <q-card class="v0-dialog" data-v0-dialog="melt">
         <q-card-section>
-          <p class="v0-eyebrow">Pay invoice</p>
-          <h2>Melt USD</h2>
+          <p class="v0-eyebrow">Top up eSIM</p>
+          <h2>Spend credits</h2>
           <p>
-            The selected proofs are fenced through the relay before payment.
+            Your selected credits are fenced through the relay before the eSIM
+            top-up is paid.
           </p>
         </q-card-section>
         <q-card-section v-if="!meltQuote">
@@ -192,7 +193,7 @@
             no-caps
             unelevated
             :loading="dialogBusy"
-            label="Pay invoice"
+            label="Confirm top up"
             @click="payMeltQuote"
           />
         </q-card-actions>
@@ -302,7 +303,7 @@ export default defineComponent({
         if (result.status !== "completed") {
           throw new Error(`Payment requires recovery: ${result.status}`);
         }
-        this.syncMessage = "Invoice paid and synchronized.";
+        this.syncMessage = "eSIM top-up paid and synchronized.";
         this.showMeltDialog = false;
         this.meltQuote = null;
         this.meltRequest = "";
