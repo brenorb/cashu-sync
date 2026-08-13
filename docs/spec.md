@@ -39,9 +39,9 @@ Silent Link operates one private Nostr-compatible relay backed by SQLite. It aut
 1. The Cashu mint is authoritative for monetary state.
 2. The relay is authoritative only for which encrypted snapshot event is the current synchronization head.
 3. Every state-changing mint or melt begins from the current relay head and reconciled mint state.
-4. A wallet MUST obtain a successful relay compare-and-swap for a prepared pending operation before contacting the mint.
+4. A wallet MUST obtain a successful relay compare-and-swap for a prepared pending operation before submitting that state-changing request to the mint.
 5. At most one unresolved mint or melt operation exists in a snapshot.
-6. A failed or stale compare-and-swap causes zero mint calls.
+6. A failed or stale compare-and-swap causes zero state-changing mint, melt, or swap submissions. Read-only quote and reconciliation calls may occur before it.
 7. Proofs, seed material, quote IDs, amounts, history, and operation details are encrypted before leaving a wallet for the relay.
 8. A new snapshot never removes an unspent proof unless the mint operation or mint reconciliation justifies the change.
 9. New outputs and recovery material become durable before old inputs are marked spent locally.
@@ -273,8 +273,8 @@ Implementation is not v0-ready until automated tests prove:
 - NIP-44 round trip, tamper rejection, wrong-key rejection, and official vector compatibility;
 - schema validation and atomic local snapshot import;
 - pairing success, invalid challenge, replay rejection, and cleanup;
-- prepared journal reaches the relay before any Nutshell call;
-- a failed CAS produces zero Nutshell calls;
+- prepared journal reaches the relay before its state-changing Nutshell submission;
+- a failed CAS produces zero state-changing `/v1/mint/bolt11`, `/v1/melt/bolt11`, or `/v1/swap` submissions;
 - crash recovery at every mint/melt boundary;
 - wallet-side versioned NUT-13 derivation, NUT-09 restore, NUT-07 reconciliation, and batches-of-100/three-empty-batches counter scanning against the reference Nutshell mint;
 - two paired wallets racing from the same head result in exactly one mint call;
