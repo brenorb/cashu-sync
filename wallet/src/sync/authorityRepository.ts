@@ -47,8 +47,12 @@ export class LocalAuthorityRepository {
     return authority;
   }
 
+  validate(value: unknown): AuthorityPayloadV0 {
+    return decodeAuthorityPayloadV0(value, this.validation);
+  }
+
   importAuthority(value: unknown): AuthorityPayloadV0 {
-    const authority = decodeAuthorityPayloadV0(value, this.validation);
+    const authority = this.validate(value);
     // This order makes an interrupted mirror write recoverable at next boot.
     this.storage.setItem(AUTHORITY_STORAGE_KEY_V0, JSON.stringify(authority));
     this.storage.setItem(LEGACY_MNEMONIC_KEY, authority.mnemonic);
@@ -57,7 +61,8 @@ export class LocalAuthorityRepository {
 
   async exportCurrent(): Promise<AuthorityPayloadV0> {
     const authority = this.load();
-    if (authority === null) throw new Error("wallet authority is not configured");
+    if (authority === null)
+      throw new Error("wallet authority is not configured");
     const state = await this.db.walletSyncState.get("wallet");
     return decodeAuthorityPayloadV0(
       {
