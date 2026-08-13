@@ -38,9 +38,17 @@
           @click="createRequest"
         />
         <template v-if="pairingRequest">
-          <div class="pairing-qr" aria-label="Pairing request QR code">
-            <vue-qrcode :value="pairingRequest" :options="{ width: 220 }" />
+          <div
+            class="pairing-qr"
+            aria-label="Open pairing request wallet QR code"
+          >
+            <vue-qrcode :value="pairingRequestUrl" :options="{ width: 220 }" />
           </div>
+          <p class="sync-copy">
+            Scan this with the existing wallet, or scan it with a phone to open
+            the wallet pairing screen. The raw request is available below for
+            copy and paste.
+          </p>
           <q-input
             :model-value="pairingRequest"
             data-pairing-field="request-output"
@@ -180,12 +188,24 @@ export default defineComponent({
   },
   computed: {
     ...mapState(useCameraStore, ["camera"]),
+    pairingRequestUrl(): string {
+      if (!this.pairingRequest) return "";
+      return new URL(
+        this.$router.resolve({
+          path: "/settings/sync",
+          query: { request: this.pairingRequest },
+        }).href,
+        window.location.href
+      ).href;
+    },
   },
   created() {
     // The wallet store captures vue-i18n during construction. Create it while
     // this page still owns the active Vue instance, before pairing awaits.
     useWalletStore();
     this.configured = useSyncRuntimeService().authority.load() !== null;
+    const request = this.$route.query.request;
+    if (typeof request === "string") this.pairingRequestInput = request;
     if (this.$route.query.auto === "1") this.createRequest();
   },
   beforeUnmount() {
@@ -197,10 +217,28 @@ export default defineComponent({
       useCameraStore().showCamera();
     },
     decodePairing(value: string) {
-      if (this.scanTarget === "request") this.pairingRequestInput = value;
+      const parsed =
+        this.scanTarget === "request" ? this.requestFromScan(value) : value;
+      if (this.scanTarget === "request") this.pairingRequestInput = parsed;
       if (this.scanTarget === "response") this.pairingResponseInput = value;
       this.scanTarget = null;
       useCameraStore().closeCamera();
+    },
+    requestFromScan(value: string): string {
+      const trimmed = value.trim();
+      try {
+        const url = new URL(trimmed, window.location.href);
+        const hashQuery = url.hash.includes("?")
+          ? url.hash.slice(url.hash.indexOf("?") + 1)
+          : "";
+        return (
+          new URLSearchParams(hashQuery).get("request") ||
+          url.searchParams.get("request") ||
+          trimmed
+        );
+      } catch {
+        return trimmed;
+      }
     },
     createRequest() {
       this.session?.destroy();

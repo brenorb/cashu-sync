@@ -280,10 +280,13 @@ export default defineComponent({
         this.syncMessage = "Funds added and synchronized.";
         this.showMintDialog = false;
         this.mintQuote = null;
-        this.fundedWalletUrl = this.$router.resolve({
-          path: "/settings/sync",
-          query: { auto: "1" },
-        }).href;
+        this.fundedWalletUrl = new URL(
+          this.$router.resolve({
+            path: "/settings/sync",
+            query: { auto: "1" },
+          }).href,
+          window.location.href
+        ).href;
         this.showFundedHandoff = true;
       });
     },
