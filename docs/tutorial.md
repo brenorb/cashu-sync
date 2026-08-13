@@ -1,6 +1,6 @@
 # Cashu Sync v0 local tutorial
 
-This tutorial exercises the complete v0 product path with one user controlling two paired PWA wallets: start a local USD Nutshell mint and the Silent Link relay, pair two isolated browser profiles with two QR payloads, mint, synchronize, melt, and recover the wallet into a third empty profile.
+This tutorial exercises the complete v0 product path with one user controlling two paired web wallets: start a local USD Nutshell mint and the Silent Link relay, fund a wallet from the Silent Link landing page, open a pairing-ready QR on another browser, synchronize, melt for an eSIM top-up, and recover after deleting the local wallet.
 
 The local Nutshell profile uses FakeWallet. It is deterministic test infrastructure, not real USD or Lightning settlement. Do not reuse its mint key, database, relay open mode, or HTTP endpoints in production.
 
@@ -62,7 +62,7 @@ PUBLIC_PATH=/ \
 python3 -m http.server 8080 --bind 127.0.0.1 --directory dist/pwa
 ```
 
-Open `http://127.0.0.1:8080`. Serving the built PWA over loopback HTTP keeps the local mint and relay on the same security level and exercises the generated service worker. The insecure-loopback flag permits only local HTTP mint and relay origins; it does not relax the production HTTPS authority rule.
+Open `http://127.0.0.1:8080`. You will first see the Silent Link landing page. Select **Top up with Lightning** or **Buy an eSIM → Top up now** to enter the wallet checkout. Serving the built PWA over loopback HTTP keeps the local mint and relay on the same security level and exercises the generated service worker. The insecure-loopback flag permits only local HTTP mint and relay origins; it does not relax the production HTTPS authority rule.
 
 For hot reloading during UI development, the same three `CASHU_SYNC_*` variables can prefix `npm run dev`; Quasar's development server uses `https://localhost:8080`, so the browser may ask you to trust its local certificate. The built HTTP path above is the recommended manual acceptance path.
 
@@ -70,29 +70,29 @@ Open `http://127.0.0.1:8080` in browser profile A and browser profile B. Each fr
 
 ## 4. Pair profile B to profile A
 
-Pairing uses two QR payloads. The current desktop-friendly UI also renders each payload as text, so this test can copy and paste it between profiles without a camera.
+Pairing uses two QR payloads. The funded wallet's handoff card links directly to the pairing screen with QR 1 ready. The current UI supports camera scanning and also renders each payload as text for desktop testing.
 
-1. In profile B, open **Settings → Sync devices** and select **Create pairing request**.
-2. **QR 1** is the pairing request. It contains an ephemeral public key, challenge, and five-minute expiry, but no wallet secret. Copy the text from **Pairing request**.
-3. In profile A, open **Settings → Sync devices**. Paste QR 1 into **Pairing request from new wallet**, then select **Create encrypted response**.
+1. In profile B, open the pairing-ready URL from the funded wallet QR, or open **Settings → Sync devices** and select **Create pairing request**.
+2. **QR 1** is the pairing request. It contains an ephemeral public key, challenge, and five-minute expiry, but no wallet secret. On profile A, select **Scan request QR** or paste the text from **Pairing request**.
+3. In profile A, select **Create encrypted response**.
 4. **QR 2** is the encrypted full-authority response bound to QR 1. Copy the text from **Encrypted pairing response**.
-5. Return to profile B, paste QR 2 into **Encrypted response from existing wallet**, and select **Finish pairing**.
+5. Return to profile B, select **Scan response QR** or paste QR 2 into **Encrypted response from existing wallet**, and select **Finish pairing**.
 6. Confirm profile B says `Paired. This wallet now follows the shared relay head.`
 
 If five minutes elapse, create a new QR 1. Pairing transfers full spend and sync authority, so only pair a wallet installation controlled by the same user.
 
-## 5. Mint 10 USD and verify cross-device sync
+## 5. Fund the wallet and verify cross-device sync
 
 In profile A:
 
 1. Return to the wallet home page and select **Add funds**.
 2. Enter `10` in **Amount in USD** and select **Create invoice**.
 3. The local FakeWallet automatically settles its generated invoice. Select **Claim paid invoice**. If the quote has not changed to `PAID` yet, wait briefly and select it again.
-4. Confirm `Funds added and synchronized.`, a higher **Available balance**, and a **Funds added** row in **Accounting**.
+4. Confirm `Funds added and synchronized.`, a higher **Available balance**, and a **Funds added** row in **Accounting**. The funded handoff card now shows a web link and QR code. It opens the pairing screen on another browser; it does not put a seed or funds in the URL.
 
 Bring profile B to the foreground and return to or reload the wallet home page. Startup and foreground resume pull the current encrypted head. Confirm profile B shows the same balance and accounting row. The wallets are not sending Cashu tokens to each other; both are displaying one synchronized wallet.
 
-## 6. Melt a 1 USD test invoice
+## 6. Melt a 1 USD test invoice as an eSIM top-up
 
 Create an internal FakeWallet Bolt11/USD invoice from terminal 1 or another shell and copy the printed invoice:
 
@@ -105,16 +105,16 @@ curl -fsS -X POST http://127.0.0.1:3338/v1/mint/quote/bolt11 \
 
 In profile B:
 
-1. Select **Pay invoice**.
+1. Select **Top up eSIM**.
 2. Paste the printed invoice into **Bolt11 invoice** and select **Review payment**.
-3. Confirm the quote summary says `1 USD`, then select **Pay invoice**.
-4. Confirm `Invoice paid and synchronized.`, the reduced balance, and an **Invoice paid** accounting row.
+3. Confirm the quote summary says `1 USD`, then select **Confirm top up**.
+4. Confirm `eSIM top-up paid and synchronized.`, the reduced balance, and an **Invoice paid** accounting row.
 
 Bring profile A to the foreground and return to or reload the home page. Confirm its balance and two accounting rows match profile B.
 
 The relay compare-and-swap and encrypted operation journal fence the state-changing mint call. If another device wins the head or a network result is ambiguous, the wallet keeps or reconciles the pending operation instead of starting a second one.
 
-## 7. Export and recover from scratch
+## 7. Delete and recover from scratch
 
 In profile A:
 
@@ -124,13 +124,19 @@ In profile A:
 
 The encrypted full-recovery bundle contains the mnemonic, shared sync secret, configured mint and relay, schema, and last remembered head. It does not contain the current snapshot itself, so leave the relay running for this test.
 
-In a new, otherwise empty browser profile C:
+To demonstrate deletion, open **Settings → Recovery & backup** on profile B and select **Delete wallet from this device**. Confirm the prompt. The encrypted relay snapshot remains intact.
+
+In a new, otherwise empty browser profile C (or the deleted profile B):
 
 1. Open `http://127.0.0.1:8080/#/settings/recovery`.
 2. Choose the downloaded file under **Encrypted backup file**. The encrypted JSON also appears in the paste field.
 3. Enter the backup passphrase and select **Restore synchronized wallet**.
 4. Confirm `Wallet restored and synchronized.`
 5. Return to the home page and confirm the final balance plus both **Funds added** and **Invoice paid** accounting rows.
+
+## Phone demo without a VPS
+
+No VPS is required. The computer can run Nutshell, the relay, and the PWA. A phone cannot, however, reach the computer's `127.0.0.1`, and camera/WebCrypto flows require HTTPS/WSS outside loopback. For a phone test, expose the three local services through a private HTTPS/WSS path (for example Tailscale Serve or a local TLS reverse proxy), then build with the resulting mint and relay origins. Do not expose the loopback-only `open` relay publicly; production/mobile deployment uses the relay's HTTPS/WSS canonical origin and pubkey allowlist. If you do not have that private path yet, use the three isolated desktop profiles—the wallet behavior is identical.
 
 A wrong passphrase, modified bundle, nonempty destination wallet, or unavailable relay must fail rather than partially import state.
 
