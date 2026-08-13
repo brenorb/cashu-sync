@@ -11,6 +11,7 @@ export type WalletDevice = {
   profileDir: string;
   context: BrowserContext;
   page: Page;
+  consoleErrors: string[];
 };
 
 export type IsolatedWalletDevices = {
@@ -57,7 +58,24 @@ export async function createIsolatedWalletDevices(): Promise<IsolatedWalletDevic
   const close = async () => {
     if (closed) return;
     closed = true;
-    await Promise.allSettled(opened.map((device) => device.context.close()));
+    for (const device of opened) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          device.context.close(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`${device.name} context close timed out`)),
+              5_000
+            );
+          }),
+        ]);
+      } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
     await rm(rootDir, { recursive: true, force: true });
   };
 
@@ -70,7 +88,29 @@ export async function createIsolatedWalletDevices(): Promise<IsolatedWalletDevic
         launchOptions()
       );
       const page = context.pages()[0] || (await context.newPage());
-      opened.push({ name, profileDir, context, page });
+      const consoleErrors: string[] = [];
+      page.on("pageerror", (error) => {
+        consoleErrors.push(`page error: ${error.message}`);
+        console.error(`[${name}] page error: ${error.message}`);
+      });
+      page.on("requestfailed", (request) =>
+        console.error(
+          `[${name}] request failed: ${request.method()} ${request.url()} ${
+            request.failure()?.errorText || "unknown"
+          }`
+        )
+      );
+      page.on("console", (message) => {
+        if (message.type() === "error") consoleErrors.push(message.text());
+        if (
+          process.env.CASHU_SYNC_E2E_DEBUG === "1" ||
+          message.type() === "error" ||
+          message.type() === "warning"
+        ) {
+          console.log(`[${name}] console.${message.type()}: ${message.text()}`);
+        }
+      });
+      opened.push({ name, profileDir, context, page, consoleErrors });
     }
 
     return {
