@@ -3,9 +3,7 @@
   <div class="welcome-slide">
     <!-- Logo -->
     <div class="logo">
-      <transition appear enter-active-class="animated bounce">
-        <img src="/clean.png" alt="Cashu Logo" class="logo-image" />
-      </transition>
+      <img :src="silentLinkLogo" alt="Silent Link" class="logo-image" />
     </div>
 
     <!-- Title -->
@@ -19,7 +17,6 @@
       <!-- Next button -->
       <q-btn
         color="primary"
-        rounded
         :label="$t('WelcomePage.actions.next.label')"
         @click="goToNext"
         class="welcome-next-btn"
@@ -412,11 +409,13 @@
 
 <script lang="ts">
 import { useWelcomeStore } from "src/stores/welcome";
+import silentLinkLogo from "src/assets/silent-link-logo.svg";
 
 export default {
   name: "WelcomeSlide1",
   data() {
     return {
+      silentLinkLogo,
       selectedLanguage: "",
       showLanguageMenu: false,
       showTerms: false,
@@ -485,35 +484,36 @@ export default {
   justify-content: space-between;
   align-items: center;
   height: 100%;
-  background: var(--q-dark);
-  color: white;
-  padding: 40px 20px 20px 20px;
+  background: var(--sl-ink);
+  color: var(--sl-on-ink);
+  padding: 32px 12px 20px;
   box-sizing: border-box;
   text-align: center;
 }
 
 .logo {
-  margin-bottom: 30px;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
+  margin-bottom: 24px;
+  width: 100%;
+  max-width: 500px;
+  height: 72px;
+  border-radius: 4px;
+  background: var(--sl-surface-muted);
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
 .logo-image {
-  width: 80px;
-  height: 80px;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+  width: 130px;
+  height: 50px;
+  object-fit: contain;
 }
 
 .title {
   font-size: 2.2rem;
   font-weight: 700;
   margin: 0 0 20px 0;
-  color: white;
+  color: var(--sl-on-ink);
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
@@ -521,7 +521,7 @@ export default {
 .description {
   font-size: 1.1rem;
   line-height: 1.5;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--sl-surface-muted);
   margin: 0 0 50px 0;
   max-width: 500px;
   text-align: left;
@@ -550,14 +550,12 @@ export default {
   font-weight: 600;
   text-transform: none;
   font-size: 1rem;
-  border-radius: 22px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s ease;
+  border-radius: 4px;
+  box-shadow: none;
 }
 
 .welcome-next-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+  background: var(--sl-orange-hover) !important;
 }
 
 .terms-agreement {
@@ -580,7 +578,7 @@ export default {
 }
 
 .terms-link:hover {
-  color: rgba(var(--q-primary-rgb), 0.8);
+  color: var(--sl-orange-hover);
 }
 
 /* Language trigger button */
@@ -783,11 +781,5 @@ export default {
   align-items: center;
   padding: 10px 0;
   flex-shrink: 0;
-}
-
-/* Animation */
-.animated.bounce {
-  animation-duration: 0.8s;
-  animation-timing-function: cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 </style>

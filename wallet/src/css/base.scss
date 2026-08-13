@@ -1,4 +1,12 @@
 $themes: (
+  "silent": (
+    primary: #ff9900,
+    secondary: #0066ff,
+    dark: #090909,
+    info: #3c3c3c,
+    marginal-bg: #090909,
+    marginal-text: #fff,
+  ),
   "classic": (
     primary: #935af5,
     secondary: #b45af5,
@@ -125,12 +133,14 @@ $themes: (
   }
 }
 
+[data-theme="silent"] .q-badge.bg-primary,
 [data-theme="monochrome"] .q-badge.bg-primary,
 [data-theme="cyber"] .q-badge.bg-primary {
   background: primary !important;
   color: #0a0a0a !important;
 }
 
+[data-theme="silent"] .q-btn.bg-primary,
 [data-theme="monochrome"] .q-btn.bg-primary,
 [data-theme="cyber"] .q-btn.bg-primary {
   background: primary !important;

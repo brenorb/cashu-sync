@@ -64,9 +64,12 @@
           />
         </q-item-section>
         <q-item-section>
-          <q-item-label>{{
-            $t(`Settings.appearance.theme.tooltips.${theme.tooltip}`)
-          }}</q-item-label>
+          <q-item-label>
+            {{
+              theme.label ||
+              $t(`Settings.appearance.theme.tooltips.${theme.tooltip}`)
+            }}
+          </q-item-label>
         </q-item-section>
         <q-item-section side>
           <q-icon name="format_color_fill" :color="theme.color" size="sm" />
@@ -92,8 +95,9 @@ export default defineComponent({
   },
   data: function () {
     return {
-      activeTheme: "monochrome",
+      activeTheme: "silent",
       themes: [
+        "silent",
         "monochrome",
         "classic",
         "bitcoin",
@@ -105,6 +109,7 @@ export default defineComponent({
         "flamingo",
       ],
       themeOptions: [
+        { name: "silent", color: "orange", label: "Silent Link" },
         { name: "monochrome", color: "grey", tooltip: "mono" },
         { name: "cyber", color: "green", tooltip: "cyber" },
         { name: "freedom", color: "pink-13", tooltip: "freedom" },
@@ -135,8 +140,7 @@ export default defineComponent({
     },
   },
   created: function () {
-    this.activeTheme =
-      this.$q.localStorage.getItem("cashu.theme") || "monochrome";
+    this.activeTheme = this.$q.localStorage.getItem("cashu.theme") || "silent";
   },
 });
 </script>

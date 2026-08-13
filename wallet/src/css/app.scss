@@ -1,13 +1,82 @@
 // app global css in SCSS form
 
-// Import Inter font from Google Fonts
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+@font-face {
+  font-family: "Karla";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/karla-regular.woff2") format("woff2");
+}
 
-// Apply Inter as the primary font throughout the application
+@font-face {
+  font-family: "Karla";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/karla-medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Karla";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/karla-bold.woff2") format("woff2");
+}
+
+:root {
+  --sl-font-sans: "Karla", sans-serif;
+  --sl-ink: #090909;
+  --sl-on-ink: #fff;
+  --sl-orange: #f90;
+  --sl-orange-hover: #ffab45;
+  --sl-blue: #06f;
+  --sl-blue-hover: #0043ca;
+  --sl-surface: #fff;
+  --sl-surface-muted: #f7f7f7;
+  --sl-outline: #f7931a4d;
+  --safe-area-inset-top: env(safe-area-inset-top);
+}
+
 body {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
+  background: var(--sl-ink);
+  color: var(--sl-on-ink);
+  font-family: var(--sl-font-sans);
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font-family: inherit;
+}
+
+:where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    [role="button"],
+    [tabindex]
+  ):focus-visible {
+  outline: 3px solid var(--sl-blue);
+  outline-offset: 2px;
+}
+
+.q-btn.bg-primary {
+  color: var(--sl-ink) !important;
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.q-btn.bg-primary:hover {
+  background: var(--sl-orange-hover) !important;
+}
+
+.q-card {
+  border-radius: 8px;
 }
 
 // Dialog header typography
@@ -36,11 +105,6 @@ body {
   overscroll-behavior: none;
 }
 
-// Map CSS env() safe area to our custom variable for PWA iOS
-:root {
-  --safe-area-inset-top: env(safe-area-inset-top);
-}
-
 // margin for top elements for ios safe area
 body,
 .q-drawer,
@@ -52,20 +116,20 @@ body,
 .q-dialog__inner > div {
   border-top-left-radius: 0px;
   border-top-right-radius: 0px;
-  border-bottom-right-radius: 20px !important;
-  border-bottom-left-radius: 20px !important;
+  border-bottom-right-radius: 8px !important;
+  border-bottom-left-radius: 8px !important;
 }
 
 .q-card {
-  border-top-left-radius: 20px;
-  border-top-right-radius: 20px;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
 }
 
 .q-dialog__inner--minimized > div {
-  border-top-left-radius: 20px;
-  border-top-right-radius: 20px;
-  border-bottom-right-radius: 20px;
-  border-bottom-left-radius: 20px;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  border-bottom-left-radius: 8px;
   max-width: 650px;
 }
 
@@ -106,4 +170,15 @@ body,
 
 .q-checkbox__svg {
   color: var(--q-dark);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

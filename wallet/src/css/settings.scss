@@ -2,6 +2,9 @@
 
 .settings-sub-page {
   width: 100%;
+  min-height: 100%;
+  background: var(--sl-ink) !important;
+  color: var(--sl-on-ink);
 }
 
 .settings-view {
@@ -51,22 +54,22 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--sl-orange);
 }
 
 .settings-section-caption {
   font-size: 12px;
   line-height: 1.4;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--sl-surface-muted);
   margin-top: 4px;
 }
 
 /* Card-style groups (settings menu, about page, section content) */
 .settings-card,
 .settings-menu-group {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
+  background: var(--sl-ink);
+  border: 1px solid var(--sl-outline);
+  border-radius: 8px;
   padding: 4px 0;
   overflow: hidden;
 }
@@ -94,7 +97,7 @@
 .settings-menu-icon {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -102,5 +105,18 @@
 }
 
 .settings-menu-chevron {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--sl-surface-muted);
+}
+
+@media (max-width: 576px) {
+  .settings-sub-page {
+    padding-right: 12px !important;
+    padding-left: 12px !important;
+  }
+
+  .settings-card .q-item,
+  .settings-menu-item {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
 }

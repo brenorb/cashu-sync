@@ -3,8 +3,6 @@
   <q-dialog
     v-model="welcomeStore.showWelcome"
     persistent
-    transition-show="slide-up"
-    transition-hide="fadeOut"
     full-screen
     @drop.prevent="dragFile"
     @dragover.prevent
@@ -12,7 +10,6 @@
     <q-card class="q-pa-none" style="height: 100%">
       <q-carousel
         v-model="welcomeStore.currentSlide"
-        animated
         control-color="primary"
         class="flex-1"
         style="height: 100%"
