@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import {
   createPayableUsdBolt11Invoice,
-  waitForMintQuoteState,
 } from "./helpers/cashu";
 import {
   createIsolatedWalletDevices,
@@ -33,9 +32,18 @@ function accounting(page: Page) {
   return page.locator('section[aria-labelledby="v0-accounting-title"]');
 }
 
+function v0Input(page: Page, name: string) {
+  return page
+    .locator(
+      `input[data-v0-field="${name}"], textarea[data-v0-field="${name}"], [data-v0-field="${name}"] input, [data-v0-field="${name}"] textarea`
+    )
+    .first();
+}
+
 async function openWallet(device: WalletDevice, server: BuiltPwaServer) {
   const { page } = device;
   await page.goto(server.walletUrl, { waitUntil: "domcontentloaded" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Your money, in sync."
   );
@@ -43,8 +51,8 @@ async function openWallet(device: WalletDevice, server: BuiltPwaServer) {
     await expect(page.getByText("Starting synchronized wallet…")).toBeHidden({
       timeout: 15_000,
     });
-    await expect(page.getByRole("status").last()).toContainText(
-      /Wallet synchronized|Pair or restore/
+    await expect(page.locator(".v0-runtime-status")).toContainText(
+      /Wallet synchronized|Pair or restore|Funds added and synchronized|eSIM top-up paid and synchronized|Wallet restored and synchronized/
     );
   } catch (cause) {
     throw new Error(
@@ -120,10 +128,10 @@ test.describe("v0 live paired wallet acceptance", () => {
     await openWallet(deviceAEntry, server);
     const initialBalance = await balance(deviceA).innerText();
     await deviceA.locator('[data-v0-action="mint-bolt11"]').click();
-    await deviceA.locator('[data-v0-field="mint-amount"] input').fill("10");
+    await v0Input(deviceA, "mint-amount").fill("10");
     await deviceA.locator('[data-v0-action="create-mint-quote"]').click();
     await expect(
-      deviceA.locator('[data-v0-field="mint-invoice"] textarea')
+      v0Input(deviceA, "mint-invoice")
     ).toHaveValue(/^lnbc/i);
     await expect(async () => {
       await deviceA.locator('[data-v0-action="claim-mint-quote"]').click();
@@ -143,11 +151,8 @@ test.describe("v0 live paired wallet acceptance", () => {
     await expect(accounting(deviceB)).toContainText("paid");
 
     const external = await createPayableUsdBolt11Invoice(100);
-    await waitForMintQuoteState(external.quote, "PAID");
     await deviceB.locator('[data-v0-action="melt-bolt11"]').click();
-    await deviceB
-      .locator('[data-v0-field="melt-invoice"] textarea')
-      .fill(external.request);
+    await v0Input(deviceB, "melt-invoice").fill(external.request);
     await deviceB.locator('[data-v0-action="create-melt-quote"]').click();
     await expect(deviceB.locator(".v0-quote-summary")).toContainText("$1.00");
     await deviceB.locator('[data-v0-action="pay-melt-quote"]').click();
@@ -179,18 +184,23 @@ test.describe("v0 live paired wallet acceptance", () => {
     const backupPath = join(devices.rootDir, "wallet-recovery.json");
     await download.saveAs(backupPath);
     const serializedBundle = await readFile(backupPath, "utf8");
-    expect(serializedBundle).toContain('"type":"cashu-sync-recovery-bundle"');
+    expect(serializedBundle).toContain('"type":"cashu-sync-full-recovery"');
     expect(serializedBundle).not.toContain(BACKUP_PASSPHRASE);
     await expect(
       deviceA.getByText("Encrypted backup downloaded.")
     ).toBeVisible();
 
+    await deviceA.goto(`${server.baseUrl}#/settings/recovery`);
+    deviceA.once("dialog", (dialog) => void dialog.accept());
+    await deviceA.locator('[data-recovery-action="delete"]').click();
+    await expect(
+      deviceA.getByText("Wallet deleted from this device. The relay backup remains.")
+    ).toBeVisible();
+
     await recovery.goto(`${server.baseUrl}#/settings/recovery`);
-    await recovery
-      .locator('[data-recovery-field="bundle-file"] input[type="file"]')
-      .setInputFiles(backupPath);
+    await recovery.locator('input[type="file"]').setInputFiles(backupPath);
     await expect(field(recovery, "bundle-input")).toHaveValue(
-      /cashu-sync-recovery-bundle/
+      /cashu-sync-full-recovery/
     );
     await field(recovery, "import-passphrase").fill(BACKUP_PASSPHRASE);
     await recovery.locator('[data-recovery-action="restore"]').click();

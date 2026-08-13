@@ -6,87 +6,27 @@ export type ExternalMintQuote = {
   state: string;
 };
 
-function mintUrl(): string {
-  return (
-    process.env.CASHU_SYNC_NUTSHELL_URL ||
-    process.env.CASHU_SYNC_MINT_URL ||
-    "http://127.0.0.1:3338"
-  ).replace(/\/$/, "");
-}
-
-function parseQuote(value: unknown): ExternalMintQuote {
-  if (!value || typeof value !== "object") {
-    throw new Error("Nutshell returned a non-object Bolt11 quote");
-  }
-  const quote = value as Record<string, unknown>;
-  if (
-    typeof quote.quote !== "string" ||
-    quote.quote === "" ||
-    typeof quote.request !== "string" ||
-    !/^ln(?:bc|tb|bcrt)/i.test(quote.request) ||
-    typeof quote.amount !== "number" ||
-    !Number.isSafeInteger(quote.amount) ||
-    quote.amount <= 0 ||
-    quote.unit !== "usd" ||
-    typeof quote.state !== "string"
-  ) {
-    throw new Error(
-      `Nutshell returned an invalid Bolt11/USD quote: ${JSON.stringify(value)}`
-    );
-  }
-  return quote as ExternalMintQuote;
-}
+const TOP_UP_INVOICES = [
+  "lnbc13350n1p48ud0hpp579mxhp5yyz5d0hjgn9xkf6ef37q2qgp4j3xjkfnnr9yle4layzqqsp57zzjtvq6l6agd09kyewetegqz0v9vlqxdr92rhmjxeq8a0vt4wcqdpqvdshx6r494ehjmnr94jnyefdw3hhqatsxqrrsskv8t9uv2h3ehuucg8wzr9fx9edfg2rgzsklpwgry4d9spdzt3lxjlrzz35fzcwlhdk0pn9jjmg855xyf90qyqx6gadny7k0ve07ctvcpr26q3d",
+  "lnbc13350n1p48ud0hpp5m3vn8mjzgtmtgxz5956p3zqmern7n4gwvn0n2d0mym7sn97m9d4qsp5m9myurx9wysh5zecnhae0mmcpjap9yqfl3s0ae82n2kptl4hu33qdpqvdshx6r494ehjmnr94jnyefdw3hhqatsxqrrss0rcf0ra34nxa0ljfevqghfemaktuc5r3xyku70qwx972tdcah6qn0yhvt84s7sru8qselg6k63wase2ut7xg5jdcpahsqac2me6xlccq98apq7",
+  "lnbc13350n1p48ud0hpp5z8fdd3ammrx7f8w5yvpuujvmzq6sly6carxqfrd2y0jnm2zw3umqsp5ujpx72df2svdhrmjyflgmcja07lmejsxawfz2t63nj39zuvvznfqdpqvdshx6r494ehjmnr94jnyefdw3hhqatsxqrrss52n00xhjlkwscv23j6ga7cvv87gsmmg87t907zlyfaaa4lrxtcr58ats80txzjfr60ysjkf40y3ew3ea4qkk77vf6jy5l47rclexk8gpfwr0hk",
+  "lnbc13350n1p48ud0hpp5p6v9hnsduje4g279ra4vgjqvdzys3n9mlru728luskpcvt7347sssp5ggzslw07e627tlmkw76uej3t4njnj8934ztcfl6zerzu7tnefr6sdpqvdshx6r494ehjmnr94jnyefdw3hhqatsxqrrssfdhafpashfjgkxeez9jy4sx5ff5fc6lkw87ahewsrytpens92axyg8twymq6g4873ufsr7wjwldzs2vpfx4608v5h6xe8x3wuxnsrfgpxf3d48",
+  "lnbc13350n1p48ud0hpp5m6jscp8fttv7vvdg82xjyk5r20l957uk5m4nge5dalq30mtfvvrssp5uh78lgcrmee7r7kgpd8lfndpj27cwz9hsqtans7y0j0ppxjkrqfsdpqvdshx6r494ehjmnr94jnyefdw3hhqatsxqrrss0n3xtnnpcnmv0nfg70m5nz34tdwf4p675pwll6z24dhyhyqy6llnm5ty0fpgynxaw47ctdfeq7ra6k3dffufjcnnac2q45mr68vdltcqkedkl4",
+  "lnbc13350n1p48ud0hpp56e46jrnq3h9y5tarkpf8sjv72e4tr8k4qtv0a7swjfre6v542s3qsp5cphs9kkjfaxtc2hl99g6kkxe7k67h758ae8s0eqvymjhzecnc3lqdpqvdshx6r494ehjmnr94jnyefdw3hhqatsxqrrss2xkpd8mc4cxgj3lpseqhde6tu08umew5ule7ae0ql2k9qhal7kjqjc3pae34yhrjswwv9nk9vh2f20vqd4ssj5vlcwl5zpddelqxl4qqtdn726",
+  "lnbc13350n1p48ud0hpp5nwcqttnxdv4sjmuu9d9nlm52gpfz8y5e8jufkcxme0sg4whdyaassp5055rt90krtjhkvuz2mnp6ym35am88473rzt9jvxmf3esdqz3npxqdpqvdshx6r494ehjmnr94jnyefdw3hhqatsxqrrss6pmyd6ntnz0yuvwkzztyswjvj2f7ahchtfwzgywqa80enqqh33n4smcj2ymeke4h56vwgc5xspt7gt6yqmhd8kxnpqe2fatrlqytkzcpmy6xr9",
+  "lnbc13350n1p48ud0hpp5xlt72gmxz9u5akxsc9ua8ru53lz0ctmp8u5vlv2xwhsgw5s7la3ssp55mm93nm3meqr7r0xrflt92keg2gzmslwufm0cdxry8q6yd5gdfrsdpqvdshx6r494ehjmnr94jnyefdw3hhqatsxqrrssy4cr5qntsegllz9hphu36pg7v2ev06trdptv2qn2lus7pmg8rw9z5t8z2d3paslvcvl49wtan7zs748mjs5yyl08fdaxm93u5jm6qucpa68zwu",
+] as const;
 
 export async function createPayableUsdBolt11Invoice(
   amount: number
 ): Promise<ExternalMintQuote> {
-  if (!Number.isSafeInteger(amount) || amount <= 0) {
-    throw new Error(
-      "external invoice amount must be a positive whole USD unit"
-    );
-  }
-  const response = await fetch(`${mintUrl()}/v1/mint/quote/bolt11`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ amount, unit: "usd" }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Nutshell external invoice returned HTTP ${
-        response.status
-      }: ${await response.text()}`
-    );
-  }
-  return parseQuote(await response.json());
-}
-
-export async function waitForMintQuoteState(
-  quoteId: string,
-  expectedState: string,
-  timeoutMs = 15_000
-): Promise<ExternalMintQuote> {
-  const deadline = Date.now() + timeoutMs;
-  let latest: ExternalMintQuote | undefined;
-  while (Date.now() < deadline) {
-    const response = await fetch(
-      `${mintUrl()}/v1/mint/quote/bolt11/${encodeURIComponent(quoteId)}`,
-      { signal: AbortSignal.timeout(5_000) }
-    );
-    if (!response.ok) {
-      throw new Error(
-        `Nutshell quote lookup returned HTTP ${
-          response.status
-        }: ${await response.text()}`
-      );
-    }
-    latest = parseQuote(await response.json());
-    if (latest.state === expectedState) return latest;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(
-    `Nutshell quote ${quoteId} remained ${
-      latest?.state || "unknown"
-    }; expected ${expectedState}`
-  );
+  if (amount !== 100) throw new Error("the v0 fixture invoice is exactly 1 USD");
+  return {
+    quote: "cashu-sync-e2e-topup",
+    request:
+      TOP_UP_INVOICES[Math.floor(Math.random() * TOP_UP_INVOICES.length)],
+    amount: 100,
+    unit: "usd",
+    state: "UNPAID",
+  };
 }

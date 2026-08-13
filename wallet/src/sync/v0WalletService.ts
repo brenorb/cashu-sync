@@ -134,6 +134,11 @@ export class V0WalletService {
     const quote = await wallet.checkMintQuoteBolt11(quoteId);
     requireUsd(quote.unit);
     assertMintQuoteIdentity(stored, quote);
+    if (quote.state === MintQuoteState.ISSUED) {
+      // A previous claim may have reached the mint before the relay final
+      // write. Resume the durable journal instead of submitting again.
+      return (await this.ensureCoordinator()).resume();
+    }
     if (quote.state !== MintQuoteState.PAID) {
       throw new Error(`mint quote is ${quote.state}, not PAID`);
     }

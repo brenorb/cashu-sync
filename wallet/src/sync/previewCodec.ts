@@ -183,10 +183,14 @@ function decodeOutputData(
       input.blindedMessage,
       `${path}.blindedMessage`
     ),
-    blindingFactor: decimalAmount(
-      input.blindingFactor,
-      `${path}.blindingFactor`
-    ),
+    // cashu-ts stores blinding factors as arbitrary 256-bit integers; they
+    // are not wallet-denominated amounts and may exceed the amount codec's
+    // 20-digit bound.
+    blindingFactor: stringValue(input.blindingFactor, `${path}.blindingFactor`, {
+      min: 1,
+      max: 78,
+      pattern: /^(0|[1-9]\d*)$/,
+    }),
     secret: stringValue(input.secret, `${path}.secret`, {
       min: 2,
       max: 8192,

@@ -70,6 +70,33 @@ describe("Cashu preview codec", () => {
     expect(restored.legacySignature).toBe("legacy-signature");
   });
 
+  it("accepts a full-width cashu blinding factor", () => {
+    const wideOutput = new OutputData(
+      {
+        amount: Amount.from(1),
+        B_: `02${"0".repeat(64)}`,
+        id: "00c0ffee",
+      },
+      BigInt("1" + "0".repeat(77)),
+      Uint8Array.from([1])
+    );
+    const serialized = serializeMintPreviewV0({
+      method: "bolt11",
+      keysetId: "00c0ffee",
+      quote: {
+        quote: "mint-q",
+        request: "lnbc1mint",
+        amount: Amount.from(1),
+        unit: "usd",
+        state: MintQuoteState.PAID,
+        expiry: null,
+      },
+      payload: { quote: "mint-q", outputs: [wideOutput.blindedMessage] },
+      outputData: [wideOutput],
+    });
+    expect(deserializeMintPreviewV0(serialized).outputData).toHaveLength(1);
+  });
+
   it("round-trips a melt preview with inputs and outputs in exact order", () => {
     const outputs = [output(0, 3), output(0, 4)];
     const quote: MeltQuoteBolt11Response = {

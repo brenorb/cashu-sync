@@ -89,7 +89,10 @@ const meltPreview: SerializedMeltPreviewV0 = {
 };
 
 const mintResponse: PendingMintResponseV0 = {
-  proofs: [proof("01", 10, "02mintfirst"), proof("02", 20, "02mintsecond")],
+  proofs: [
+    proof(String.fromCharCode(1), 10, "02mintfirst"),
+    proof(String.fromCharCode(2), 20, "02mintsecond"),
+  ],
 };
 
 function proof(secret: string, amount: number, C: string): SnapshotProofV0 {
@@ -278,7 +281,9 @@ describe("OperationJournalRepository responses", () => {
     await repository.markSubmitted(MINT_OPERATION, "mint", NOW + 1);
     await repository.recordMintResponse(MINT_OPERATION, mintResponse, NOW + 2);
 
-    expect(await db.proofs.bulkGet(["01", "02"])).toEqual(mintResponse.proofs);
+    expect(
+      await db.proofs.bulkGet([String.fromCharCode(1), String.fromCharCode(2)])
+    ).toEqual(mintResponse.proofs);
     expect(await db.mintQuotes.get("mint-q")).toMatchObject({
       state: "ISSUED",
     });
@@ -298,12 +303,12 @@ describe("OperationJournalRepository responses", () => {
   it("rolls back mint response collisions and mid-transaction failures", async () => {
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
-    await db.proofs.put(proof("02", 99, "collision"));
+    await db.proofs.put(proof(String.fromCharCode(2), 99, "collision"));
 
     await expect(
       repository.recordMintResponse(MINT_OPERATION, mintResponse, NOW + 1)
     ).rejects.toMatchObject({ code: "proof-collision" });
-    expect(await db.proofs.get("01")).toBeUndefined();
+    expect(await db.proofs.get(String.fromCharCode(1))).toBeUndefined();
     expect(await db.mintQuotes.get("mint-q")).toMatchObject({ state: "PAID" });
     expect(
       (await db.walletSyncState.get("wallet"))?.pending_operation
@@ -312,14 +317,16 @@ describe("OperationJournalRepository responses", () => {
       response: null,
     });
 
-    await db.proofs.delete("02");
+    await db.proofs.delete(String.fromCharCode(2));
     vi.spyOn(db.mintQuotes, "update").mockRejectedValueOnce(
       new Error("injected quote failure")
     );
     await expect(
       repository.recordMintResponse(MINT_OPERATION, mintResponse, NOW + 1)
     ).rejects.toThrow("injected quote failure");
-    expect(await db.proofs.bulkGet(["01", "02"])).toEqual([
+    expect(
+      await db.proofs.bulkGet([String.fromCharCode(1), String.fromCharCode(2)])
+    ).toEqual([
       undefined,
       undefined,
     ]);
@@ -382,7 +389,7 @@ describe("OperationJournalRepository responses", () => {
         {
           proofs: [
             proof("attacker", 10, "02mintfirst"),
-            proof("02", 20, "02mintsecond"),
+            proof(String.fromCharCode(2), 20, "02mintsecond"),
           ],
         },
         NOW + 1
@@ -399,11 +406,13 @@ describe("OperationJournalRepository responses", () => {
     const response: PendingMeltResponseV0 = {
       state: "PAID",
       payment_preimage: "preimage",
-      change: [proof("03", 4, "02change")],
+      change: [proof(String.fromCharCode(3), 4, "02change")],
     };
     await repository.recordMeltResponse(MELT_OPERATION, response, NOW + 2);
 
-    expect(await db.proofs.bulkGet(["first", "second", "03"])).toEqual([
+    expect(
+      await db.proofs.bulkGet(["first", "second", String.fromCharCode(3)])
+    ).toEqual([
       undefined,
       undefined,
       response.change[0],
@@ -465,15 +474,17 @@ describe("OperationJournalRepository responses", () => {
       {
         state: "PAID",
         payment_preimage: "preimage",
-        change: [proof("03", 4, "02change")],
+        change: [proof(String.fromCharCode(3), 4, "02change")],
       },
       NOW + 2
     );
 
-    expect(await db.proofs.bulkGet(["first", "second", "03"])).toEqual([
+    expect(
+      await db.proofs.bulkGet(["first", "second", String.fromCharCode(3)])
+    ).toEqual([
       undefined,
       undefined,
-      proof("03", 4, "02change"),
+      proof(String.fromCharCode(3), 4, "02change"),
     ]);
     expect(
       (await db.walletSyncState.get("wallet"))?.pending_operation
@@ -544,7 +555,7 @@ describe("OperationJournalRepository responses", () => {
       const response: PendingMeltResponseV0 = {
         state: "PAID",
         payment_preimage: "preimage",
-        change: [proof("03", 4, "02change")],
+        change: [proof(String.fromCharCode(3), 4, "02change")],
       };
       inject();
 

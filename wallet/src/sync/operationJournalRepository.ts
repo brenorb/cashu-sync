@@ -26,6 +26,7 @@ import type {
   SnapshotV0,
 } from "src/sync/types";
 import { canonicalJson } from "src/sync/validation";
+import { hexToBytes } from "src/sync/syncCrypto";
 
 const OPERATION_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -960,6 +961,10 @@ function sameSelectedProof(
   );
 }
 
+function preparedOutputSecret(serialized: string): string {
+  return new TextDecoder().decode(hexToBytes(serialized));
+}
+
 function assertMintResponseMatchesPreview(
   pending: PendingMintV0,
   response: PendingMintResponseV0
@@ -977,7 +982,7 @@ function assertMintResponseMatchesPreview(
         proof.id !== output.id ||
         proof.id !== prepared.blindedMessage.id ||
         proof.amount !== safeDecimalNumber(output.amount) ||
-        proof.secret.toLowerCase() !== prepared.secret.toLowerCase()
+        proof.secret !== preparedOutputSecret(prepared.secret)
       );
     })
   ) {
@@ -1001,7 +1006,7 @@ function assertMeltResponseMatchesPreview(
         prepared === undefined ||
         proof.id !== preview.keyset_id ||
         proof.id !== prepared.blindedMessage.id ||
-        proof.secret.toLowerCase() !== prepared.secret.toLowerCase()
+        proof.secret !== preparedOutputSecret(prepared.secret)
       );
     })
   ) {
