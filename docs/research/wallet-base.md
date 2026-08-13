@@ -20,7 +20,7 @@ The evaluated upstream commit passed its 108 tests and produced a PWA build.
 
 ## Required adaptation
 
-- lock the product to one configured Nutshell mint;
+- lock the product to one configured USD Nutshell mint;
 - remove or disable send, receive, user-visible swap, multi-mint, discovery, NWC, Nostr DM, and unrelated advanced UI;
 - add a typed, minimal sync serializer rather than synchronizing arbitrary browser storage;
 - add pairing and the v0 revision/CAS protocol;
@@ -49,4 +49,3 @@ The wallet is a static PWA and can be hosted with GitHub Pages after switching f
 - Satoshi Pay: no license, old Cashu library, limited tests.
 - EndFiat: less mature and coupled to Supabase.
 - Official Cashu native wallet: strong base but Swift/Kotlin rather than a hostable PWA.
-

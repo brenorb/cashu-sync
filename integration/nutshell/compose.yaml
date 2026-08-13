@@ -1,0 +1,49 @@
+services:
+  redis:
+    image: redis:7.4.5-alpine@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    tmpfs:
+      - /data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+  mint:
+    image: cashubtc/nutshell:0.20.3@sha256:f039b0e61f64d67c7212f5472eb5d021c3703cd9e72170aa924906ce6bd1f2ed
+    command: ["poetry", "run", "mint"]
+    ports:
+      - "127.0.0.1:${CASHU_SYNC_NUTSHELL_PORT:-3338}:3338"
+    environment:
+      CASHU_DIR: /data
+      MINT_DATABASE: /data/mint
+      MINT_AUTH_DATABASE: /data/auth
+      MINT_PRIVATE_KEY: cashu-sync-integration-test-only
+      MINT_DERIVATION_PATH: "m/0'/2'/0'"
+      MINT_BACKEND_BOLT11_USD: FakeWallet
+      MINT_LISTEN_HOST: 0.0.0.0
+      MINT_LISTEN_PORT: 3338
+      MINT_INPUT_FEE_PPK: 0
+      MINT_RATE_LIMIT: "FALSE"
+      FAKEWALLET_BRR: "TRUE"
+      FAKEWALLET_DELAY_INCOMING_PAYMENT: 0
+      FAKEWALLET_DELAY_OUTGOING_PAYMENT: 0
+      FAKEWALLET_PAYMENT_STATE: SETTLED
+      FAKEWALLET_PAY_INVOICE_STATE: SETTLED
+      MINT_REDIS_CACHE_ENABLED: "TRUE"
+      MINT_REDIS_CACHE_URL: redis://redis:6379/0
+      MINT_REDIS_CACHE_TTL: 3600
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - mint-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3338/v1/info"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+
+volumes:
+  mint-data:

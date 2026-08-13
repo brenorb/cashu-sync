@@ -43,5 +43,4 @@ local prepared journal
 
 A relay conflict before the Nutshell request is a clean retry. A crash or conflict after the request requires reconciliation; the wallet preserves all request, counter, response, and proof material until the result is known.
 
-An unresolved operation does not expire automatically and blocks a new operation across paired wallets. The next wallet uses quote state, NUT-07, NUT-09/NUT-13, and NUT-19 where available to finish or safely clear it.
-
+An unresolved operation does not expire automatically and blocks a new operation across paired wallets. The next wallet uses quote state and NUT-07, plus wallet-side NUT-13 regeneration and mint-side NUT-09 restoration, to finish or safely clear it. The reference profile's one-hour NUT-19 cache permits exact-request replay but is not a durable source of truth after expiry.

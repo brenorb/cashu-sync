@@ -8,7 +8,7 @@ Cashu Sync v0 lets one person use the same Silent Link wallet from multiple pair
 
 V0 supports exactly:
 
-- one configured Nutshell mint;
+- one configured Nutshell mint using the `usd` unit;
 - minting value into the wallet;
 - melting value out of the wallet;
 - pairing fully authorized wallets;
@@ -28,7 +28,7 @@ Wallet clients hold and process all plaintext secrets. They create, sign, encryp
 
 ### Cashu mint
 
-V0 integrates against [Nutshell](https://github.com/cashubtc/nutshell) as the reference mint. The mint is authoritative for quotes and whether proofs are `UNSPENT`, `PENDING`, or `SPENT`.
+V0 integrates against [Nutshell](https://github.com/cashubtc/nutshell) as the reference mint. The mint is authoritative for quotes and whether proofs are `UNSPENT`, `PENDING`, or `SPENT`. The reproducible local profile is defined in [the Nutshell reference](./research/nutshell-reference.md).
 
 ### Silent Link sync relay
 
@@ -51,7 +51,7 @@ Silent Link operates one private Nostr-compatible relay backed by SQLite. It aut
 
 ### Cashu master seed
 
-The wallet uses a twelve-word BIP39 mnemonic and standard NUT-13 derivation for deterministic Cashu secrets and blinding factors. The user can deliberately reveal/export the mnemonic and import it later.
+The wallet uses a twelve-word BIP39 mnemonic and versioned NUT-13 derivation for deterministic Cashu secrets and blinding factors. It selects the derivation from the keyset ID: version `01` keysets use the HMAC-SHA256 construction and version `00` keysets use the legacy BIP32 construction. Counters are independent per mint and keyset. The user can deliberately reveal/export the mnemonic and import it later.
 
 ### Sync secret
 
@@ -68,7 +68,7 @@ The sync secret is used to:
 
 The wallet offers two explicit exports:
 
-- **Twelve-word funds backup:** recovers deterministic Cashu funds through NUT-13/NUT-09, but not the random sync secret or encrypted history.
+- **Twelve-word funds backup:** regenerates deterministic outputs through wallet-side NUT-13, asks the mint for their signatures through NUT-09, and filters proof state through NUT-07. It does not recover the random sync secret or encrypted history.
 - **Encrypted full-recovery bundle:** contains the mnemonic, sync secret, mint URL, relay URL, schema version, and last remembered head. It recovers funds plus synchronized state.
 
 Export requires deliberate confirmation and a user-supplied encryption passphrase. Plaintext seed or pairing material MUST NOT appear in URLs, analytics, logs, relay events, or clipboard operations performed without explicit user action.
@@ -118,7 +118,7 @@ Only routing and concurrency metadata is public. Tags MUST NOT expose revision n
   "revision": 42,
   "previous_event_id": "<same value as outer prev tag>",
   "mint": "https://configured-nutshell.example",
-  "unit": "sat",
+  "unit": "usd",
   "proofs": [],
   "counters": {},
   "quotes": [],
@@ -160,6 +160,8 @@ Snapshot application occurs in one local IndexedDB transaction. The client rejec
 
 After applying a snapshot, the wallet reconciles any pending operation and the proofs relevant to the requested action with Nutshell.
 
+NUT-17 notifications are an optional latency optimization, not a correctness dependency. After accepting a subscription, Nutshell sends the current state before later updates. A client still uses REST quote lookup, NUT-07, and NUT-09 reconciliation after a disconnect, missed notification, timeout, or restart.
+
 ## 9. Pending-operation journal
 
 The snapshot contains either `null` or one encrypted pending operation with:
@@ -168,7 +170,8 @@ The snapshot contains either `null` or one encrypted pending operation with:
 - `mint` or `melt` type;
 - phase;
 - quote ID and method;
-- exact request material or canonical request hash;
+- full ordered request material needed to submit the operation again, including quote, inputs, outputs, signature, and `prefer_async` where applicable;
+- optional canonical request hash for comparison and diagnostics;
 - selected input proofs for melt;
 - reserved NUT-13 counters and deterministic output material;
 - locally known response and quote state;
@@ -206,7 +209,7 @@ If the final snapshot conflicts, the wallet fetches the new head and reconciles;
 9. Persist the response and change proofs before marking inputs spent locally.
 10. Publish a final snapshot containing the new state and clearing the pending operation.
 
-Uncertain responses are reconciled through quote state, NUT-07, NUT-09/NUT-13 restoration, and NUT-19 where supported.
+The reference Nutshell profile enables NUT-19 with a one-hour TTL. Within that window, a wallet may repeat the exact mint or melt request to obtain a cached successful response. A NUT-19 cache miss or expiry is not proof that the first request failed. Durable reconciliation uses quote state and NUT-07, plus wallet-side NUT-13 regeneration and NUT-09 restoration for deterministic outputs.
 
 ## 12. Recovery
 
@@ -224,7 +227,7 @@ Decrypt the bundle, restore sync credentials and endpoints, fetch the relay snap
 
 ### Mnemonic-only recovery
 
-Derive and scan deterministic outputs through NUT-13/NUT-09, then check proof state through NUT-07. Create a new sync secret and genesis snapshot. Accounting history, labels, and unresolved operation context may be lost.
+For every known keyset, regenerate outputs through NUT-13 in batches of 100, request their signatures through NUT-09, and check restored proofs through NUT-07. Continue until three consecutive batches return no restored signatures. Set that keyset's next counter to one after the highest counter that returned a signature. Create a new sync secret and genesis snapshot. Accounting history, labels, and unresolved operation context may be lost.
 
 ## 13. Relay policy and deployment
 
@@ -264,7 +267,7 @@ Implementation is not v0-ready until automated tests prove:
 - prepared journal reaches the relay before any Nutshell call;
 - a failed CAS produces zero Nutshell calls;
 - crash recovery at every mint/melt boundary;
-- NUT-09/NUT-13 restore, NUT-07 reconciliation, and counter-gap scanning against the reference Nutshell mint;
+- wallet-side versioned NUT-13 derivation, NUT-09 restore, NUT-07 reconciliation, and batches-of-100/three-empty-batches counter scanning against the reference Nutshell mint;
 - two paired wallets racing from the same head result in exactly one mint call;
 - PWA update cannot replace code during an in-progress operation.
 
@@ -272,5 +275,6 @@ Implementation is not v0-ready until automated tests prove:
 
 The selected wallet base is Cashu.me at commit `f4a3f3221be0b7b818c71ece23d9cb472f03f4ad`. The rationale and required hardening are documented in [the wallet evaluation](./research/wallet-base.md).
 
-The relay should reuse a Nostr framework for protocol plumbing and implement only the SQLite compare-and-swap policy. The implementation must remain compatible with the normative behavior above even if the chosen framework changes.
+The reference mint is Nutshell `0.20.3` at commit `18539020b4fa473ad8ad440e210720d2aaf8401a`. Integration tests use the multi-platform image `cashubtc/nutshell:0.20.3@sha256:f039b0e61f64d67c7212f5472eb5d021c3703cd9e72170aa924906ce6bd1f2ed`, a USD FakeWallet backend, and Redis-backed NUT-19. NUT-13 is wallet behavior and is intentionally not advertised by the mint's NUT-06 response.
 
+The relay should reuse a Nostr framework for protocol plumbing and implement only the SQLite compare-and-swap policy. The implementation must remain compatible with the normative behavior above even if the chosen framework changes.

@@ -5,7 +5,7 @@ This file separates agreed v0 scope from ideas that need later validation.
 ## V0 — implement now
 
 - Cashu.me-derived phone PWA with Silent Link branding.
-- One configured Nutshell mint.
+- One configured USD Nutshell mint.
 - Mint and melt only.
 - Full-authority QR/deeplink pairing.
 - Random shared sync secret.
@@ -38,4 +38,3 @@ This file separates agreed v0 scope from ideas that need later validation.
 - Hardware-backed key storage and least-authority paired devices.
 
 These are not v0 compatibility requirements. Any promotion requires a new ADR, security analysis, and tests.
-
