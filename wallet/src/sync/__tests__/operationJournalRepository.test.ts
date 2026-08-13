@@ -327,6 +327,47 @@ describe("OperationJournalRepository responses", () => {
     });
   });
 
+  it.each([
+    [
+      "history",
+      () =>
+        vi
+          .spyOn(db.paymentHistory, "bulkPut")
+          .mockRejectedValueOnce(new Error("injected mint history failure")),
+    ],
+    [
+      "journal",
+      () =>
+        vi
+          .spyOn(db.walletSyncState, "put")
+          .mockRejectedValueOnce(new Error("injected mint journal failure")),
+    ],
+  ] as const)(
+    "rolls back mint response after %s failure",
+    async (_step, inject) => {
+      await seedMintRows();
+      await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
+      inject();
+
+      await expect(
+        repository.recordMintResponse(MINT_OPERATION, mintResponse, NOW + 1)
+      ).rejects.toThrow(/injected mint/);
+      expect(await db.proofs.count()).toBe(0);
+      expect(await db.mintQuotes.get("mint-q")).toMatchObject({
+        state: "PAID",
+      });
+      expect(await db.paymentHistory.get("mint:mint-q")).toMatchObject({
+        status: "pending",
+      });
+      expect(
+        (await db.walletSyncState.get("wallet"))?.pending_operation
+      ).toMatchObject({
+        phase: "prepared",
+        response: null,
+      });
+    }
+  );
+
   it("rejects mint proofs not bound to prepared output secrets before writing", async () => {
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
@@ -463,33 +504,70 @@ describe("OperationJournalRepository responses", () => {
     expect(await db.walletSyncState.get("wallet")).toEqual(before);
   });
 
-  it("rolls back change and response if exact input deletion fails", async () => {
-    await seedMeltRows();
-    await repository.prepareMelt(MELT_OPERATION, meltPreview, NOW);
-    const response: PendingMeltResponseV0 = {
-      state: "PAID",
-      payment_preimage: "preimage",
-      change: [proof("03", 4, "02change")],
-    };
-    vi.spyOn(db.proofs, "bulkDelete").mockRejectedValueOnce(
-      new Error("injected delete failure")
-    );
+  it.each([
+    [
+      "journal response",
+      () =>
+        vi
+          .spyOn(db.walletSyncState, "put")
+          .mockRejectedValueOnce(new Error("injected melt journal failure")),
+    ],
+    [
+      "input deletion",
+      () =>
+        vi
+          .spyOn(db.proofs, "bulkDelete")
+          .mockRejectedValueOnce(new Error("injected melt delete failure")),
+    ],
+    [
+      "quote update",
+      () =>
+        vi
+          .spyOn(db.meltQuotes, "update")
+          .mockRejectedValueOnce(new Error("injected melt quote failure")),
+    ],
+    [
+      "history update",
+      () =>
+        vi
+          .spyOn(db.paymentHistory, "bulkPut")
+          .mockRejectedValueOnce(new Error("injected melt history failure")),
+    ],
+  ] as const)(
+    "rolls back PAID melt after %s failure",
+    async (_step, inject) => {
+      await seedMeltRows();
+      await repository.prepareMelt(MELT_OPERATION, meltPreview, NOW);
+      const response: PendingMeltResponseV0 = {
+        state: "PAID",
+        payment_preimage: "preimage",
+        change: [proof("03", 4, "02change")],
+      };
+      inject();
 
-    await expect(
-      repository.recordMeltResponse(MELT_OPERATION, response, NOW + 1)
-    ).rejects.toThrow("injected delete failure");
-    expect(await db.proofs.get("03")).toBeUndefined();
-    expect(await db.proofs.bulkGet(["first", "second"])).toEqual([
-      expect.objectContaining({ reserved: true }),
-      expect.objectContaining({ reserved: true }),
-    ]);
-    expect(
-      (await db.walletSyncState.get("wallet"))?.pending_operation
-    ).toMatchObject({
-      phase: "prepared",
-      response: null,
-    });
-  });
+      await expect(
+        repository.recordMeltResponse(MELT_OPERATION, response, NOW + 1)
+      ).rejects.toThrow(/injected melt/);
+      expect(await db.proofs.get("03")).toBeUndefined();
+      expect(await db.proofs.bulkGet(["first", "second"])).toEqual([
+        expect.objectContaining({ reserved: true }),
+        expect.objectContaining({ reserved: true }),
+      ]);
+      expect(
+        (await db.walletSyncState.get("wallet"))?.pending_operation
+      ).toMatchObject({
+        phase: "prepared",
+        response: null,
+      });
+      expect(await db.meltQuotes.get("melt-q")).toMatchObject({
+        state: "UNPAID",
+        payment_preimage: null,
+      });
+      expect(await db.paymentHistory.get("melt:melt-q")).toMatchObject({
+        status: "pending",
+      });
+    }
+  );
 });
 
 describe("OperationJournalRepository CAS finalization", () => {
