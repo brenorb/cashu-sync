@@ -40,6 +40,23 @@
       </q-item>
     </SettingsSection>
 
+    <SettingsSection title="Delete this device">
+      <q-item class="column items-stretch q-pa-lg q-gutter-md">
+        <p class="recovery-copy">
+          Remove the local wallet, proofs, history, and authority from this
+          device. The encrypted relay snapshot remains available for recovery.
+        </p>
+        <q-btn
+          data-recovery-action="delete"
+          outline
+          color="negative"
+          no-caps
+          label="Delete wallet from this device"
+          @click="deleteWallet"
+        />
+      </q-item>
+    </SettingsSection>
+
     <SettingsSection title="Restore this wallet">
       <q-item class="column items-stretch q-pa-lg q-gutter-md">
         <p class="recovery-copy">
@@ -109,6 +126,7 @@ import {
   useV0WalletService,
 } from "src/sync/v0WalletService";
 import { useWalletStore } from "src/stores/wallet";
+import { cashuDb, resetCashuDexie } from "src/stores/dexie";
 
 export default defineComponent({
   name: "RecoverySettingsPage",
@@ -178,6 +196,23 @@ export default defineComponent({
         this.importPassphrase = "";
         this.bundleInput = "";
         this.bundleFile = null;
+      });
+    },
+    async deleteWallet() {
+      if (
+        !window.confirm(
+          "Delete this wallet from this device? The relay backup will remain."
+        )
+      )
+        return;
+      await this.run(async () => {
+        const runtime = useSyncRuntimeService();
+        await runtime.runtime.resetSession();
+        runtime.authority.clear();
+        await resetCashuDexie(cashuDb);
+        resetV0WalletService();
+        this.message =
+          "Wallet deleted from this device. The relay backup remains.";
       });
     },
     async run(operation: () => Promise<void>) {

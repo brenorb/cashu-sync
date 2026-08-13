@@ -61,12 +61,12 @@ async function pairWallets(
   joining: Page,
   server: BuiltPwaServer
 ) {
-  await joining.goto(`${server.walletUrl}#/settings/sync`);
+  await joining.goto(`${server.baseUrl}#/settings/sync`);
   await joining.locator('[data-pairing-action="create-request"]').click();
   const request = await field(joining, "request-output").inputValue();
   expect(request).toContain('"type":"cashu-sync-pairing-request"');
 
-  await existing.goto(`${server.walletUrl}#/settings/sync`);
+  await existing.goto(`${server.baseUrl}#/settings/sync`);
   await expect(existing.getByText("Sync authority configured")).toBeVisible();
   await field(existing, "request-input").fill(request);
   await existing.locator('[data-pairing-action="create-response"]').click();
@@ -167,7 +167,7 @@ test.describe("v0 live paired wallet acceptance", () => {
     await expect(accounting(deviceA)).toContainText("Invoice paid");
     await expect(accounting(deviceA).getByRole("listitem")).toHaveCount(2);
 
-    await deviceA.goto(`${server.walletUrl}#/settings/recovery`);
+    await deviceA.goto(`${server.baseUrl}#/settings/recovery`);
     await field(deviceA, "export-passphrase").fill(BACKUP_PASSPHRASE);
     await field(deviceA, "export-confirmation").fill(BACKUP_PASSPHRASE);
     const downloadPromise = deviceA.waitForEvent("download");
@@ -185,7 +185,7 @@ test.describe("v0 live paired wallet acceptance", () => {
       deviceA.getByText("Encrypted backup downloaded.")
     ).toBeVisible();
 
-    await recovery.goto(`${server.walletUrl}#/settings/recovery`);
+    await recovery.goto(`${server.baseUrl}#/settings/recovery`);
     await recovery
       .locator('[data-recovery-field="bundle-file"] input[type="file"]')
       .setInputFiles(backupPath);

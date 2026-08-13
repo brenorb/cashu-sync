@@ -59,6 +59,13 @@
             label="Encrypted response from existing wallet"
           />
           <q-btn
+            data-pairing-action="scan-response"
+            flat
+            no-caps
+            label="Scan response QR"
+            @click="openScanner('response')"
+          />
+          <q-btn
             data-pairing-action="finish"
             color="primary"
             no-caps
@@ -84,6 +91,13 @@
           outlined
           autogrow
           label="Pairing request from new wallet"
+        />
+        <q-btn
+          data-pairing-action="scan-request"
+          flat
+          no-caps
+          label="Scan request QR"
+          @click="openScanner('request')"
         />
         <q-btn
           data-pairing-action="create-response"
@@ -123,11 +137,15 @@
     >
       {{ message }}
     </p>
+    <q-dialog v-model="camera.show" backdrop-filter="blur(2px) brightness(60%)">
+      <QrcodeReader @decode="decodePairing" />
+    </q-dialog>
   </SettingsPageShell>
 </template>
 
 <script lang="ts">
 import { defineComponent } from "vue";
+import { mapState } from "pinia";
 import SettingsPageShell from "./SettingsPageShell.vue";
 import SettingsSection from "./SettingsSection.vue";
 import {
@@ -140,10 +158,12 @@ import {
   useV0WalletService,
 } from "src/sync/v0WalletService";
 import { useWalletStore } from "src/stores/wallet";
+import { useCameraStore } from "src/stores/camera";
+import QrcodeReader from "src/components/QrcodeReader.vue";
 
 export default defineComponent({
   name: "SyncSettingsPage",
-  components: { SettingsPageShell, SettingsSection },
+  components: { SettingsPageShell, SettingsSection, QrcodeReader },
   data() {
     return {
       configured: false,
@@ -155,18 +175,33 @@ export default defineComponent({
       busy: false,
       failed: false,
       message: "",
+      scanTarget: null as "request" | "response" | null,
     };
+  },
+  computed: {
+    ...mapState(useCameraStore, ["camera"]),
   },
   created() {
     // The wallet store captures vue-i18n during construction. Create it while
     // this page still owns the active Vue instance, before pairing awaits.
     useWalletStore();
     this.configured = useSyncRuntimeService().authority.load() !== null;
+    if (this.$route.query.auto === "1") this.createRequest();
   },
   beforeUnmount() {
     this.session?.destroy();
   },
   methods: {
+    openScanner(target: "request" | "response") {
+      this.scanTarget = target;
+      useCameraStore().showCamera();
+    },
+    decodePairing(value: string) {
+      if (this.scanTarget === "request") this.pairingRequestInput = value;
+      if (this.scanTarget === "response") this.pairingResponseInput = value;
+      this.scanTarget = null;
+      useCameraStore().closeCamera();
+    },
     createRequest() {
       this.session?.destroy();
       const runtime = useSyncRuntimeService();

@@ -22,6 +22,7 @@ describe("v0 visible UI contract", () => {
     expect(paths).toEqual(
       expect.arrayContaining([
         "/",
+        "/wallet",
         "/settings",
         "/settings/sync",
         "/settings/recovery",
@@ -48,6 +49,9 @@ describe("v0 visible UI contract", () => {
       expect(paths).not.toContain(forbidden);
     }
     expect(source("src/router/routes.js")).toContain("V0WalletPage.vue");
+    expect(source("src/router/routes.js")).toContain(
+      "SilentLinkLandingPage.vue"
+    );
   });
 
   it("exposes only Bolt11 mint and melt actions on the wallet", () => {
@@ -56,8 +60,15 @@ describe("v0 visible UI contract", () => {
     expect(wallet).toContain('data-v0-action="melt-bolt11"');
     expect(wallet).toContain('to="/settings/sync"');
     expect(wallet).not.toMatch(
-      /send token|receive token|ecash|scan|on-chain|bolt12|lnurl|choose mint/i
+      /send token|receive token|ecash|on-chain|bolt12|lnurl|choose mint/i
     );
+  });
+
+  it("exposes the Silent Link landing checkout", () => {
+    const landing = template("src/pages/SilentLinkLandingPage.vue");
+    expect(landing).toContain('data-landing-action="buy-esim"');
+    expect(landing).toContain('data-landing-action="top-up"');
+    expect(landing).toMatch(/silent link/i);
   });
 
   it("removes mint and unit switching from reachable payment dialogs", () => {
@@ -90,10 +101,13 @@ describe("v0 visible UI contract", () => {
     expect(sync).toMatch(/two QR codes/i);
     expect(sync).toContain('data-pairing-action="finish"');
     expect(sync).toContain('data-pairing-action="create-response"');
+    expect(sync).toContain('data-pairing-action="scan-request"');
+    expect(sync).toContain('data-pairing-action="scan-response"');
     expect(recovery).toMatch(/encrypted recovery bundle/i);
     expect(recovery).toMatch(/Restore this wallet/i);
     expect(recovery).toContain('data-recovery-action="download"');
     expect(recovery).toContain('data-recovery-action="restore"');
+    expect(recovery).toContain('data-recovery-action="delete"');
     expect(`${sync}${recovery}`).toContain("aria-live");
     expect(source("src/pages/settings/SyncSettings.vue")).toMatch(
       /created\(\)[\s\S]*useWalletStore\(\)/

@@ -20,6 +20,7 @@ export const DEFAULT_E2E_BASE_PATH = "/cashu-sync-e2e/";
 export type BuiltPwaServer = {
   origin: string;
   basePath: string;
+  baseUrl: string;
   walletUrl: string;
   close: () => Promise<void>;
 };
@@ -129,11 +130,13 @@ export async function startBuiltPwaServer(options?: {
   }
 
   const origin = `http://127.0.0.1:${address.port}`;
+  const baseUrl = `${origin}${basePath}`;
   let closed = false;
   return {
     origin,
     basePath,
-    walletUrl: `${origin}${basePath}`,
+    baseUrl,
+    walletUrl: `${baseUrl}#/wallet`,
     close: async () => {
       if (closed) return;
       closed = true;

@@ -43,16 +43,48 @@
 
     <V0AccountingHistory />
 
-    <p v-if="syncMessage" class="v0-runtime-status" role="status" aria-live="polite">
+    <p
+      v-if="syncMessage"
+      class="v0-runtime-status"
+      role="status"
+      aria-live="polite"
+    >
       {{ syncMessage }}
     </p>
+
+    <section
+      v-if="showFundedHandoff"
+      class="funded-handoff"
+      aria-labelledby="funded-title"
+    >
+      <p class="v0-eyebrow">Wallet ready</p>
+      <h2 id="funded-title">Your credits are yours.</h2>
+      <p>
+        Open a browser on your phone and pair it with this funded wallet in two
+        quick scans.
+      </p>
+      <vue-qrcode
+        :value="fundedWalletUrl"
+        :options="{ width: 180 }"
+        aria-label="Open funded wallet QR code"
+      />
+      <a :href="fundedWalletUrl" class="funded-link"
+        >Open pairing-ready wallet <span aria-hidden="true">→</span></a
+      >
+      <small
+        >The QR contains no seed or funds. It opens the wallet website and
+        starts pairing.</small
+      >
+    </section>
 
     <q-dialog v-model="showMintDialog">
       <q-card class="v0-dialog" data-v0-dialog="mint">
         <q-card-section>
           <p class="v0-eyebrow">Add funds</p>
           <h2>Mint USD</h2>
-          <p>Pay the Lightning invoice, then claim the exact prepared outputs.</p>
+          <p>
+            Pay the Lightning invoice, then claim the exact prepared outputs.
+          </p>
         </q-card-section>
         <q-card-section v-if="!mintQuote">
           <q-input
@@ -73,6 +105,17 @@
             readonly
             autogrow
             label="Lightning invoice"
+            @click="claimMintQuote"
+          />
+          <q-btn
+            data-v0-action="simulate-mint-payment"
+            class="full-width"
+            color="primary"
+            no-caps
+            unelevated
+            :loading="dialogBusy"
+            label="I've paid — add credits"
+            @click="claimMintQuote"
           />
         </q-card-section>
         <q-card-section v-if="dialogError" class="v0-dialog-error" role="alert">
@@ -109,7 +152,9 @@
         <q-card-section>
           <p class="v0-eyebrow">Pay invoice</p>
           <h2>Melt USD</h2>
-          <p>The selected proofs are fenced through the relay before payment.</p>
+          <p>
+            The selected proofs are fenced through the relay before payment.
+          </p>
         </q-card-section>
         <q-card-section v-if="!meltQuote">
           <q-input
@@ -160,6 +205,7 @@
 import { defineComponent } from "vue";
 import { mapState } from "pinia";
 import { ChevronRight as ChevronRightIcon } from "lucide-vue-next";
+import VueQrcode from "@chenfengyuan/vue-qrcode";
 import V0BalanceCard from "src/components/V0BalanceCard.vue";
 import V0AccountingHistory from "src/components/V0AccountingHistory.vue";
 import { useMintsStore } from "src/stores/mints";
@@ -179,6 +225,7 @@ export default defineComponent({
     V0BalanceCard,
     V0AccountingHistory,
     ChevronRightIcon,
+    VueQrcode,
   },
   data() {
     return {
@@ -192,6 +239,8 @@ export default defineComponent({
       dialogError: "",
       syncMessage: "Starting synchronized wallet…",
       walletReady: false,
+      showFundedHandoff: false,
+      fundedWalletUrl: "",
       visibilityHandler: null as (() => void) | null,
     };
   },
@@ -230,6 +279,11 @@ export default defineComponent({
         this.syncMessage = "Funds added and synchronized.";
         this.showMintDialog = false;
         this.mintQuote = null;
+        this.fundedWalletUrl = this.$router.resolve({
+          path: "/settings/sync",
+          query: { auto: "1" },
+        }).href;
+        this.showFundedHandoff = true;
       });
     },
     async createMeltQuote() {
@@ -256,8 +310,10 @@ export default defineComponent({
     },
     parseUsdCents(value: string): number {
       const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
-      if (!match) throw new Error("enter a valid USD amount with up to two decimals");
-      const cents = Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
+      if (!match)
+        throw new Error("enter a valid USD amount with up to two decimals");
+      const cents =
+        Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
       if (!Number.isSafeInteger(cents) || cents <= 0) {
         throw new Error("amount must be greater than zero");
       }
@@ -297,10 +353,12 @@ export default defineComponent({
         resumed.status === "idle" || resumed.status === "completed";
       this.visibilityHandler = () => {
         if (document.visibilityState === "visible") {
-          void useV0WalletService().syncNow().catch((error) => {
-            this.syncMessage =
-              error instanceof Error ? error.message : "Sync failed";
-          });
+          void useV0WalletService()
+            .syncNow()
+            .catch((error) => {
+              this.syncMessage =
+                error instanceof Error ? error.message : "Sync failed";
+            });
         }
       };
       document.addEventListener("visibilitychange", this.visibilityHandler);
@@ -316,6 +374,9 @@ export default defineComponent({
     if (request) {
       this.meltRequest = request;
       this.showMeltDialog = true;
+    }
+    if (this.$route.query.topup === "1") {
+      this.showMintDialog = true;
     }
   },
   beforeUnmount() {
