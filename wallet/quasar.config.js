@@ -78,6 +78,12 @@ module.exports = configure(function (/* ctx */) {
 
       vueRouterMode: "hash", // GitHub Pages has no SPA fallback.
       publicPath,
+      env: {
+        CASHU_SYNC_MINT_URL: process.env.CASHU_SYNC_MINT_URL || "",
+        CASHU_SYNC_RELAY_URL: process.env.CASHU_SYNC_RELAY_URL || "",
+        CASHU_SYNC_ALLOW_INSECURE_LOOPBACK:
+          process.env.CASHU_SYNC_ALLOW_INSECURE_LOOPBACK === "true",
+      },
       // vueRouterBase,
       // vueDevtools,
       // vueOptionsAPI: false,
