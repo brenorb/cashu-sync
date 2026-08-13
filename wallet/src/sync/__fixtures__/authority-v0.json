@@ -1,0 +1,8 @@
+{
+  "schema": 0,
+  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+  "sync_secret": "1111111111111111111111111111111111111111111111111111111111111111",
+  "mint_url": "https://usd-mint.example",
+  "relay_url": "wss://relay.example",
+  "head_event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}
