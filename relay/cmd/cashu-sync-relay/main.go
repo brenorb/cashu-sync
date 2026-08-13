@@ -40,7 +40,13 @@ func run() error {
 	}
 	defer repository.Close()
 
-	server := syncrelay.New(repository, syncrelay.DefaultConfig())
+	relayConfig := syncrelay.DefaultConfig()
+	if config.AdmissionMode == appconfig.AdmissionAllowlist {
+		relayConfig.AdmissionMode = syncrelay.AdmissionAllowlist
+		relayConfig.AllowedPubkeys = config.AllowedPubkeys
+		relayConfig.ServiceURL = config.ServiceURL
+	}
+	server := syncrelay.New(repository, relayConfig)
 	started := make(chan bool)
 	serveErr := make(chan error, 1)
 	go func() {

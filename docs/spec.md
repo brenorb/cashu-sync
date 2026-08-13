@@ -236,14 +236,19 @@ V0 runs one Go relay process and one persistent SQLite database behind TLS/WSS.
 The relay:
 
 - requires NIP-42 authentication for reads and writes;
+- in production, admits only sync pubkeys loaded from the operator allowlist;
 - permits access only to the authenticated sync pubkey;
 - accepts only kind `30078`, the exact v0 `d` value, valid signatures, bounded clock skew, and bounded ciphertext size;
-- rate-limits by authenticated pubkey and IP;
+- rate-limits by admitted pubkey; the trusted TLS edge independently limits source IPs, handshakes, connections, frames, and bandwidth;
 - stores the current event plus a small bounded rollback history;
 - backs up encrypted SQLite data;
 - never decrypts events or projects wallet state.
 
 GitHub Pages may host the static wallet PWA. It cannot host the stateful WebSocket relay.
+
+Open admission is permitted only for local end-to-end testing and only on a loopback bind. Production uses a nonempty startup-loaded allowlist and a fixed canonical HTTPS/WSS service origin for NIP-42; it never derives the authentication origin from forwarded request headers. Paired devices share the already admitted sync key. Full-bundle recovery retains that key; mnemonic-only recovery creates a new key that the operator must enroll.
+
+The production Go port is reachable only from its TLS reverse proxy. That proxy overwrites inbound `X-Forwarded-For`, enforces per-IP and global WebSocket limits, and bounds handshake rate, idle connections, frame size, and bandwidth. The persistent SQLite volume has a quota and usage alert in addition to backups.
 
 ## 14. Security and privacy limitations
 
@@ -261,6 +266,10 @@ Implementation is not v0-ready until automated tests prove:
 
 - genesis, child, duplicate, stale-child, concurrent-child, and restart-safe CAS behavior;
 - invalid signature, wrong kind/`d`, oversized event, and unauthenticated access rejection;
+- unsafe open-mode binds and empty or malformed production allowlists fail at startup;
+- rotated unadmitted pubkeys create no relay state or rate-limiter entries;
+- paired clients sharing one admitted sync key both work, and pubkey limits survive source-IP changes;
+- the canonical NIP-42 service origin cannot be changed through forwarded host headers;
 - NIP-44 round trip, tamper rejection, wrong-key rejection, and official vector compatibility;
 - schema validation and atomic local snapshot import;
 - pairing success, invalid challenge, replay rejection, and cleanup;

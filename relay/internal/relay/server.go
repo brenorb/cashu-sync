@@ -13,7 +13,8 @@ import (
 )
 
 type Server struct {
-	Relay *khatru.Relay
+	Relay  *khatru.Relay
+	policy *Policy
 }
 
 func New(repository *store.Repository, config Config) *Server {
@@ -23,6 +24,9 @@ func New(repository *store.Repository, config Config) *Server {
 	relay.Info.Description = "Private encrypted snapshot relay for Cashu Sync v0"
 	relay.Info.SupportedNIPs = []any{1, 11, 42, 78}
 	relay.MaxMessageSize = int64(config.MaxContentBytes + 16*1024)
+	if config.AdmissionMode == AdmissionAllowlist {
+		relay.ServiceURL = config.ServiceURL
+	}
 	relay.Router().HandleFunc("GET /healthz", func(writer http.ResponseWriter, request *http.Request) {
 		if err := repository.Ping(request.Context()); err != nil {
 			http.Error(writer, "not ready", http.StatusServiceUnavailable)
@@ -61,5 +65,5 @@ func New(repository *store.Repository, config Config) *Server {
 		}()
 		return result, nil
 	})
-	return &Server{Relay: relay}
+	return &Server{Relay: relay, policy: policy}
 }

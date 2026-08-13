@@ -188,6 +188,27 @@ func TestHistoryPruningRetainsLatestEventsAndIsolatesAuthors(t *testing.T) {
 	}
 }
 
+func TestRowCountIsBoundedByAuthorsAndMaxHistory(t *testing.T) {
+	repo, err := Open(filepath.Join(t.TempDir(), "relay.db"), 3)
+	if err != nil {
+		t.Fatalf("open repository: %v", err)
+	}
+	t.Cleanup(func() { _ = repo.Close() })
+	for author := 0; author < 4; author++ {
+		key := nostr.GeneratePrivateKey()
+		previous := ""
+		for revision := 0; revision < 7; revision++ {
+			event := signedEvent(t, key, previous, "ciphertext")
+			mustAdvance(t, repo, event)
+			previous = event.ID
+		}
+	}
+	events, heads := rowCounts(t, repo)
+	if events != 4*3 || heads != 4 {
+		t.Fatalf("rows: events=%d heads=%d, want events=12 heads=4", events, heads)
+	}
+}
+
 func openTestRepository(t *testing.T, path string) *Repository {
 	t.Helper()
 	repo, err := Open(path, 8)
@@ -246,4 +267,15 @@ func eventIDs(events []nostr.Event) []string {
 		ids[i] = event.ID
 	}
 	return ids
+}
+
+func rowCounts(t *testing.T, repo *Repository) (events int, heads int) {
+	t.Helper()
+	if err := repo.db.QueryRow(`SELECT COUNT(*) FROM events`).Scan(&events); err != nil {
+		t.Fatalf("count events: %v", err)
+	}
+	if err := repo.db.QueryRow(`SELECT COUNT(*) FROM heads`).Scan(&heads); err != nil {
+		t.Fatalf("count heads: %v", err)
+	}
+	return events, heads
 }

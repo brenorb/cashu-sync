@@ -54,11 +54,10 @@ The local IndexedDB store is a cache and crash journal, not the only backup.
 
 ## Relay containers
 
-The Go relay reuses Nostr WebSocket, signature, subscription, and NIP-42 behavior. Its only wallet-specific responsibility is atomic compare-and-swap: the incoming `prev` event ID must equal the SQLite head.
+The Go relay reuses Nostr WebSocket, signature, subscription, and NIP-42 behavior. Its wallet-specific responsibilities are production admission from a startup-loaded sync-pubkey allowlist and atomic compare-and-swap: the incoming `prev` event ID must equal the SQLite head. Paired wallets share one admitted sync key. Open admission exists only for loopback-bound local end-to-end tests.
 
 The relay does not decrypt snapshots, calculate balances, reconcile proofs, or call Nutshell. V0 runs one relay process with one persistent SQLite volume. GitHub Pages hosts only the static PWA, never this stateful service.
 
 ## Deployment note
 
 A future CLI is another Wallet container using the same encrypted schema and relay protocol. It is not part of the first v0 implementation.
-

@@ -37,7 +37,13 @@ func TestValidateEvent(t *testing.T) {
 			e.CreatedAt = nostr.Timestamp(config.Now().Add(config.MaxClockSkew + time.Second).Unix())
 			resign(t, e, key)
 		}},
-		{"invalid signature", func(e *nostr.Event) { e.Sig = "0" + e.Sig[1:] }},
+		{"invalid signature", func(e *nostr.Event) {
+			first := byte('0')
+			if e.Sig[0] == first {
+				first = '1'
+			}
+			e.Sig = string(first) + e.Sig[1:]
+		}},
 	}
 
 	policy := NewPolicy(config)
@@ -85,6 +91,38 @@ func TestValidateFilterRequiresOneAuthorAndV0Scope(t *testing.T) {
 
 	if err := policy.ValidateFilter(pubkey, valid); err != nil {
 		t.Fatalf("valid filter rejected: %s", err)
+	}
+}
+
+func TestAllowlistAdmission(t *testing.T) {
+	allowed := strings.Repeat("a", 64)
+	config := DefaultConfig()
+	config.AdmissionMode = AdmissionAllowlist
+	config.AllowedPubkeys = map[string]struct{}{allowed: {}}
+	policy := NewPolicy(config)
+	if !policy.isAdmitted(allowed) {
+		t.Fatal("allowlisted pubkey was not admitted")
+	}
+	if policy.isAdmitted(strings.Repeat("b", 64)) {
+		t.Fatal("unlisted pubkey was admitted")
+	}
+}
+
+func TestLimiterExpiresOldKeys(t *testing.T) {
+	now := time.Unix(1_780_000_000, 0)
+	limiter := newFixedWindowLimiter(1, time.Minute, func() time.Time { return now })
+	if !limiter.Allow("old") || !limiter.Allow("another") {
+		t.Fatal("initial keys were rejected")
+	}
+	if size := limiter.size(); size != 2 {
+		t.Fatalf("limiter size = %d, want 2", size)
+	}
+	now = now.Add(2 * time.Minute)
+	if !limiter.Allow("current") {
+		t.Fatal("current key was rejected")
+	}
+	if size := limiter.size(); size != 1 {
+		t.Fatalf("limiter size after cleanup = %d, want 1", size)
 	}
 }
 

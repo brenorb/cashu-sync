@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +20,13 @@ const (
 
 var lowercaseEventID = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
+type AdmissionMode string
+
+const (
+	AdmissionOpen      AdmissionMode = "open"
+	AdmissionAllowlist AdmissionMode = "allowlist"
+)
+
 type Config struct {
 	Kind              int
 	Identifier        string
@@ -30,6 +36,9 @@ type Config struct {
 	WritesPerMinute   int
 	RequestsPerMinute int
 	Now               func() time.Time
+	AdmissionMode     AdmissionMode
+	AllowedPubkeys    map[string]struct{}
+	ServiceURL        string
 }
 
 func DefaultConfig() Config {
@@ -42,6 +51,7 @@ func DefaultConfig() Config {
 		WritesPerMinute:   60,
 		RequestsPerMinute: 120,
 		Now:               time.Now,
+		AdmissionMode:     AdmissionOpen,
 	}
 }
 
@@ -52,6 +62,11 @@ type Policy struct {
 }
 
 func NewPolicy(config Config) *Policy {
+	allowed := make(map[string]struct{}, len(config.AllowedPubkeys))
+	for pubkey := range config.AllowedPubkeys {
+		allowed[pubkey] = struct{}{}
+	}
+	config.AllowedPubkeys = allowed
 	return &Policy{
 		config: config,
 		writes: newFixedWindowLimiter(config.WritesPerMinute, time.Minute, config.Now),
@@ -64,10 +79,13 @@ func (p *Policy) OnEvent(ctx context.Context, event *nostr.Event) (bool, string)
 	if authed == "" {
 		return true, "auth-required: authenticate before publishing"
 	}
+	if !p.isAdmitted(authed) {
+		return true, "restricted: sync pubkey is not admitted"
+	}
 	if authed != event.PubKey {
 		return true, "restricted: authenticated pubkey must match event author"
 	}
-	if !p.writes.Allow(rateKey(ctx, authed)) {
+	if !p.writes.Allow(authed) {
 		return true, "rate-limited: too many snapshot writes"
 	}
 	if err := p.ValidateEvent(event); err != nil {
@@ -81,13 +99,28 @@ func (p *Policy) OnRequest(ctx context.Context, filter nostr.Filter) (bool, stri
 	if authed == "" {
 		return true, "auth-required: authenticate before reading"
 	}
-	if !p.reads.Allow(rateKey(ctx, authed)) {
+	if !p.isAdmitted(authed) {
+		return true, "restricted: sync pubkey is not admitted"
+	}
+	if !p.reads.Allow(authed) {
 		return true, "rate-limited: too many snapshot requests"
 	}
 	if err := p.ValidateFilter(authed, filter); err != nil {
 		return true, "restricted: " + err.Error()
 	}
 	return false, ""
+}
+
+func (p *Policy) isAdmitted(pubkey string) bool {
+	if p.config.AdmissionMode == AdmissionOpen {
+		return true
+	}
+	_, allowed := p.config.AllowedPubkeys[pubkey]
+	return p.config.AdmissionMode == AdmissionAllowlist && allowed
+}
+
+func (p *Policy) limiterSizes() (writes int, reads int) {
+	return p.writes.size(), p.reads.size()
 }
 
 func (p *Policy) ValidateEvent(event *nostr.Event) error {
@@ -171,16 +204,13 @@ func (p *Policy) ValidateFilter(authed string, filter nostr.Filter) error {
 	return nil
 }
 
-func rateKey(ctx context.Context, pubkey string) string {
-	return pubkey + "|" + strings.TrimSpace(khatru.GetIP(ctx))
-}
-
 type fixedWindowLimiter struct {
-	mu     sync.Mutex
-	limit  int
-	window time.Duration
-	now    func() time.Time
-	items  map[string]windowCount
+	mu          sync.Mutex
+	limit       int
+	window      time.Duration
+	now         func() time.Time
+	items       map[string]windowCount
+	nextCleanup time.Time
 }
 
 type windowCount struct {
@@ -199,6 +229,14 @@ func (l *fixedWindowLimiter) Allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
+	if l.nextCleanup.IsZero() || !now.Before(l.nextCleanup) {
+		for itemKey, item := range l.items {
+			if now.Sub(item.start) >= l.window {
+				delete(l.items, itemKey)
+			}
+		}
+		l.nextCleanup = now.Add(l.window)
+	}
 	item := l.items[key]
 	if item.start.IsZero() || now.Sub(item.start) >= l.window {
 		l.items[key] = windowCount{start: now, count: 1}
@@ -210,4 +248,10 @@ func (l *fixedWindowLimiter) Allow(key string) bool {
 	item.count++
 	l.items[key] = item
 	return true
+}
+
+func (l *fixedWindowLimiter) size() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.items)
 }
