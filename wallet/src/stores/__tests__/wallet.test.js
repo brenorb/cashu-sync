@@ -212,27 +212,6 @@ vi.mock("@cashu/cashu-ts", () => ({
   CheckStateEnum: { SPENT: "SPENT" },
   MeltQuoteState: { PAID: "PAID", PENDING: "PENDING", UNPAID: "UNPAID" },
   MintQuoteState: { PAID: "PAID", ISSUED: "ISSUED", PENDING: "PENDING" },
-  createEphemeralCounterSource: (initial) => {
-    const counters = new Map(Object.entries(initial ?? {}));
-    return {
-      reserve: async (id, n) => {
-        if (n < 0) throw new Error("reserve called with negative count");
-        const cur = counters.get(id) ?? 0;
-        if (n === 0) return { start: cur, count: 0 };
-        counters.set(id, cur + n);
-        return { start: cur, count: n };
-      },
-      advanceToAtLeast: async (id, min) => {
-        const cur = counters.get(id) ?? 0;
-        if (min > cur) counters.set(id, min);
-      },
-      snapshot: async () => Object.fromEntries(counters),
-      setNext: async (id, next) => {
-        if (next < 0) throw new Error("setNext: negative next not allowed");
-        counters.set(id, next);
-      },
-    };
-  },
 }));
 
 vi.mock("src/stores/receiveTokensStore", () => ({
@@ -292,7 +271,7 @@ vi.mock("src/js/token", () => ({
 }));
 
 import { useWalletStore } from "src/stores/wallet";
-import { cashuDb } from "src/stores/dexie";
+import { cashuDb, initialWalletSyncState } from "src/stores/dexie";
 import { PaymentMethod } from "src/stores/walletTypes";
 
 function mockMintWebsocket(unit = "sat") {
@@ -331,6 +310,7 @@ describe("wallet store", () => {
     await cashuDb.paymentHistory.clear();
     await cashuDb.mintQuotes.clear();
     await cashuDb.meltQuotes.clear();
+    await cashuDb.walletSyncState.put(initialWalletSyncState());
 
     h.receiveTokensStore.showReceiveTokens = false;
     h.receiveTokensStore.receiveData.tokensBase64 = "";
@@ -369,6 +349,10 @@ describe("wallet store", () => {
     h.settingsStore.checkSentTokens = true;
     h.settingsStore.periodicallyCheckIncomingInvoices = true;
     h.settingsStore.useWebsockets = true;
+    const wallet = useWalletStore();
+    wallet.sharedCounterSource = null;
+    wallet.keysetCounters = [];
+    wallet.oldMnemonicCounters = [];
   });
 
   it("manages keyset counters", async () => {
@@ -380,18 +364,23 @@ describe("wallet store", () => {
     expect(wallet.keysetCounter("k2")).toBe(3);
   });
 
-  it("creates a new mnemonic and archives previous counters", () => {
+  it("creates a new mnemonic and archives previous counters", async () => {
     const wallet = useWalletStore();
     wallet.mnemonic = "old mnemonic";
-    wallet.keysetCounters = [{ id: "00aa", counter: 11 }];
+    await wallet.increaseKeysetCounter("00aa", 11);
 
-    wallet.newMnemonic();
+    await wallet.newMnemonic();
 
     expect(wallet.oldMnemonicCounters[0]).toEqual({
       mnemonic: "old mnemonic",
       keysetCounters: [{ id: "00aa", counter: 11 }],
     });
     expect(wallet.keysetCounters).toEqual([]);
+    expect(await wallet.getOrCreateCounterSource().snapshot()).toEqual({});
+    expect(await wallet.getOrCreateCounterSource().reserve("00aa", 1)).toEqual({
+      start: 0,
+      count: 1,
+    });
     expect(wallet.mnemonic).not.toBe("old mnemonic");
   });
 
@@ -585,7 +574,7 @@ describe("wallet store", () => {
   it("creates active wallet and loads cache", async () => {
     const wallet = useWalletStore();
     wallet.mnemonic = "";
-    wallet.keysetCounters = [{ id: "00aa", counter: 13 }];
+    await wallet.increaseKeysetCounter("00aa", 13);
 
     const activeWallet = await wallet.activeWallet();
 
@@ -753,7 +742,7 @@ describe("wallet store", () => {
 
   it("accounts for signed-output errors", async () => {
     const wallet = useWalletStore();
-    wallet.keysetCounters = [{ id: "00aa", counter: 1 }];
+    await wallet.increaseKeysetCounter("00aa", 1);
 
     const handled = await wallet.handleOutputsHaveAlreadyBeenSignedError(
       "00aa",
@@ -1012,7 +1001,7 @@ describe("wallet store", () => {
         type: PaymentMethod.Bolt12,
       },
     ];
-    wallet.keysetCounters = [{ id: "00aa", counter: 1 }];
+    await wallet.increaseKeysetCounter("00aa", 1);
 
     let locked = false;
     h.uiStore.lockMutex.mockImplementation(async () => {
@@ -1041,7 +1030,7 @@ describe("wallet store", () => {
         run: vi.fn(async () => {
           const counter = wallet.keysetCounter("00aa");
           counters.push(counter);
-          wallet.increaseKeysetCounter("00aa", 1);
+          await wallet.increaseKeysetCounter("00aa", 1);
           return [{ id: "00aa", amount, secret: `secret-${counter}` }];
         }),
       };
@@ -1093,7 +1082,7 @@ describe("wallet store", () => {
         type: PaymentMethod.Onchain,
       },
     ];
-    wallet.keysetCounters = [{ id: "00aa", counter: 1 }];
+    await wallet.increaseKeysetCounter("00aa", 1);
 
     const quoteStates = [
       { quote: parentQuote, amount_paid: 175, amount_issued: 100 },

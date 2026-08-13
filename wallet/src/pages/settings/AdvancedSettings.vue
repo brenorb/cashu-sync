@@ -337,7 +337,7 @@ export default defineComponent({
     ...mapActions(useDexieStore, ["deleteAllTables"]),
     ...mapActions(useStorageStore, ["restoreFromBackup", "exportWalletState"]),
     generateNewMnemonic: async function () {
-      this.newMnemonic();
+      await this.newMnemonic();
       await this.initSigner();
       await this.generateNPCConnection();
     },
@@ -398,7 +398,7 @@ export default defineComponent({
       // create a backup just in case
       await this.exportWalletState();
       // clear dexie tables
-      this.deleteAllTables();
+      await this.deleteAllTables();
       // clear nostr user databases
       useNostrUserStore().clearAllDatabases();
       // clear mint reviews database

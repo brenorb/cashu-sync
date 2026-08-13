@@ -55,8 +55,9 @@ export const useMigrationsStore = defineStore("migrations", {
             );
           } catch (error) {
             console.error(`Migration ${migration.version} failed:`, error);
-            // Stop running migrations if one fails
-            break;
+            // A failed deterministic-counter migration must stop wallet startup;
+            // continuing with an empty cursor namespace could reuse Cashu outputs.
+            throw error;
           }
         }
       } finally {
@@ -157,7 +158,7 @@ export const useMigrationsStore = defineStore("migrations", {
       let updated = false;
 
       const invoiceHistory = JSON.parse(raw);
-      const migrated = invoiceHistory.map((invoice) => {
+      const migrated = invoiceHistory.map((invoice: any) => {
         const request = invoice.request || invoice.bolt11;
         if (!request) {
           return invoice;
@@ -193,6 +194,14 @@ export const useMigrationsStore = defineStore("migrations", {
       const tokensStore = useTokensStore();
       await tokensStore.migrateHistoryTokensFromLocalStorage();
       console.log("Migrated historyTokens to Dexie ecashHistory");
+    },
+    async migrateKeysetCountersToDexie() {
+      const { cashuDb } = await import("./dexie");
+      const { migrateLegacyKeysetCounters } = await import(
+        "../sync/durableCounterSource"
+      );
+      await migrateLegacyKeysetCounters(cashuDb);
+      console.log("Migrated keyset counters to Dexie walletSyncState");
     },
 
     // Initialize migrations
@@ -237,6 +246,14 @@ export const useMigrationsStore = defineStore("migrations", {
         name: "Migrate historyTokens to Dexie ecashHistory",
         description: "Moves ecash history from localStorage to Dexie",
         execute: async () => await this.migrateHistoryTokensToEcashHistory(),
+      });
+
+      this.registerMigration({
+        version: 6,
+        name: "Migrate keyset counters to Dexie",
+        description:
+          "Moves deterministic keyset counters from localStorage into the transactional wallet sync state",
+        execute: async () => await this.migrateKeysetCountersToDexie(),
       });
 
       // Add more migrations here in the future

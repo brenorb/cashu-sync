@@ -2,6 +2,27 @@ import { defineStore } from "pinia";
 import Dexie, { Table } from "dexie";
 import { useLocalStorage } from "@vueuse/core";
 import type { WalletProof } from "./mints";
+import type { PendingOperationV0 } from "../sync/types";
+
+export const WALLET_SYNC_STATE_ID = "wallet" as const;
+
+export type WalletSyncStateRow = {
+  id: typeof WALLET_SYNC_STATE_ID;
+  revision: number;
+  head_event_id: string;
+  counters: Record<string, number>;
+  pending_operation: PendingOperationV0 | null;
+};
+
+export function initialWalletSyncState(): WalletSyncStateRow {
+  return {
+    id: WALLET_SYNC_STATE_ID,
+    revision: 0,
+    head_event_id: "",
+    counters: {},
+    pending_operation: null,
+  };
+}
 
 // export interface Proof {
 //   id: string
@@ -18,9 +39,10 @@ export class CashuDexie extends Dexie {
   mintQuotes!: Table<any>;
   meltQuotes!: Table<any>;
   ecashHistory!: Table<any>;
+  walletSyncState!: Table<WalletSyncStateRow, typeof WALLET_SYNC_STATE_ID>;
 
-  constructor() {
-    super("db");
+  constructor(name = "db") {
+    super(name);
     this.version(1).stores({
       proofs: "secret, id, C, amount, reserved, quote",
     });
@@ -40,10 +62,51 @@ export class CashuDexie extends Dexie {
       ecashHistory:
         "id, status, token, mint, unit, date, paidDate, paymentRequestId, [status+date], [mint+unit]",
     });
+    this.version(4)
+      .stores({
+        proofs: "secret, id, C, amount, reserved, quote",
+        paymentHistory:
+          "id, direction, quote, parentQuote, method, status, mint, unit, date, paidDate, [direction+quote], [direction+status], [method+status]",
+        mintQuotes: "quote, method, request, unit, state, expiry, pubkey",
+        meltQuotes: "quote, method, request, unit, state, expiry",
+        ecashHistory:
+          "id, status, token, mint, unit, date, paidDate, paymentRequestId, [status+date], [mint+unit]",
+        walletSyncState: "id",
+      })
+      .upgrade((transaction) =>
+        transaction.table("walletSyncState").put(initialWalletSyncState())
+      );
+    this.on("populate", (transaction) =>
+      transaction.table("walletSyncState").put(initialWalletSyncState())
+    );
   }
 }
 
 export const cashuDb = new CashuDexie();
+
+export async function resetCashuDexie(db: CashuDexie): Promise<void> {
+  await db.transaction(
+    "rw",
+    [
+      db.proofs,
+      db.paymentHistory,
+      db.mintQuotes,
+      db.meltQuotes,
+      db.ecashHistory,
+      db.walletSyncState,
+    ],
+    async () => {
+      await Promise.all([
+        db.proofs.clear(),
+        db.paymentHistory.clear(),
+        db.mintQuotes.clear(),
+        db.meltQuotes.clear(),
+        db.ecashHistory.clear(),
+      ]);
+      await db.walletSyncState.put(initialWalletSyncState());
+    }
+  );
+}
 
 export const useDexieStore = defineStore("dexie", {
   state: () => ({
@@ -91,12 +154,8 @@ export const useDexieStore = defineStore("dexie", {
       // remove proofs from localstorage
       localStorage.removeItem("cashu.proofs");
     },
-    deleteAllTables: function () {
-      cashuDb.proofs.clear();
-      cashuDb.paymentHistory.clear();
-      cashuDb.mintQuotes.clear();
-      cashuDb.meltQuotes.clear();
-      cashuDb.ecashHistory.clear();
+    deleteAllTables: async function () {
+      await resetCashuDexie(cashuDb);
     },
   },
 });

@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { markRaw } from "vue";
 import { currentDateStr } from "src/js/utils";
 import { useMintsStore, WalletProof, MintClass, StoredMint } from "./mints";
 import { useLocalStorage } from "@vueuse/core";
@@ -81,8 +82,6 @@ import {
   KeyChain,
   type AmountLike,
   type P2PKOptions,
-  type CounterSource,
-  createEphemeralCounterSource,
   // ConsoleLogger,
 } from "@cashu/cashu-ts";
 // @ts-ignore
@@ -108,6 +107,11 @@ import {
 } from "src/js/legacy-qr";
 import { onchainNetwork } from "src/js/onchain";
 import { PaymentMethod } from "src/stores/walletTypes";
+import {
+  DexieCounterSource,
+  type DurableCounterSource,
+} from "src/sync/durableCounterSource";
+import { cashuDb } from "./dexie";
 
 type Invoice = {
   amount: number;
@@ -202,15 +206,12 @@ export const useWalletStore = defineStore("wallet", {
       mnemonic: useLocalStorage("cashu.mnemonic", ""),
       invoiceHistory: [] as InvoiceHistory[],
       paymentHistoryUnsubscribe: null as null | (() => void),
-      keysetCounters: useLocalStorage(
-        "cashu.keysetCounters",
-        [] as KeysetCounter[]
-      ),
+      keysetCounters: [] as KeysetCounter[],
       oldMnemonicCounters: useLocalStorage(
         "cashu.oldMnemonicCounters",
         [] as { mnemonic: string; keysetCounters: KeysetCounter[] }[]
       ),
-      sharedCounterSource: null as CounterSource | null,
+      sharedCounterSource: null as DurableCounterSource | null,
       invoiceData: {} as InvoiceHistory,
       activeWebsocketConnections: 0,
       payInvoiceData: {
@@ -344,6 +345,7 @@ export const useWalletStore = defineStore("wallet", {
           // Continue with potentially stale keysets rather than failing
         }
       }
+      await this.refreshCounterCache();
       return this.createWalletInstance(storedMint, url, unit);
     },
     // Synchronous wallet creation for non-critical operations (e.g., fee calculation display)
@@ -356,16 +358,13 @@ export const useWalletStore = defineStore("wallet", {
       }
       return this.createWalletInstance(storedMint, url, unit);
     },
-    getOrCreateCounterSource(): CounterSource {
+    getOrCreateCounterSource(): DurableCounterSource {
       if (!this.sharedCounterSource) {
-        const initial = Object.fromEntries(
-          this.keysetCounters.map(({ id, counter }) => [id, counter])
-        );
-        this.sharedCounterSource = createEphemeralCounterSource(initial);
+        this.sharedCounterSource = markRaw(new DexieCounterSource(cashuDb));
       }
       return this.sharedCounterSource;
     },
-    syncCounterToStorage(keysetId: string, next: number) {
+    updateCounterCache(keysetId: string, next: number) {
       const entry = this.keysetCounters.find((c) => c.id === keysetId);
       if (entry) {
         entry.counter = Math.max(entry.counter, next);
@@ -373,14 +372,23 @@ export const useWalletStore = defineStore("wallet", {
         this.keysetCounters.push({ id: keysetId, counter: next });
       }
     },
+    async refreshCounterCache() {
+      const counters = await this.getOrCreateCounterSource().snapshot();
+      this.keysetCounters = Object.entries(counters ?? {}).map(
+        ([id, counter]) => ({ id, counter })
+      );
+    },
+    async syncCounterToStorage(keysetId: string, next: number) {
+      await this.getOrCreateCounterSource().advanceToAtLeast(keysetId, next);
+      this.updateCounterCache(keysetId, next);
+    },
     keysetCounter(id: string): number {
       return this.keysetCounters.find((c) => c.id === id)?.counter ?? 0;
     },
     async increaseKeysetCounter(id: string, by: number) {
-      const next = this.keysetCounter(id) + by;
       const src = this.getOrCreateCounterSource();
-      await src.advanceToAtLeast(id, next);
-      this.syncCounterToStorage(id, next);
+      const range = await src.reserve(id, by);
+      this.updateCounterCache(id, range.start + range.count);
     },
     createWalletInstance(
       storedMint: StoredMint,
@@ -398,7 +406,8 @@ export const useWalletStore = defineStore("wallet", {
         // logger: new ConsoleLogger("debug"),
       });
       wallet.on.countersReserved(({ keysetId, next }) => {
-        this.syncCounterToStorage(keysetId, next);
+        // The durable source committed this cursor before emitting the event.
+        this.updateCounterCache(keysetId, next);
       });
       // Load the caches
       const keychainCache = KeyChain.mintToCacheDTO(
@@ -414,14 +423,19 @@ export const useWalletStore = defineStore("wallet", {
     mnemonicToSeedSync: function (mnemonic: string): Uint8Array {
       return mnemonicToSeedSync(mnemonic);
     },
-    newMnemonic: function () {
+    newMnemonic: async function () {
       // store old mnemonic and keysetCounters
       const oldMnemonicCounters = this.oldMnemonicCounters;
-      const keysetCounters = this.keysetCounters;
+      const counters = await this.getOrCreateCounterSource().snapshot();
+      const keysetCounters = Object.entries(counters ?? {}).map(
+        ([id, counter]) => ({ id, counter })
+      );
       oldMnemonicCounters.push({ mnemonic: this.mnemonic, keysetCounters });
-      this.keysetCounters = [];
-      this.sharedCounterSource = null; // force re-creation on next wallet init
+      // Switch seeds before clearing the old namespace: interruption can skip
+      // counters for the new seed, but can never make the old seed reuse one.
       this.mnemonic = generateMnemonic(wordlist);
+      await this.getOrCreateCounterSource().replaceAll({});
+      this.keysetCounters = [];
     },
     retryOnceOnSignedOutputs: async function <T>(
       keysetId: string,
@@ -1654,9 +1668,11 @@ export const useWalletStore = defineStore("wallet", {
             `[wallet] outputs already signed for keyset ${keysetId}, advancing counter and trying again`
           );
         }
-        const next = this.keysetCounter(keysetId) + 10;
-        await this.getOrCreateCounterSource().advanceToAtLeast(keysetId, next);
-        this.syncCounterToStorage(keysetId, next);
+        const range = await this.getOrCreateCounterSource().reserve(
+          keysetId,
+          10
+        );
+        this.updateCounterCache(keysetId, range.start + range.count);
         if (notifyUser) {
           notify(this.t("wallet.notifications.trying_again"));
         }

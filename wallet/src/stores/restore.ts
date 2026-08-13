@@ -134,12 +134,7 @@ export const useRestoreStore = defineStore("restore", {
         // already-signed output, even when restored proofs are sparse.
         if (maxLastCounterWithSignature >= 0) {
           const nextCounter = maxLastCounterWithSignature + 1;
-          if (nextCounter > walletStore.keysetCounter(keyset.id)) {
-            await walletStore
-              .getOrCreateCounterSource()
-              .advanceToAtLeast(keyset.id, nextCounter);
-            walletStore.syncCounterToStorage(keyset.id, nextCounter);
-          }
+          await walletStore.syncCounterToStorage(keyset.id, nextCounter);
         }
 
         let restoredProofs: Proof[] = [];
