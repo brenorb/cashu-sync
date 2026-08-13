@@ -58,6 +58,23 @@ export function getSyncPublicKey(secret: Uint8Array): string {
   return getPublicKey(assertSecret(secret));
 }
 
+/** Rebuild the event without nostr-tools' cached verified Symbol. */
+export function verifyEventFresh(event: Event): boolean {
+  try {
+    return verifyEvent({
+      id: event.id,
+      pubkey: event.pubkey,
+      created_at: event.created_at,
+      kind: event.kind,
+      tags: event.tags.map((tag) => [...tag]),
+      content: event.content,
+      sig: event.sig,
+    });
+  } catch {
+    return false;
+  }
+}
+
 function conversationKey(secret: Uint8Array): Uint8Array {
   const publicKey = getSyncPublicKey(secret);
   return nip44.v2.utils.getConversationKey(bytesToHex(secret), publicKey);
@@ -96,7 +113,7 @@ export function createSyncEventV0(
 }
 
 function assertEnvelope(event: Event, expectedPublicKey: string): string {
-  if (!verifyEvent(event)) {
+  if (!verifyEventFresh(event)) {
     throw new SyncCryptoError("invalid event signature or event id");
   }
   if (event.kind !== SYNC_EVENT_KIND_V0) {

@@ -66,6 +66,18 @@ describe("dedicated snapshot crypto", () => {
     ).toThrow();
   });
 
+  it("recomputes signatures for a mutated finalized event", () => {
+    const event = createSyncEventV0(snapshot, secret, {
+      expectedMint: snapshot.mint,
+      createdAt: 1780000400,
+    });
+    event.created_at += 1;
+
+    expect(() =>
+      decryptSyncEventV0(event, secret, { expectedMint: snapshot.mint })
+    ).toThrow(/signature/i);
+  });
+
   it("rejects a wrong key and a mismatched prev tag", () => {
     const event = createSyncEventV0(snapshot, secret, {
       expectedMint: snapshot.mint,
