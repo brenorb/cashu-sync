@@ -403,6 +403,23 @@ describe("SnapshotSyncCoordinator publish", () => {
     expect(value.repository.applied[0]?.snapshot).toEqual(candidate);
   });
 
+  it("can confirm an exact candidate without applying it for journal-owned finalization", async () => {
+    const value = fixture(snapshot(4, HEAD_A));
+    const candidate = snapshot(5, HEAD_A);
+
+    await expect(
+      value.coordinator.publishCandidate(candidate, { applyAccepted: false })
+    ).resolves.toEqual({
+      status: "accepted",
+      resolution: "direct",
+      eventId: HEAD_C,
+      revision: 5,
+    });
+    expect(value.relay.publish).toHaveBeenCalledOnce();
+    expect(value.repository.applied).toHaveLength(0);
+    expect(value.repository.state).toEqual(snapshot(4, HEAD_A));
+  });
+
   it("rejects a stale caller-built candidate before relay publication", async () => {
     const value = fixture(snapshot(4, HEAD_A));
     await expect(

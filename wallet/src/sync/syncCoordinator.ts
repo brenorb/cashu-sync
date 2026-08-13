@@ -60,6 +60,7 @@ export class SnapshotSyncCoordinatorError extends Error {
 }
 
 export type PullOptions = { mode?: "normal" | "bootstrap" };
+export type PublishCandidateOptions = { applyAccepted?: boolean };
 
 export type PullOutcome =
   | { status: "empty" }
@@ -130,8 +131,13 @@ export class SnapshotSyncCoordinator {
     return this.serialize(() => this.publishUnlocked());
   }
 
-  publishCandidate(candidate: SnapshotV0): Promise<PublishOutcome> {
-    return this.serialize(() => this.publishUnlocked(candidate));
+  publishCandidate(
+    candidate: SnapshotV0,
+    options: PublishCandidateOptions = {}
+  ): Promise<PublishOutcome> {
+    return this.serialize(() =>
+      this.publishUnlocked(candidate, options.applyAccepted ?? true)
+    );
   }
 
   private serialize<T>(operation: () => Promise<T>): Promise<T> {
@@ -312,7 +318,8 @@ export class SnapshotSyncCoordinator {
   }
 
   private async publishUnlocked(
-    suppliedCandidate?: SnapshotV0
+    suppliedCandidate?: SnapshotV0,
+    applyAccepted = true
   ): Promise<PublishOutcome> {
     const local = await this.repository.exportSnapshot();
     this.assertLocalBaseline(local);
@@ -366,7 +373,9 @@ export class SnapshotSyncCoordinator {
 
     const result = await this.relay.publish(event);
     if (result.status === "accepted") {
-      await this.applyLocal(candidate, event.id, event.id);
+      if (applyAccepted) {
+        await this.applyLocal(candidate, event.id, event.id);
+      }
       return {
         status: "accepted",
         resolution: "direct",
@@ -417,7 +426,9 @@ export class SnapshotSyncCoordinator {
           "confirmed event does not contain the published snapshot"
         );
       }
-      await this.applyLocal(candidate, event.id, event.id);
+      if (applyAccepted) {
+        await this.applyLocal(candidate, event.id, event.id);
+      }
       return {
         status: "accepted",
         resolution: "confirmed",
