@@ -94,13 +94,16 @@ Bring profile B to the foreground and return to or reload the wallet home page. 
 
 ## 6. Melt a 1 USD test invoice as an eSIM top-up
 
-Create an internal FakeWallet Bolt11/USD invoice from terminal 1 or another shell and copy the printed invoice:
+Use one of the valid unpaid Bolt11/USD test invoices shipped with the live flow. Do not use a mint quote as the melt invoice: FakeWallet auto-settles mint quotes, so Nutshell will reject them as already paid. Print a fresh fixture with:
 
 ```sh
-curl -fsS -X POST http://127.0.0.1:3338/v1/mint/quote/bolt11 \
-  -H 'content-type: application/json' \
-  -d '{"amount":100,"unit":"usd"}' \
-  | python3 -c 'import json, sys; print(json.load(sys.stdin)["request"])'
+python3 - <<'PY'
+import re, secrets
+from pathlib import Path
+
+invoices = re.findall(r'"(lnbc[^"\\]+)"', Path("wallet/tests/e2e/helpers/cashu.ts").read_text())
+print(secrets.choice(invoices))
+PY
 ```
 
 In profile B:
