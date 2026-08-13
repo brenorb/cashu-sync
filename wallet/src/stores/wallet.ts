@@ -98,6 +98,7 @@ import { wordlist } from "@scure/bip39/wordlists/english";
 import { useSettingsStore } from "./settings";
 import { usePriceStore } from "./price";
 import { usePaymentHistoryStore } from "./paymentHistory";
+import { parseV0Bolt11Request, rejectV0Operation } from "src/v0/profile";
 import { useI18n } from "vue-i18n";
 import { decodeBolt12Offer } from "src/js/bolt12";
 import { ensurePaymentMethodMintActive } from "src/js/mint-payment-methods";
@@ -609,6 +610,7 @@ export const useWalletStore = defineStore("wallet", {
       amount: number,
       receiverPubkey: string | P2PKOptions
     ) {
+      rejectV0Operation("p2pk");
       // Accept a bare pubkey (manual lock flow) or a full P2PKOptions so a
       // NUT-18 payment request can reproduce its requested NUT-10 condition
       // (P2PK or HTLC). Going through the `.asP2PK()` builder keeps the
@@ -644,6 +646,10 @@ export const useWalletStore = defineStore("wallet", {
       invalidate: boolean = false,
       includeFees: boolean = false
     ): Promise<{ keepProofs: ProofLike[]; sendProofs: ProofLike[] }> {
+      // v0's existing Bolt11 melt implementation uses this proof-selection
+      // primitive with invalidate=false. External token sends take ownership
+      // with invalidate=true and must stop before touching the mint or proofs.
+      if (invalidate) rejectV0Operation("cashu-token-send");
       // Returns sendProofs summing to `amount` (plus input fees when
       // includeFees=true). Tries an offline exact-match first; otherwise
       // swaps via the mint. Reserves sendProofs in proofsStore on success,
@@ -732,6 +738,7 @@ export const useWalletStore = defineStore("wallet", {
       }
     },
     redeem: async function () {
+      rejectV0Operation("cashu-token-redeem");
       /*
       Receives a token that is prepared in the receiveToken – it is not yet in the history
       */
@@ -856,12 +863,12 @@ export const useWalletStore = defineStore("wallet", {
         this.payInvoiceData?.invoice &&
         (this.payInvoiceData.invoice as any).onchain
       ) {
-        return await meltQuoteInvoiceDataOnchain.call(this);
+        rejectV0Operation("onchain");
       } else if (
         this.payInvoiceData?.invoice &&
         (this.payInvoiceData.invoice as any).bolt12
       ) {
-        return await meltQuoteInvoiceDataBolt12.call(this);
+        rejectV0Operation("bolt12");
       } else {
         return await meltQuoteInvoiceDataBolt11.call(this);
       }
@@ -872,12 +879,12 @@ export const useWalletStore = defineStore("wallet", {
         this.payInvoiceData?.invoice &&
         (this.payInvoiceData.invoice as any).onchain
       ) {
-        return await meltInvoiceDataOnchain.call(this, silent);
+        rejectV0Operation("onchain");
       } else if (
         this.payInvoiceData?.invoice &&
         (this.payInvoiceData.invoice as any).bolt12
       ) {
-        return await meltInvoiceDataBolt12.call(this, silent);
+        rejectV0Operation("bolt12");
       } else {
         return await meltInvoiceDataBolt11.call(this, silent);
       }
@@ -893,17 +900,37 @@ export const useWalletStore = defineStore("wallet", {
     meltInvoiceDataBolt11: meltInvoiceDataBolt11,
     meltBolt11: meltBolt11,
     // Bolt12 explicit aliases
-    requestMintBolt12: requestMintBolt12,
-    meltQuoteInvoiceDataBolt12: meltQuoteInvoiceDataBolt12,
-    meltInvoiceDataBolt12: meltInvoiceDataBolt12,
-    meltBolt12: meltBolt12,
-    mintOnPaidBolt12: mintOnPaidBolt12,
+    requestMintBolt12: async function () {
+      rejectV0Operation("bolt12");
+    },
+    meltQuoteInvoiceDataBolt12: async function () {
+      rejectV0Operation("bolt12");
+    },
+    meltInvoiceDataBolt12: async function () {
+      rejectV0Operation("bolt12");
+    },
+    meltBolt12: async function () {
+      rejectV0Operation("bolt12");
+    },
+    mintOnPaidBolt12: async function () {
+      rejectV0Operation("bolt12");
+    },
     // On-chain explicit aliases
-    requestMintOnchain: requestMintOnchain,
-    meltQuoteInvoiceDataOnchain: meltQuoteInvoiceDataOnchain,
-    meltInvoiceDataOnchain: meltInvoiceDataOnchain,
-    meltOnchain: meltOnchain,
-    mintOnPaidOnchain: mintOnPaidOnchain,
+    requestMintOnchain: async function () {
+      rejectV0Operation("onchain");
+    },
+    meltQuoteInvoiceDataOnchain: async function () {
+      rejectV0Operation("onchain");
+    },
+    meltInvoiceDataOnchain: async function () {
+      rejectV0Operation("onchain");
+    },
+    meltOnchain: async function () {
+      rejectV0Operation("onchain");
+    },
+    mintOnPaidOnchain: async function () {
+      rejectV0Operation("onchain");
+    },
     // /check
     checkProofsSpendable: async function (
       proofs: WalletProof[],
@@ -953,6 +980,7 @@ export const useWalletStore = defineStore("wallet", {
       historyToken: HistoryToken,
       verbose: boolean = true
     ) {
+      rejectV0Operation("cashu-token-send");
       /*
       checks whether a base64-encoded token (from the history table) has been spent already.
       if it is spent, the appropraite entry in the history table is set to paid.
@@ -1054,10 +1082,10 @@ export const useWalletStore = defineStore("wallet", {
       return await checkOutgoingInvoiceBolt11.call(this, quote, verbose);
     },
     checkOutgoingInvoiceBolt12: async function (quote: string, verbose = true) {
-      return await checkOutgoingInvoiceBolt12.call(this, quote, verbose);
+      rejectV0Operation("bolt12");
     },
     checkOutgoingOnchain: async function (quote: string, verbose = true) {
-      return await checkOutgoingOnchain.call(this, quote, verbose);
+      rejectV0Operation("onchain");
     },
     checkOutgoingInvoice: async function (quote: string, verbose = true) {
       const invoice = this.invoiceHistory.find((i) => i.quote === quote);
@@ -1065,10 +1093,10 @@ export const useWalletStore = defineStore("wallet", {
         throw new Error("invoice not found");
       }
       if (invoice.type === PaymentMethod.Onchain) {
-        return await this.checkOutgoingOnchain(quote, verbose);
+        rejectV0Operation("onchain");
       }
       if (invoice.type === PaymentMethod.Bolt12) {
-        return await this.checkOutgoingInvoiceBolt12(quote, verbose);
+        rejectV0Operation("bolt12");
       }
       return await this.checkOutgoingInvoiceBolt11(quote, verbose);
     },
@@ -1077,26 +1105,17 @@ export const useWalletStore = defineStore("wallet", {
       verbose = true,
       hideInvoiceDetailsOnMint = true
     ) {
-      return await checkOfferAndMintBolt12.call(
-        this,
-        quote,
-        verbose,
-        hideInvoiceDetailsOnMint
-      );
+      rejectV0Operation("bolt12");
     },
     checkOnchainAndMint: async function (
       quote: string,
       verbose = true,
       hideInvoiceDetailsOnMint = true
     ) {
-      return await checkOnchainAndMint.call(
-        this,
-        quote,
-        verbose,
-        hideInvoiceDetailsOnMint
-      );
+      rejectV0Operation("onchain");
     },
     onTokenPaid: async function (historyToken: HistoryToken) {
+      rejectV0Operation("cashu-token-send");
       const sendTokensStore = useSendTokensStore();
       const uIStore = useUiStore();
       const tokenJson = await token.decodeFull(historyToken.token);
@@ -1286,6 +1305,7 @@ export const useWalletStore = defineStore("wallet", {
     setMeltChangeOutputData: setMeltChangeOutputData,
     clearMeltChangeOutputData: clearMeltChangeOutputData,
     checkPendingTokens: async function (verbose: boolean = true) {
+      rejectV0Operation("cashu-token-send");
       const tokenStore = useTokensStore();
       const last_n = 5;
       let i = 0;
@@ -1305,19 +1325,16 @@ export const useWalletStore = defineStore("wallet", {
       return await handleBolt11InvoiceBolt11.call(this);
     },
     handleCashuToken: function () {
-      this.payInvoiceData.show = false;
-      receiveStore.showReceiveTokens = true;
+      rejectV0Operation("cashu-token-receive");
     },
     handleP2PK: function (req: string) {
-      const sendTokenStore = useSendTokensStore();
-      sendTokenStore.sendData.p2pkPubkey = req;
-      sendTokenStore.showSendTokens = true;
+      rejectV0Operation("p2pk");
     },
     handlePaymentRequest: async function (req: string) {
-      const prStore = usePRStore();
-      await prStore.decodePaymentRequest(req);
+      rejectV0Operation("payment-request");
     },
     handleBolt12Offer: async function (offer: string) {
+      rejectV0Operation("bolt12");
       const mintStore = useMintsStore();
       this.payInvoiceData.show = true;
       this.payInvoiceData.input.amount = undefined;
@@ -1424,130 +1441,9 @@ export const useWalletStore = defineStore("wallet", {
       this.payInvoiceData.invoice = Object.freeze(cleanAddress);
     },
     decodeRequest: async function (req: string) {
-      const p2pkStore = useP2PKStore();
-      req = req.trim();
+      req = parseV0Bolt11Request(req);
       this.payInvoiceData.input.request = req;
-      if (
-        req.toLowerCase().startsWith("lnbc") ||
-        req.toLowerCase().startsWith("lntb") ||
-        req.toLowerCase().startsWith("lntbs") ||
-        req.toLowerCase().startsWith("lnbcrt")
-      ) {
-        this.payInvoiceData.input.request = req;
-        await this.handleBolt11InvoiceBolt11();
-      } else if (req.toLowerCase().startsWith("lightning:")) {
-        const ln = req.slice(10);
-        if (ln.toLowerCase().startsWith("lno1")) {
-          await this.handleBolt12Offer(ln);
-        } else {
-          this.payInvoiceData.input.request = ln;
-          await this.handleBolt11InvoiceBolt11();
-        }
-      } else if (req.toLowerCase().startsWith("bitcoin:")) {
-        try {
-          const url = new URL(
-            req.replace(/^bitcoin:/i, "bitcoin://placeholder/")
-          );
-          const address = url.pathname.replace(/^\//, "");
-          // BIP-321 query keys are case-insensitive (per RFC 3986 / BIP-21).
-          // Encoders may emit fully uppercase URIs to enable QR alphanumeric
-          // mode for denser codes (e.g. CDK, cashu-for-woocommerce).
-          const getParamCI = (name: string): string | null => {
-            for (const [k, v] of url.searchParams) {
-              if (k.toLowerCase() === name) return v;
-            }
-            return null;
-          };
-          const creq = getParamCI("creq");
-          const lightning = getParamCI("lightning");
-          if (creq) {
-            this.payInvoiceData.input.request = creq;
-            await this.handlePaymentRequest(creq);
-          } else if (lightning) {
-            this.payInvoiceData.input.request = lightning;
-            if (lightning.toLowerCase().startsWith("lno1")) {
-              await this.handleBolt12Offer(lightning);
-            } else if (lightning.toLowerCase().startsWith("lnurl1")) {
-              await this.lnurlPayFirst(lightning);
-            } else {
-              await this.handleBolt11InvoiceBolt11();
-            }
-          } else if (address && this.isBitcoinAddress(address)) {
-            this.payInvoiceData.input.request = address;
-            await this.handleOnchainAddress(address);
-          }
-        } catch {
-          const addressMatch = req.match(/^bitcoin:([^?]+)/i);
-          const creqMatch = req.match(/[?&]creq=([^&]+)/i);
-          const lightningMatch = req.match(/[?&]lightning=([^&]+)/i);
-          if (creqMatch) {
-            this.payInvoiceData.input.request = creqMatch[1];
-            await this.handlePaymentRequest(creqMatch[1]);
-          } else if (lightningMatch) {
-            this.payInvoiceData.input.request = lightningMatch[1];
-            const lm = lightningMatch[1];
-            if (lm.toLowerCase().startsWith("lno1")) {
-              await this.handleBolt12Offer(lm);
-            } else {
-              await this.handleBolt11InvoiceBolt11();
-            }
-          } else if (addressMatch && this.isBitcoinAddress(addressMatch[1])) {
-            this.payInvoiceData.input.request = addressMatch[1];
-            await this.handleOnchainAddress(addressMatch[1]);
-          }
-        }
-      } else if (this.isBitcoinAddress(req)) {
-        await this.handleOnchainAddress(req);
-      } else if (req.toLowerCase().startsWith("lno1")) {
-        await this.handleBolt12Offer(req);
-      } else if (req.toLowerCase().startsWith("lnurl:")) {
-        this.payInvoiceData.input.request = req.slice(6);
-        await this.lnurlPayFirst(this.payInvoiceData.input.request);
-      } else if (req.indexOf("lightning=lnurl1") !== -1) {
-        this.payInvoiceData.input.request = req
-          .split("lightning=")[1]
-          .split("&")[0];
-        await this.lnurlPayFirst(this.payInvoiceData.input.request);
-      } else if (
-        req.toLowerCase().startsWith("lnurl1") ||
-        req.match(/[\w.+-~_]+@[\w.+-~_]/)
-      ) {
-        this.payInvoiceData.input.request = req;
-        await this.lnurlPayFirst(this.payInvoiceData.input.request);
-      } else if (req.startsWith("cashuA") || req.startsWith("cashuB")) {
-        // parse cashu tokens from a pasted token
-        receiveStore.receiveData.tokensBase64 = req;
-        this.handleCashuToken();
-      } else if (req.indexOf("token=cashu") !== -1) {
-        // parse cashu tokens from a URL like https://example.com#token=cashu...
-        const token = req.slice(req.indexOf("token=cashu") + 6);
-        receiveStore.receiveData.tokensBase64 = token;
-        this.handleCashuToken();
-      } else if (p2pkStore.isValidPubkey(req)) {
-        this.handleP2PK(req);
-      } else if (req.startsWith("http")) {
-        const mintStore = useMintsStore();
-        mintStore.addMintData = { url: req, nickname: "" };
-      } else if (
-        req.toLowerCase().startsWith("creqa") ||
-        req.toLowerCase().startsWith("creqb")
-      ) {
-        await this.handlePaymentRequest(req);
-      } else if (isLegacyRetailQR(req)) {
-        // Try to convert legacy retail QR code (EMV format) to Lightning Address
-        const lightningAddress = translateLegacyQRToLightningAddress(req);
-        if (lightningAddress) {
-          // Process as Lightning Address (LNURL)
-          this.payInvoiceData.input.request = lightningAddress;
-          await this.lnurlPayFirst(lightningAddress);
-        } else {
-          // Not a supported merchant QR code
-          notifyWarning(
-            this.t("wallet.notifications.unsupported_legacy_qr"),
-            this.t("wallet.notifications.legacy_qr_not_supported")
-          );
-        }
-      }
+      await this.handleBolt11InvoiceBolt11();
       const uiStore = useUiStore();
       uiStore.closeDialogs();
     },

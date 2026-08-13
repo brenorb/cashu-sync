@@ -8,6 +8,7 @@ import { notifyApiError, notifyError, notifySuccess } from "../js/notify";
 import token from "../js/token";
 import { useTokensStore } from "../stores/tokens";
 import { useNostrStore } from "../stores/nostr";
+import { V0_FEATURES, rejectV0Operation } from "src/v0/profile";
 // type NPCConnection = {
 //   walletPublicKey: string,
 //   walletPrivateKey: string,
@@ -66,6 +67,7 @@ export const useNPCStore = defineStore("npc", {
   getters: {},
   actions: {
     generateNPCConnection: async function () {
+      if (!V0_FEATURES.nostrPeerFlows) return;
       const nostrStore = useNostrStore();
       if (!nostrStore.pubkey) {
         return;
@@ -112,6 +114,7 @@ export const useNPCStore = defineStore("npc", {
       method: string,
       body?: string
     ): Promise<string> {
+      rejectV0Operation("nostr-peer");
       const nostrStore = useNostrStore();
       await nostrStore.initSignerIfNotSet();
       const nip98Event = new NDKEvent(new NDK());
@@ -128,6 +131,7 @@ export const useNPCStore = defineStore("npc", {
       return btoa(eventString);
     },
     getInfo: async function (): Promise<NPCInfo> {
+      rejectV0Operation("nostr-peer");
       const authHeader = await this.generateNip98Event(
         `${this.baseURL}/api/v1/info`,
         "GET"
@@ -151,6 +155,7 @@ export const useNPCStore = defineStore("npc", {
       }
     },
     claimAllTokens: async function () {
+      if (!V0_FEATURES.cashuTokens) return;
       if (!this.npcEnabled) {
         return;
       }
@@ -211,6 +216,7 @@ export const useNPCStore = defineStore("npc", {
     },
 
     getBalance: async function (): Promise<number> {
+      rejectV0Operation("nostr-peer");
       const authHeader = await this.generateNip98Event(
         `${this.baseURL}/api/v1/balance`,
         "GET"
@@ -234,6 +240,7 @@ export const useNPCStore = defineStore("npc", {
       }
     },
     getClaim: async function (): Promise<string> {
+      rejectV0Operation("nostr-peer");
       const authHeader = await this.generateNip98Event(
         `${this.baseURL}/api/v1/claim`,
         "GET"

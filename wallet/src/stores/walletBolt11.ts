@@ -27,6 +27,7 @@ import { PaymentMethod } from "src/stores/walletTypes";
 import { ensurePaymentMethodMintActive } from "src/js/mint-payment-methods";
 import { type AppMeltQuote, normalizeMeltQuote } from "./walletMelt";
 import { usePaymentHistoryStore } from "./paymentHistory";
+import { assertV0NoMultiPartPayment } from "src/v0/profile";
 
 // These actions are implemented as regular functions that rely on dynamic `this`
 // when attached to the Pinia store (wallet.ts assigns them to actions).
@@ -205,6 +206,7 @@ export async function meltQuoteBolt11(
   request: string,
   mpp_amount: number | undefined = undefined
 ): Promise<AppMeltQuote> {
+  assertV0NoMultiPartPayment(mpp_amount);
   const mintStore = useMintsStore();
   let data;
   if (mpp_amount) {

@@ -19,6 +19,13 @@ import { useNostrMintBackupStore } from "./nostrMintBackup";
 import { bytesToHex } from "@noble/hashes/utils"; // already an installed dependency
 import { PaymentMethod } from "src/stores/walletTypes";
 import { sumProofAmounts } from "src/js/proofs";
+import {
+  V0_MINT_UNIT,
+  type V0AuthorityProfile,
+  assertV0AuthorityMint,
+  assertV0Unit,
+  rejectV0Operation,
+} from "src/v0/profile";
 
 export type StoredMint = {
   url: string;
@@ -109,8 +116,13 @@ export const useMintsStore = defineStore("mints", {
   state: () => {
     const t = i18n.global.t;
     const activeProofs = ref<WalletProof[]>([]);
-    const activeUnit = useLocalStorage<string>("cashu.activeUnit", "sat");
+    const activeUnit = useLocalStorage<string>(
+      "cashu.activeUnit",
+      V0_MINT_UNIT
+    );
+    activeUnit.value = V0_MINT_UNIT;
     const activeMintUrl = useLocalStorage<string>("cashu.activeMintUrl", "");
+    const authorityMintUrl = ref("");
     const addMintData = ref({
       url: "",
       nickname: "",
@@ -139,6 +151,7 @@ export const useMintsStore = defineStore("mints", {
       activeProofs,
       activeUnit,
       activeMintUrl,
+      authorityMintUrl,
       addMintData,
       mints,
       showAddMintDialog,
@@ -251,13 +264,6 @@ export const useMintsStore = defineStore("mints", {
       if (mint) {
         return new MintClass(mint);
       } else {
-        if (this.mints.length) {
-          console.error(
-            "No active mint. This should not happen. switching to first one."
-          );
-          this.activateMintUrl(this.mints[0].url, false, true);
-          return new MintClass(this.mints[0]);
-        }
         throw new Error("No active mint");
       }
     },
@@ -272,30 +278,21 @@ export const useMintsStore = defineStore("mints", {
       return mint.keysets.filter((k) => k.unit === unit);
     },
     toggleUnit: function () {
-      const units = this.activeMint().units;
-      this.activeUnit =
-        units[(units.indexOf(this.activeUnit) + 1) % units.length];
-      return this.activeUnit;
+      rejectV0Operation("unit-switch");
     },
     toggleActiveUnitForMint(mint: StoredMint) {
-      // method to set the active unit to one that is supported by `mint`
       const mintClass = new MintClass(mint);
-      if (
-        !this.activeUnit ||
-        mintClass.allBalances[this.activeUnit] == undefined
-      ) {
-        this.activeUnit = mintClass.units[0];
+      if (!mintClass.units.includes(V0_MINT_UNIT)) {
+        throw new Error("The configured authority mint does not support USD");
       }
+      this.activeUnit = V0_MINT_UNIT;
     },
     updateMint(oldMint: StoredMint, newMint: StoredMint) {
       const index = this.mints.findIndex((m) => m.url === oldMint.url);
       this.mints[index] = newMint;
     },
     updateMintMultinutSelection(mintUrl: string, selected: boolean) {
-      const mint = this.mints.find((m) => m.url === mintUrl);
-      if (mint) {
-        mint.multinutSelected = selected;
-      }
+      rejectV0Operation("multi-mint");
     },
     getKeysForKeyset: async function (keyset_id: string): Promise<MintKeys> {
       const mint = this.mints.find((m) => m.url === this.activeMintUrl);
@@ -310,46 +307,33 @@ export const useMintsStore = defineStore("mints", {
         throw new Error("Mint not found");
       }
     },
-    addMint: async function (
-      addMintData: { url: string; nickname?: string },
+    addMint: async function () {
+      rejectV0Operation("mint-add");
+    },
+    bootstrapAuthorityMint: async function (
+      profile: V0AuthorityProfile,
       verbose = false
     ): Promise<StoredMint> {
-      let url = addMintData.url;
+      const url = profile.mintUrl;
+      assertV0AuthorityMint(profile, url);
+      assertV0Unit(profile.unit);
+      this.authorityMintUrl = url;
       this.addMintBlocking = true;
       try {
-        // sanitize url
-        const sanitizeUrl = (url: string): string => {
-          let cleanedUrl = url.trim().replace(/\/+$/, "");
-          if (!/^[a-z]+:\/\//.test(cleanedUrl)) {
-            // Check for any protocol followed by "://"
-            cleanedUrl = "https://" + cleanedUrl;
-          }
-          return cleanedUrl;
-        };
-        url = sanitizeUrl(url);
-
         const mintToAdd: StoredMint = {
           url: url,
           keys: [],
           keysets: [],
-          nickname: addMintData.nickname,
         };
 
-        // we have no mints at all
-        if (this.mints.length === 0) {
-          this.mints = [mintToAdd];
-        } else if (this.mints.filter((m) => m.url === url).length === 0) {
-          // we don't have this mint yet
-          // add mint to this.mints so it can be activated in
-          this.mints.push(mintToAdd);
-        } else {
-          // we already have this mint
-          if (verbose) {
-            notifySuccess(this.t("wallet.mint.notifications.already_added"));
-          }
-          return mintToAdd;
-        }
-        await this.activateMint(mintToAdd, false, true);
+        const existing = this.mints.find((mint) => mint.url === url);
+        this.mints = [existing ?? mintToAdd];
+        await this.activateAuthorityMint(
+          profile,
+          existing ?? mintToAdd,
+          false,
+          true
+        );
         if (verbose) {
           await notifySuccess(this.t("wallet.mint.notifications.added"));
         }
@@ -373,65 +357,20 @@ export const useMintsStore = defineStore("mints", {
       force = false,
       unit: string | undefined = undefined
     ) {
-      const mint = this.mints.filter((m) => m.url === url)[0];
-      if (mint) {
-        await this.activateMint(mint, verbose, force);
-        if (unit) {
-          await this.activateUnit(unit, verbose);
-        }
-      } else {
-        notifyError(
-          this.t("wallet.mint.notifications.not_found"),
-          this.t("wallet.mint.notifications.activation_failed")
-        );
-      }
+      rejectV0Operation("mint-switch");
     },
     selectMintUrl: function (
       url: string,
       unit: string | undefined = undefined
     ) {
-      const mint = this.mints.find((m) => m.url === url);
-      if (!mint) {
-        return false;
-      }
-      this.activeMintUrl = mint.url;
-      if (unit) {
-        const mintClass = new MintClass(mint);
-        if (mintClass.units.includes(unit)) {
-          this.activeUnit = unit;
-        }
-      } else {
-        this.toggleActiveUnitForMint(mint);
-      }
-      useWorkersStore().clearAllWorkers();
-      return true;
+      rejectV0Operation("mint-switch");
     },
     activateUnit: async function (unit: string, verbose = false) {
+      assertV0Unit(unit);
       if (unit === this.activeUnit) {
         return;
       }
-      const uIStore = useUiStore();
-      await uIStore.lockMutex();
-      const mint = this.mints.find((m) => m.url === this.activeMintUrl);
-      if (!mint) {
-        notifyError(
-          this.t("wallet.mint.notifications.no_active_mint"),
-          this.t("wallet.mint.notifications.unit_activation_failed")
-        );
-        return;
-      }
-      const mintClass = new MintClass(mint);
-      if (mintClass.units.includes(unit)) {
-        this.activeUnit = unit;
-      } else {
-        notifyError(
-          this.t("wallet.mint.notifications.unit_not_supported"),
-          this.t("wallet.mint.notifications.unit_activation_failed")
-        );
-      }
-      await uIStore.unlockMutex();
-      const worker = useWorkersStore();
-      worker.clearAllWorkers();
+      rejectV0Operation("unit-switch");
     },
     updateMintInfoAndKeys: async function (mint: StoredMint) {
       const newMintInfo = await this.fetchMintInfo(mint);
@@ -442,11 +381,16 @@ export const useMintsStore = defineStore("mints", {
       mintToUpdate.errored = false;
       return mint;
     },
-    activateMint: async function (
+    activateMint: async function () {
+      rejectV0Operation("mint-switch");
+    },
+    activateAuthorityMint: async function (
+      profile: V0AuthorityProfile,
       mint: StoredMint,
       verbose = false,
       force = false
     ) {
+      assertV0AuthorityMint(profile, mint.url);
       if (mint.url === this.activeMintUrl && !force) {
         return;
       }
@@ -642,18 +586,7 @@ export const useMintsStore = defineStore("mints", {
       }
     },
     removeMint: async function (url: string) {
-      this.mints = this.mints.filter((m) => m.url !== url);
-      if (url === this.activeMintUrl) {
-        this.activeMintUrl = "";
-      }
-      // todo: we always reset to the first mint, improve this
-      if (this.mints.length > 0) {
-        await this.activateMint(this.mints[0], false);
-      }
-      notifySuccess(this.t("wallet.mint.notifications.removed"));
-
-      // Trigger Nostr backup if enabled
-      this.triggerNostrBackup();
+      rejectV0Operation("mint-remove");
     },
     assertMintError: function (
       response: Record<string, unknown>,

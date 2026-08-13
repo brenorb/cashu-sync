@@ -38,6 +38,7 @@ import { useSendTokensStore } from "./sendTokensStore";
 import { usePRStore } from "./payment-request";
 import token from "../js/token";
 import { HistoryToken } from "./tokens";
+import { V0_FEATURES, rejectV0Operation } from "src/v0/profile";
 
 type NostrEventLog = {
   id: string;
@@ -255,6 +256,7 @@ export const useNostrStore = defineStore("nostr", {
       recipient: string,
       message: string
     ) {
+      rejectV0Operation("nostr-peer");
       const randomPrivateKey = generateSecretKey();
       const randomPublicKey = getPublicKey(randomPrivateKey);
       // const randomPrivateKey = hexToBytes(this.seedSignerPrivateKey);
@@ -278,6 +280,7 @@ export const useNostrStore = defineStore("nostr", {
       }
     },
     subscribeToNip04DirectMessages: async function () {
+      if (!V0_FEATURES.nostrPeerFlows) return;
       await this.walletSeedGenerateKeyPair();
       await this.initNdkReadOnly();
       let nip04DirectMessageEvents: Set<NDKEvent> = new Set();
@@ -324,6 +327,7 @@ export const useNostrStore = defineStore("nostr", {
       nprofile: string,
       message: string
     ) {
+      rejectV0Operation("nostr-peer");
       const result = nip19.decode(nprofile);
       const pubkey: string = (result.data as ProfilePointer).pubkey;
       const relays: string[] | undefined = (result.data as ProfilePointer)
@@ -338,6 +342,7 @@ export const useNostrStore = defineStore("nostr", {
       message: string,
       relays?: string[]
     ) {
+      rejectV0Operation("nostr-peer");
       await this.walletSeedGenerateKeyPair();
       const randomPrivateKey = generateSecretKey();
       const randomPublicKey = getPublicKey(randomPrivateKey);
@@ -395,6 +400,7 @@ export const useNostrStore = defineStore("nostr", {
       }
     },
     subscribeToNip17DirectMessages: async function () {
+      if (!V0_FEATURES.nostrPeerFlows) return;
       await this.walletSeedGenerateKeyPair();
       await this.initNdkReadOnly();
       let nip17DirectMessageEvents: Set<NDKEvent> = new Set();
@@ -472,6 +478,7 @@ export const useNostrStore = defineStore("nostr", {
       }
     },
     parseMessageForEcash: async function (message: string) {
+      rejectV0Operation("cashu-token-receive");
       // first check if the message can be converted to a json and then to a PaymentRequestPayload
       try {
         const payload = JSON.parse(message) as PaymentRequestPayload;

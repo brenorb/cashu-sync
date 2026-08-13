@@ -4,6 +4,7 @@ import { useUiStore } from "src/stores/ui"; // showInvoiceDetails
 import { useSendTokensStore } from "src/stores/sendTokensStore"; // showSendTokens and sendData
 import { useSettingsStore } from "./settings";
 import { HistoryToken, useTokensStore } from "./tokens";
+import { rejectV0Operation } from "src/v0/profile";
 export const useWorkersStore = defineStore("workers", {
   state: () => {
     return {
@@ -55,6 +56,7 @@ export const useWorkersStore = defineStore("workers", {
       }, this.checkInterval);
     },
     checkTokenSpendableWorker: async function (historyToken: HistoryToken) {
+      rejectV0Operation("cashu-token-send");
       const settingsStore = useSettingsStore();
       if (!settingsStore.checkSentTokens) {
         console.log(

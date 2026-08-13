@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { V0_FEATURES, rejectV0Operation } from "src/v0/profile";
 import NDK, { NDKEvent } from "@nostr-dev-kit/ndk";
 import { useLocalStorage } from "@vueuse/core";
 import { nip19 } from "nostr-tools";
@@ -83,6 +84,7 @@ export const useNPCV2Store = defineStore("npcV2", {
   getters: {},
   actions: {
     generateNPCV2Connection: async function () {
+      if (!V0_FEATURES.nostrPeerFlows) return;
       if (!this.npcV2Enabled) {
         return;
       }
@@ -130,6 +132,7 @@ export const useNPCV2Store = defineStore("npcV2", {
       lockQuote: boolean;
       pubkey: string;
     }> {
+      rejectV0Operation("nostr-peer");
       try {
         const response = await this.sendAuthedRequest(
           `${this.npcV2BaseURL}/api/v2/user/info`
@@ -151,6 +154,7 @@ export const useNPCV2Store = defineStore("npcV2", {
       }
     },
     changeMintUrl: async function (mintUrl: string) {
+      rejectV0Operation("nostr-peer");
       const mintstore = useMintsStore();
       if (!mintstore.mints.find((m) => m.url === mintUrl)) {
         notifyError(
@@ -185,6 +189,7 @@ export const useNPCV2Store = defineStore("npcV2", {
       }
     },
     getLatestQuotes: async function () {
+      if (!V0_FEATURES.nostrPeerFlows) return;
       if (!this.npcV2Enabled) {
         return;
       }
@@ -249,6 +254,7 @@ export const useNPCV2Store = defineStore("npcV2", {
     getUsernameQuote: async function (
       username: string
     ): Promise<UsernameQuote> {
+      rejectV0Operation("nostr-peer");
       const res = await this.sendAuthedRequest(
         `${this.npcV2BaseURL}/api/v2/user/username`,
         {
@@ -271,6 +277,7 @@ export const useNPCV2Store = defineStore("npcV2", {
       throw new Error("Unexpected reply without payment request");
     },
     setUsername: async function (username: string, token: string) {
+      rejectV0Operation("nostr-peer");
       try {
         const res = await this.sendAuthedRequest(
           `${this.npcV2BaseURL}/api/v2/user/username`,
@@ -297,6 +304,7 @@ export const useNPCV2Store = defineStore("npcV2", {
       opts?: RequestInit,
       authUrl?: string
     ) {
+      rejectV0Operation("nostr-peer");
       const authHeader = await this.generateNip98Event(
         authUrl || url,
         opts?.method || "GET"
@@ -310,6 +318,7 @@ export const useNPCV2Store = defineStore("npcV2", {
       url: string,
       method: string
     ): Promise<string> {
+      rejectV0Operation("nostr-peer");
       const nostrStore = useNostrStore();
       await nostrStore.initSignerIfNotSet();
       const nip98Event = new NDKEvent(new NDK());

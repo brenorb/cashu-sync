@@ -810,7 +810,7 @@ describe("wallet store", () => {
     expect(websocket.mintWallet.completeBatchMint).not.toHaveBeenCalled();
   });
 
-  it("subscribes Bolt12 minting to Bolt12 websocket updates", async () => {
+  it.skip("legacy: subscribes Bolt12 minting to Bolt12 websocket updates", async () => {
     const wallet = useWalletStore();
     const websocket = mockMintWebsocket();
     wallet.invoiceHistory = [
@@ -863,7 +863,7 @@ describe("wallet store", () => {
     expect(websocket.connection.cancelSubscription).not.toHaveBeenCalled();
   });
 
-  it("subscribes on-chain minting to on-chain websocket updates", async () => {
+  it.skip("legacy: subscribes on-chain minting to on-chain websocket updates", async () => {
     const wallet = useWalletStore();
     const websocket = mockMintWebsocket();
     wallet.invoiceHistory = [
@@ -917,7 +917,7 @@ describe("wallet store", () => {
     expect(websocket.connection.cancelSubscription).not.toHaveBeenCalled();
   });
 
-  it("subscribes sent-token proof-state websocket on the token mint", async () => {
+  it.skip("legacy: subscribes sent-token proof-state websocket on the token mint", async () => {
     const wallet = useWalletStore();
     h.mintsStore.activeMintUrl = "https://mint-a.example";
     h.mintsStore.mints = [
@@ -985,7 +985,7 @@ describe("wallet store", () => {
     );
   });
 
-  it("serializes Bolt12 minting so concurrent checks use distinct counters", async () => {
+  it.skip("legacy: serializes Bolt12 minting so concurrent checks use distinct counters", async () => {
     const wallet = useWalletStore();
     wallet.invoiceHistory = [
       {
@@ -1064,7 +1064,7 @@ describe("wallet store", () => {
     expect(h.uiStore.unlockMutex).toHaveBeenCalledTimes(2);
   });
 
-  it("records on-chain subpayments with an explicit parent quote", async () => {
+  it.skip("legacy: records on-chain subpayments with an explicit parent quote", async () => {
     const wallet = useWalletStore();
     const parentQuote = "onchain_quote_with_underscores";
     wallet.invoiceHistory = [
@@ -1120,7 +1120,7 @@ describe("wallet store", () => {
     expect(mintWallet.checkMintQuoteOnchain).toHaveBeenCalledWith(parentQuote);
   });
 
-  it("converts fiat input to msat for amountless Bolt12 melt quotes", async () => {
+  it.skip("legacy: converts fiat input to msat for amountless Bolt12 melt quotes", async () => {
     const wallet = useWalletStore();
     h.mintsStore.activeUnit = "usd";
     const createMeltQuoteBolt12 = vi.fn(async () => ({
@@ -1143,7 +1143,7 @@ describe("wallet store", () => {
     expect(createMeltQuoteBolt12).toHaveBeenCalledWith("lno1offer", 5_000_000);
   });
 
-  it("shows an error when no mint supports Bolt12 offers", async () => {
+  it.skip("legacy: shows an error when no mint supports Bolt12 offers", async () => {
     const wallet = useWalletStore();
     h.mintsStore.mints = [
       {
@@ -1165,7 +1165,7 @@ describe("wallet store", () => {
     expect(h.mintsStore.selectMintUrl).not.toHaveBeenCalled();
   });
 
-  it("switches to a Bolt12-enabled mint when paying an offer", async () => {
+  it.skip("legacy: switches to a Bolt12-enabled mint when paying an offer", async () => {
     const wallet = useWalletStore();
     h.mintsStore.activeMintUrl = "https://mint-a.example";
     h.mintsStore.mints = [
@@ -1196,7 +1196,7 @@ describe("wallet store", () => {
     expect(wallet.payInvoiceData.meltQuote.error).toBe("");
   });
 
-  it("does not treat Bolt12 mint support as sufficient for paying an offer", async () => {
+  it.skip("legacy: does not treat Bolt12 mint support as sufficient for paying an offer", async () => {
     const wallet = useWalletStore();
     h.mintsStore.activeMintUrl = "https://mint-a.example";
     h.mintsStore.mints = [
@@ -1343,7 +1343,7 @@ describe("wallet store", () => {
     });
   });
 
-  it("resets stale Bolt12 amount and quote state for amountless offers", async () => {
+  it.skip("legacy: resets stale Bolt12 amount and quote state for amountless offers", async () => {
     const wallet = useWalletStore();
     h.mintsStore.mints[0].info = {
       nuts: {
@@ -1378,7 +1378,7 @@ describe("wallet store", () => {
     expect(quoteSpy).not.toHaveBeenCalled();
   });
 
-  it("checks pending Bolt12 outgoing invoices with Bolt12 melt quotes", async () => {
+  it.skip("legacy: checks pending Bolt12 outgoing invoices with Bolt12 melt quotes", async () => {
     const wallet = useWalletStore();
     const proofs = [{ id: "00aa", amount: 105, secret: "s1" }];
     const checkMeltQuoteBolt12 = vi.fn(async () => ({
@@ -1600,7 +1600,7 @@ describe("wallet store", () => {
     expect(meltBolt11).toHaveBeenCalledWith(proofs, quote, mintWallet, true);
   });
 
-  it("passes selected on-chain fee index through recoverable melt completion", async () => {
+  it.skip("legacy: passes selected on-chain fee index through recoverable melt completion", async () => {
     const wallet = useWalletStore();
     wallet.payInvoiceData.input.request = "bitcoin:bc1qabc?amount=0.00000100";
     const proofs = [{ id: "00aa", amount: 112, secret: "s1" }];
@@ -1656,7 +1656,7 @@ describe("wallet store", () => {
     });
   });
 
-  it("recovers deferred melt change before finalizing pending payments", async () => {
+  it.skip("legacy: recovers deferred melt change before finalizing pending payments", async () => {
     const wallet = useWalletStore();
     const proofs = [{ id: "00aa", amount: 105, secret: "s1" }];
     const changeProofs = [{ id: "00aa", amount: 3, secret: "change" }];
@@ -1761,7 +1761,82 @@ describe("wallet store", () => {
     });
   });
 
-  it("routes decodeRequest branches", async () => {
+  it("accepts only direct Bolt11 ingress and rejects alternate public lanes", async () => {
+    const wallet = useWalletStore();
+    const bolt11Handler = vi
+      .spyOn(wallet, "handleBolt11InvoiceBolt11")
+      .mockResolvedValue(undefined);
+
+    await wallet.decodeRequest("lnbc1direct");
+    await wallet.decodeRequest("lightning:lntb1wrapped");
+
+    expect(bolt11Handler).toHaveBeenCalledTimes(2);
+    expect(wallet.payInvoiceData.input.request).toBe("lntb1wrapped");
+    for (const request of [
+      "lightning:lno1offer",
+      "lnurl1pay",
+      "alice@example.com",
+      "bitcoin:bc1qxyz?lightning=lnbc1invoice",
+      "cashuAabcdef",
+      "https://mint-b.example",
+      "creqb1request",
+    ]) {
+      await expect(wallet.decodeRequest(request)).rejects.toMatchObject({
+        operation: "unsupported-request",
+      });
+    }
+  });
+
+  it("rejects all public Bolt12 and on-chain store aliases", async () => {
+    const wallet = useWalletStore();
+
+    for (const call of [
+      () => wallet.requestMintBolt12(),
+      () => wallet.meltQuoteInvoiceDataBolt12(),
+      () => wallet.mintOnPaidBolt12("quote"),
+      () => wallet.checkOfferAndMintBolt12("quote"),
+    ]) {
+      await expect(call()).rejects.toMatchObject({ operation: "bolt12" });
+    }
+    for (const call of [
+      () => wallet.requestMintOnchain(),
+      () => wallet.meltQuoteInvoiceDataOnchain(),
+      () => wallet.mintOnPaidOnchain("quote"),
+      () => wallet.checkOnchainAndMint("quote"),
+    ]) {
+      await expect(call()).rejects.toMatchObject({ operation: "onchain" });
+    }
+  });
+
+  it("rejects ecash transfer before mint network or proof mutation", async () => {
+    const wallet = useWalletStore();
+    const mintSend = vi.fn();
+    const mintWallet = {
+      mint: { mintUrl: "https://mint-a.example" },
+      unit: "usd",
+      ops: { send: mintSend },
+    };
+
+    await expect(
+      wallet.send([], mintWallet, 10, true, false)
+    ).rejects.toMatchObject({ operation: "cashu-token-send" });
+    await expect(wallet.redeem()).rejects.toMatchObject({
+      operation: "cashu-token-redeem",
+    });
+    await expect(
+      wallet.onTokenPaid({ token: "cashu-token" })
+    ).rejects.toMatchObject({ operation: "cashu-token-send" });
+    await expect(
+      wallet.checkTokenSpendable({ token: "cashu-token" })
+    ).rejects.toMatchObject({ operation: "cashu-token-send" });
+
+    expect(mintSend).not.toHaveBeenCalled();
+    expect(h.proofsStore.addProofs).not.toHaveBeenCalled();
+    expect(h.proofsStore.removeProofs).not.toHaveBeenCalled();
+    expect(h.proofsStore.setReserved).not.toHaveBeenCalled();
+  });
+
+  it.skip("legacy: routes decodeRequest branches", async () => {
     const wallet = useWalletStore();
     vi.spyOn(wallet, "handleBolt11InvoiceBolt11").mockResolvedValue(undefined);
     vi.spyOn(wallet, "lnurlPayFirst").mockResolvedValue(undefined);
@@ -1794,7 +1869,7 @@ describe("wallet store", () => {
     expect(h.uiStore.closeDialogs).toHaveBeenCalled();
   });
 
-  it("decodes BIP-321 bitcoin: URIs with uppercase query keys", async () => {
+  it.skip("legacy: decodes BIP-321 bitcoin: URIs with uppercase query keys", async () => {
     const wallet = useWalletStore();
     vi.spyOn(wallet, "handleBolt11InvoiceBolt11").mockResolvedValue(undefined);
     vi.spyOn(wallet, "handlePaymentRequest").mockResolvedValue(undefined);
@@ -1806,7 +1881,7 @@ describe("wallet store", () => {
     expect(wallet.handlePaymentRequest).toHaveBeenCalledWith("CREQB1UPPERCASE");
   });
 
-  it("redeem shows the normalized received amount for v4 proofs", async () => {
+  it.skip("legacy: redeem shows the normalized received amount for v4 proofs", async () => {
     const wallet = useWalletStore();
     h.receiveTokensStore.receiveData.tokensBase64 = "cashuB500";
 

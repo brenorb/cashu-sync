@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { V0_FEATURES, rejectV0Operation } from "src/v0/profile";
 import NDK, {
   NDKEvent,
   NDKFilter,
@@ -87,6 +88,7 @@ export const useNWCStore = defineStore("nwc", {
   actions: {
     // ––––---------- NWC Command Handlers ––––----------
     handleGetInfo: async function (nwcCommand: NWCCommand) {
+      rejectV0Operation("nostr-peer");
       console.log("### get_info", nwcCommand.method);
       return {
         result_type: "get_info",
@@ -102,6 +104,7 @@ export const useNWCStore = defineStore("nwc", {
       };
     },
     handleGetBalance: async function (nwcCommand: NWCCommand) {
+      rejectV0Operation("nostr-peer");
       const mintsStore = useMintsStore() as any;
       console.log("### get_balance", nwcCommand.method);
       return {
@@ -112,6 +115,7 @@ export const useNWCStore = defineStore("nwc", {
       };
     },
     handlePayInvoice: async function (nwcCommand: NWCCommand) {
+      rejectV0Operation("nostr-peer");
       const invoice = nwcCommand.params.invoice;
       const amountMsat = nwcCommand.params.amount;
       console.log("### pay_invoice", nwcCommand.method);
@@ -179,6 +183,7 @@ export const useNWCStore = defineStore("nwc", {
       }
     },
     handleMakeInvoice: async function (nwcCommand: NWCCommand) {
+      rejectV0Operation("nostr-peer");
       const { amount, description, expiry } = nwcCommand.params;
       console.log("### make_invoice");
       console.log("### amount", amount); // msats
@@ -214,6 +219,7 @@ export const useNWCStore = defineStore("nwc", {
       };
     },
     handleListTransactions: async function (nwcCommand: NWCCommand) {
+      rejectV0Operation("nostr-peer");
       console.log("### list_transactions", nwcCommand.method);
       const walletStore = useWalletStore();
       const from = nwcCommand.params.from || 0;
@@ -266,6 +272,7 @@ export const useNWCStore = defineStore("nwc", {
       };
     },
     handleLookupInvoice: async function (nwcCommand: NWCCommand) {
+      rejectV0Operation("nostr-peer");
       let hash = nwcCommand.params.payment_hash;
       if (!hash) {
         const bolt11 = nwcCommand.params.invoice;
@@ -330,6 +337,7 @@ export const useNWCStore = defineStore("nwc", {
       event: NDKEvent,
       conn: NWCConnection
     ) {
+      rejectV0Operation("nostr-peer");
       // reply to NWC with result
       const replyEvent = new NDKEvent(event.ndk);
       replyEvent.kind = 23195;
@@ -353,6 +361,7 @@ export const useNWCStore = defineStore("nwc", {
       event: NDKEvent,
       conn: NWCConnection
     ) {
+      rejectV0Operation("nostr-peer");
       // parse command to JSON object {method: 'pay_invoice', params: {invoice: '1234'}}
       const nwcCommand: NWCCommand = JSON.parse(command);
       let result: NWCResult | NWCError;
@@ -404,6 +413,7 @@ export const useNWCStore = defineStore("nwc", {
       )}&secret=${connectionSecretHex}`;
     },
     generateNWCConnection: async function () {
+      rejectV0Operation("nostr-peer");
       let conn: NWCConnection;
       // NOTE: we only support one connection for now
       if (!this.connections.length) {
@@ -459,6 +469,7 @@ export const useNWCStore = defineStore("nwc", {
       }
     },
     listenToNWCCommands: async function () {
+      if (!V0_FEATURES.nostrPeerFlows) return;
       // if (!this.connections.length) {
       //   await this.generateNWCConnection()
       // }

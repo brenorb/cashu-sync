@@ -13,6 +13,7 @@ import {
 } from "../js/notify";
 import { getDecodedTokenBinary, getEncodedToken } from "@cashu/cashu-ts";
 import { useSwapStore } from "./swap";
+import { rejectV0Operation } from "src/v0/profile";
 
 export const useReceiveTokensStore = defineStore("receiveTokensStore", {
   state: () => ({
@@ -42,6 +43,7 @@ export const useReceiveTokensStore = defineStore("receiveTokensStore", {
         .includes(token.getMint(tokenJson));
     },
     receiveToken: async function (encodedToken: string) {
+      rejectV0Operation("cashu-token-receive");
       const mintStore = useMintsStore();
       const walletStore = useWalletStore();
       const receiveStore = useReceiveTokensStore();
@@ -75,6 +77,7 @@ export const useReceiveTokensStore = defineStore("receiveTokensStore", {
       uiStore.closeDialogs();
     },
     receiveIfDecodes: async function () {
+      rejectV0Operation("cashu-token-receive");
       try {
         const decodedToken = this.decodeToken(this.receiveData.tokensBase64);
         if (decodedToken) {
@@ -87,6 +90,7 @@ export const useReceiveTokensStore = defineStore("receiveTokensStore", {
       }
     },
     meltTokenToMint: async function (encodedToken: string, mint: StoredMint) {
+      rejectV0Operation("cashu-token-receive");
       const receiveStore = useReceiveTokensStore();
       const mintStore = useMintsStore();
       const uiStore = useUiStore();

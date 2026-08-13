@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { rejectV0Operation } from "src/v0/profile";
 import {
   PaymentRequest,
   Token,
@@ -42,6 +43,7 @@ export const useSwapStore = defineStore("swap", {
   actions: {
     //
     mintAmountSwap: async function (swapAmountData: SwapAmountData) {
+      rejectV0Operation("multi-mint");
       const walletStore = useWalletStore();
       const mintStore = useMintsStore();
       if (this.swapBlocking) {
@@ -97,6 +99,7 @@ export const useSwapStore = defineStore("swap", {
       }
     },
     meltToMintFees: async function (tokenJson: Token) {
+      rejectV0Operation("multi-mint");
       const proofsStore = useProofsStore();
       const walletStore = useWalletStore();
       const fromMintUrl = token.getMint(tokenJson);
@@ -112,6 +115,7 @@ export const useSwapStore = defineStore("swap", {
       return tokenAmount - meltAmount;
     },
     meltProofsToMint: async function (tokenJson: Token, mint: StoredMint) {
+      rejectV0Operation("multi-mint");
       const proofsStore = useProofsStore();
       const walletStore = useWalletStore();
       if (this.swapBlocking) {

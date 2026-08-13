@@ -14,6 +14,7 @@ import { useProofsStore } from "src/stores/proofs";
 import { useUiStore } from "src/stores/ui";
 import * as nobleSecp256k1 from "@noble/secp256k1";
 import { bytesToHex } from "@noble/hashes/utils";
+import { V0_MINT_UNIT, rejectV0Operation } from "src/v0/profile";
 interface InvoiceQuote {
   quote: string;
   addedAt: number;
@@ -156,24 +157,7 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
       }
     },
     addBolt12OfferToChecker(quote: string, forceStart = false) {
-      const existingIndex = this.bolt12Quotes.findIndex(
-        (q) => q.quote === quote
-      );
-      if (existingIndex !== -1) {
-        this.startInvoiceCheckerWorker(forceStart);
-        return;
-      }
-
-      if (this.bolt12Quotes.length >= this.maxLength) {
-        this.bolt12Quotes.shift();
-      }
-      this.bolt12Quotes.push({
-        quote,
-        addedAt: Date.now(),
-        lastChecked: 0,
-        checkCount: 0,
-      });
-      this.startInvoiceCheckerWorker(forceStart);
+      rejectV0Operation("bolt12");
     },
     removeBolt12OfferFromChecker(quote: string) {
       const index = this.bolt12Quotes.findIndex((q) => q.quote === quote);
@@ -182,24 +166,7 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
       }
     },
     addOnchainQuoteToChecker(quote: string, forceStart = false) {
-      const existingIndex = this.onchainQuotes.findIndex(
-        (q) => q.quote === quote
-      );
-      if (existingIndex !== -1) {
-        this.startInvoiceCheckerWorker(forceStart);
-        return;
-      }
-
-      if (this.onchainQuotes.length >= this.maxLength) {
-        this.onchainQuotes.shift();
-      }
-      this.onchainQuotes.push({
-        quote,
-        addedAt: Date.now(),
-        lastChecked: 0,
-        checkCount: 0,
-      });
-      this.startInvoiceCheckerWorker(forceStart);
+      rejectV0Operation("onchain");
     },
     removeOnchainQuoteFromChecker(quote: string) {
       const index = this.onchainQuotes.findIndex((q) => q.quote === quote);
@@ -214,7 +181,7 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
       this.removeOutgoingPaymentFromChecker("invoice", quote);
     },
     addOutgoingTokenToChecker(token: string, forceStart = false) {
-      this.addOutgoingPaymentToChecker("token", token, forceStart);
+      rejectV0Operation("cashu-token-send");
     },
     removeOutgoingTokenFromChecker(token: string) {
       this.removeOutgoingPaymentFromChecker("token", token);
@@ -224,6 +191,7 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
       id: string,
       forceStart = false
     ) {
+      if (type === "token") rejectV0Operation("cashu-token-send");
       if (!id) return;
       const existingIndex = this.outgoingPayments.findIndex(
         (q) => q.type === type && q.id === id
@@ -531,10 +499,47 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
     async processQuotes() {
       const now = Date.now();
       const walletStore = useWalletStore();
-      await this.processIncomingQueues(now, walletStore);
-      await this.processOutgoingQueue(now, walletStore);
+      await this.processIncomingQueuesV0(now, walletStore);
+      await this.processOutgoingQueueV0(now, walletStore);
+    },
+    async processIncomingQueuesV0(now: number, walletStore: any) {
+      this.bolt12Quotes = [];
+      this.onchainQuotes = [];
+      this.quotes = this.quotes.filter((q) => now - q.addedAt < this.maxAge);
+      if (now - this.lastInvoiceCheckTime < this.checkInterval) return;
+
+      const mintStore = useMintsStore();
+      for (let index = this.quotes.length - 1; index >= 0; index--) {
+        const queueEntry = this.quotes[index];
+        const invoice = walletStore.invoiceHistory.find(
+          (item: any) => item.quote === queueEntry.quote
+        );
+        const allowed =
+          (invoice?.type === undefined ||
+            invoice?.type === PaymentMethod.Bolt11) &&
+          invoice?.unit === V0_MINT_UNIT &&
+          mintStore.authorityMintUrl !== "" &&
+          invoice?.mint === mintStore.authorityMintUrl &&
+          invoice?.mint === mintStore.activeMintUrl &&
+          this.shouldCheckInvoice(invoice);
+        if (!allowed) {
+          this.quotes.splice(index, 1);
+          continue;
+        }
+        if (now > this.dueTime(queueEntry)) {
+          await this.processSingleBolt11Entry(
+            { queueEntry, invoice },
+            now,
+            walletStore
+          );
+          return;
+        }
+      }
     },
     async processIncomingQueues(now: number, walletStore: any) {
+      return this.processIncomingQueuesV0(now, walletStore);
+    },
+    async processIncomingQueuesLegacy(now: number, walletStore: any) {
       this.quotes = this.quotes.filter((q) => now - q.addedAt < this.maxAge);
       this.bolt12Quotes = this.bolt12Quotes.filter(
         (q) => now - q.addedAt < this.maxAge
@@ -892,7 +897,7 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
       }
       this.lastInvoiceCheckTime = now;
     },
-    async processOutgoingQueue(now: number, walletStore: any) {
+    async processOutgoingQueueLegacy(now: number, walletStore: any) {
       if (!useSettingsStore().checkSentTokens) return;
       this.outgoingPayments = this.outgoingPayments.filter(
         (q) => now - q.addedAt < this.maxAge
@@ -944,6 +949,49 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
         break;
       }
     },
+    async processOutgoingQueueV0(now: number, walletStore: any) {
+      this.outgoingPayments = this.outgoingPayments.filter(
+        (entry) => entry.type === "invoice"
+      );
+      if (!useSettingsStore().checkSentTokens) return;
+      this.outgoingPayments = this.outgoingPayments.filter(
+        (q) => now - q.addedAt < this.maxAge
+      );
+      if (this.outgoingPayments.length === 0) return;
+      if (now - this.lastOutgoingCheckTime < this.checkInterval) return;
+
+      const mintStore = useMintsStore();
+      for (let index = this.outgoingPayments.length - 1; index >= 0; index--) {
+        const entry = this.outgoingPayments[index];
+        if (now <= this.dueTime(entry)) continue;
+        const invoice = walletStore.invoiceHistory.find(
+          (item: any) => item.quote === entry.id
+        );
+        const allowed =
+          invoice?.type === PaymentMethod.Bolt11 &&
+          invoice?.unit === V0_MINT_UNIT &&
+          mintStore.authorityMintUrl !== "" &&
+          invoice?.mint === mintStore.authorityMintUrl &&
+          invoice?.mint === mintStore.activeMintUrl &&
+          this.shouldCheckOutgoingInvoice(invoice);
+        if (!allowed) {
+          this.outgoingPayments.splice(index, 1);
+          continue;
+        }
+        try {
+          await walletStore.checkOutgoingInvoice(entry.id, false);
+          this.outgoingPayments.splice(index, 1);
+        } catch {
+          entry.lastChecked = now;
+          entry.checkCount += 1;
+        }
+        this.lastOutgoingCheckTime = now;
+        return;
+      }
+    },
+    async processOutgoingQueue(now: number, walletStore: any) {
+      return this.processOutgoingQueueV0(now, walletStore);
+    },
     async checkPendingInvoices() {
       if (!useSettingsStore().checkInvoicesOnStartup) return;
       if (
@@ -956,8 +1004,14 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
       this.queuePendingOutgoingPayments(walletStore);
     },
     queuePendingIncomingPayments(walletStore: any) {
-      const quotesToCheck = walletStore.invoiceHistory.filter((q: any) =>
-        this.shouldCheckInvoice(q)
+      const quotesToCheck = walletStore.invoiceHistory.filter(
+        (q: any) =>
+          (q.type === undefined || q.type === PaymentMethod.Bolt11) &&
+          q.unit === V0_MINT_UNIT &&
+          useMintsStore().authorityMintUrl !== "" &&
+          q.mint === useMintsStore().authorityMintUrl &&
+          q.mint === useMintsStore().activeMintUrl &&
+          this.shouldCheckInvoice(q)
       );
       if (quotesToCheck.length > this.maxQuotesToCheckOnStartup) {
         quotesToCheck.splice(this.maxQuotesToCheckOnStartup);
@@ -966,23 +1020,9 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
       this.lastPendingInvoiceCheck = now;
       for (const q of quotesToCheck) {
         try {
-          if (q.type === PaymentMethod.Bolt12) {
-            if (this.reusableMintInCooldown(q.mint, now)) continue;
-            this.addBolt12OfferToChecker(q.quote);
-            walletStore.mintOnPaidBolt12(q.quote, false, false).catch(() => {
-              // Background websocket setup is best-effort; long-polling handles retries.
-            });
-          } else if (q.type === PaymentMethod.Onchain) {
-            if (this.reusableMintInCooldown(q.mint, now)) continue;
-            this.addOnchainQuoteToChecker(q.quote, true);
-            walletStore.mintOnPaidOnchain(q.quote, false, false).catch(() => {
-              // Background websocket setup is best-effort; long-polling handles retries.
-            });
-          } else {
-            walletStore.mintOnPaidBolt11(q.quote, false, false).catch(() => {
-              // Background websocket setup is best-effort; long-polling handles retries.
-            });
-          }
+          walletStore.mintOnPaidBolt11(q.quote, false, false).catch(() => {
+            // Background websocket setup is best-effort; long-polling handles retries.
+          });
         } catch (error) {
           // Background invoice checks stay silent; manual checks surface errors.
         }
@@ -990,26 +1030,19 @@ export const useInvoicesWorkerStore = defineStore("invoicesWorker", {
     },
     queuePendingOutgoingPayments(walletStore: any) {
       if (!useSettingsStore().checkSentTokens) return;
-      const tokenStore = useTokensStore();
-      const outgoingInvoices = walletStore.invoiceHistory.filter((q: any) =>
-        this.shouldCheckOutgoingInvoice(q)
-      );
-      const outgoingTokens = tokenStore.historyTokens.filter((t) =>
-        this.shouldCheckOutgoingToken(t)
+      const outgoingInvoices = walletStore.invoiceHistory.filter(
+        (q: any) =>
+          q.type === PaymentMethod.Bolt11 &&
+          q.unit === V0_MINT_UNIT &&
+          useMintsStore().authorityMintUrl !== "" &&
+          q.mint === useMintsStore().authorityMintUrl &&
+          q.mint === useMintsStore().activeMintUrl &&
+          this.shouldCheckOutgoingInvoice(q)
       );
       const maxInvoices = this.maxQuotesToCheckOnStartup;
       outgoingInvoices.slice(0, maxInvoices).forEach((q: any) => {
         this.addOutgoingInvoiceToChecker(q.quote, true);
       });
-      const remaining = Math.max(
-        0,
-        this.maxQuotesToCheckOnStartup - maxInvoices
-      );
-      outgoingTokens
-        .slice(0, remaining || this.maxQuotesToCheckOnStartup)
-        .forEach((t) => {
-          this.addOutgoingTokenToChecker(t.token, true);
-        });
     },
   },
 });

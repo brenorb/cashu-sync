@@ -52,6 +52,71 @@ describe("invoices worker", () => {
     worker.batchPathCooldowns = {};
     worker.lastInvoiceCheckTime = 0;
     worker.lastOutgoingCheckTime = 0;
+    worker.processIncomingQueues =
+      worker.processIncomingQueuesLegacy.bind(worker);
+    worker.processOutgoingQueue =
+      worker.processOutgoingQueueLegacy.bind(worker);
+  });
+
+  it("uses exactly one Bolt11 USD check even when NUT-29 is advertised", async () => {
+    const worker = useInvoicesWorkerStore();
+    const mintStore = useMintsStore();
+    const now = Date.now();
+    mintStore.activeMintUrl = "https://mint.example";
+    mintStore.authorityMintUrl = "https://mint.example";
+    mintStore.activeUnit = "usd";
+    advertiseBatchMint(mintStore, "https://mint.example");
+    worker.quotes = [queuedQuote("usd-q", now - 10_000)];
+    const walletStore = {
+      invoiceHistory: [pendingInvoice("usd-q", { unit: "usd" })],
+      mintWallet: vi.fn(),
+      checkInvoiceBolt11: vi.fn(async () => {}),
+    };
+
+    await worker.processIncomingQueuesV0(now, walletStore);
+
+    expect(walletStore.checkInvoiceBolt11).toHaveBeenCalledExactlyOnceWith(
+      "usd-q",
+      false
+    );
+    expect(walletStore.mintWallet).not.toHaveBeenCalled();
+  });
+
+  it("clears unsupported persisted queues without network or proof mutation", async () => {
+    const worker = useInvoicesWorkerStore();
+    const now = Date.now();
+    worker.bolt12Quotes = [queuedQuote("bolt12-q", now - 10_000)];
+    worker.onchainQuotes = [queuedQuote("onchain-q", now - 10_000)];
+    worker.outgoingPayments = [
+      {
+        id: "cashu-token",
+        type: "token",
+        addedAt: now - 10_000,
+        lastChecked: 0,
+        checkCount: 0,
+      },
+    ];
+    const walletStore = {
+      invoiceHistory: [],
+      checkOfferAndMintBolt12: vi.fn(),
+      checkOnchainAndMint: vi.fn(),
+      checkTokenSpendable: vi.fn(),
+    };
+    const proofsStore = useProofsStore();
+    const addProofs = vi.spyOn(proofsStore, "addProofs");
+    const removeProofs = vi.spyOn(proofsStore, "removeProofs");
+
+    await worker.processIncomingQueuesV0(now, walletStore);
+    await worker.processOutgoingQueueV0(now, walletStore);
+
+    expect(worker.bolt12Quotes).toEqual([]);
+    expect(worker.onchainQuotes).toEqual([]);
+    expect(worker.outgoingPayments).toEqual([]);
+    expect(walletStore.checkOfferAndMintBolt12).not.toHaveBeenCalled();
+    expect(walletStore.checkOnchainAndMint).not.toHaveBeenCalled();
+    expect(walletStore.checkTokenSpendable).not.toHaveBeenCalled();
+    expect(addProofs).not.toHaveBeenCalled();
+    expect(removeProofs).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -921,7 +986,7 @@ describe("invoices worker", () => {
     ]);
   });
 
-  it("does not reset reusable quote backoff when re-queueing an existing quote", () => {
+  it("rejects re-queueing an unsupported on-chain quote", () => {
     const worker = useInvoicesWorkerStore();
     worker.onchainQuotes = [
       {
@@ -932,7 +997,9 @@ describe("invoices worker", () => {
       },
     ];
 
-    worker.addOnchainQuoteToChecker("onchain-q", true);
+    expect(() => worker.addOnchainQuoteToChecker("onchain-q", true)).toThrow(
+      "onchain is not available in the v0 profile"
+    );
 
     expect(worker.onchainQuotes).toEqual([
       {
@@ -951,11 +1018,13 @@ describe("invoices worker", () => {
       .mockImplementation(() => {});
 
     worker.addInvoiceToChecker("bolt11-q", true);
-    worker.addBolt12OfferToChecker("bolt12-q", true);
+    expect(() => worker.addBolt12OfferToChecker("bolt12-q", true)).toThrow(
+      "bolt12 is not available in the v0 profile"
+    );
 
     expect(startSpy).toHaveBeenCalledWith(true);
     expect(worker.quotes.map((q) => q.quote)).toContain("bolt11-q");
-    expect(worker.bolt12Quotes.map((q) => q.quote)).toContain("bolt12-q");
+    expect(worker.bolt12Quotes).toEqual([]);
   });
 
   it("skips reusable quote checks while the quote mint is in cooldown", async () => {
@@ -1043,7 +1112,9 @@ describe("invoices worker", () => {
       worker.reusableMintCooldowns["https://offline.example"].nextRetryAt
     ).toBeGreaterThan(now);
 
-    worker.addOnchainQuoteToChecker("onchain-q", true);
+    expect(() => worker.addOnchainQuoteToChecker("onchain-q", true)).toThrow(
+      "onchain is not available in the v0 profile"
+    );
     expect(worker.onchainQuotes[0].checkCount).toBe(1);
 
     worker.reusableMintCooldowns = {};
@@ -1060,7 +1131,7 @@ describe("invoices worker", () => {
     expect(worker.reusableMintCooldowns).toEqual({});
   });
 
-  it("starts websocket listeners for pending Bolt12 offers on startup", () => {
+  it("ignores pending Bolt12 offers on startup", () => {
     const worker = useInvoicesWorkerStore();
     const walletStore = {
       invoiceHistory: [
@@ -1079,11 +1150,7 @@ describe("invoices worker", () => {
 
     worker.queuePendingIncomingPayments(walletStore);
 
-    expect(worker.bolt12Quotes.map((q) => q.quote)).toContain("bolt12-q");
-    expect(walletStore.mintOnPaidBolt12).toHaveBeenCalledWith(
-      "bolt12-q",
-      false,
-      false
-    );
+    expect(worker.bolt12Quotes).toEqual([]);
+    expect(walletStore.mintOnPaidBolt12).not.toHaveBeenCalled();
   });
 });

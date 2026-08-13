@@ -18,6 +18,7 @@ import token from "src/js/token";
 import { notifyError, notifySuccess, notifyWarning } from "src/js/notify";
 import { useLocalStorage } from "@vueuse/core";
 import { v4 as uuidv4 } from "uuid";
+import { rejectV0Operation } from "src/v0/profile";
 
 export type OurPaymentRequest = {
   id: string; // UUID from PaymentRequest
@@ -61,6 +62,7 @@ export const usePRStore = defineStore("payment-request", {
       mintUrl?: string,
       forceNew: boolean = false
     ) {
+      rejectV0Operation("payment-request");
       // If not forcing a new request and we already have at least one,
       // do not auto-create a new one; just show the currently selected.
       if (!forceNew && this.ourPaymentRequests.length > 0) {
@@ -76,6 +78,7 @@ export const usePRStore = defineStore("payment-request", {
       memo?: string,
       mintUrl?: string
     ) {
+      rejectV0Operation("payment-request");
       const nostrStore = useNostrStore();
       const mintStore = useMintsStore();
       const tags = [["n", "17"]];
@@ -177,6 +180,7 @@ export const usePRStore = defineStore("payment-request", {
         .filter((t): t is HistoryToken => !!t);
     },
     async decodePaymentRequest(pr: string) {
+      rejectV0Operation("payment-request");
       console.log("decodePaymentRequest", pr);
       const request: PaymentRequest = decodePaymentRequest(pr);
       console.log("decodePaymentRequest", request);
@@ -241,6 +245,7 @@ export const usePRStore = defineStore("payment-request", {
       request: PaymentRequest,
       tokenStr: string
     ): Promise<boolean> {
+      rejectV0Operation("payment-request");
       const transports: PaymentRequestTransport[] = request.transport ?? [];
       for (const transport of transports) {
         if (transport.type == PaymentRequestTransportType.NOSTR) {
@@ -261,6 +266,7 @@ export const usePRStore = defineStore("payment-request", {
       transport: PaymentRequestTransport,
       tokenStr: string
     ): Promise<boolean> {
+      rejectV0Operation("payment-request");
       console.log("payNostrPaymentRequest", request, tokenStr);
       console.log("transport", transport);
       const nostrStore = useNostrStore();
@@ -295,6 +301,7 @@ export const usePRStore = defineStore("payment-request", {
       transport: PaymentRequestTransport,
       tokenStr: string
     ): Promise<boolean> {
+      rejectV0Operation("payment-request");
       console.log("payPostPaymentRequest", request, tokenStr);
       // get the endpoint from the transport target and make an HTTP POST request with the paymentPayload as the body
       const decodedToken = await token.decodeFull(tokenStr);

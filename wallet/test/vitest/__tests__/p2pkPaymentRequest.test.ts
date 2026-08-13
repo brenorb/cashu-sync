@@ -98,29 +98,17 @@ describe("walletStore.sendToLock pubkey normalization", () => {
     return { wallet, mockWallet, asP2PK, sendProofs, walletProofs };
   };
 
-  test("wraps a bare pubkey string in P2PKOptions", async () => {
-    const { wallet, mockWallet, asP2PK, sendProofs } = setup();
-    const result = await wallet.sendToLock([], mockWallet, 21, PUBKEY);
-    expect(asP2PK).toHaveBeenCalledWith({ pubkey: PUBKEY });
-    expect(result.sendProofs).toEqual(sendProofs);
-  });
-
-  test("passes full P2PKOptions through untouched", async () => {
+  test("rejects P2PK before mint network or proof mutation", async () => {
     const { wallet, mockWallet, asP2PK } = setup();
-    const lockOptions = {
-      pubkey: [PUBKEY],
-      hashlock: HASH,
-      locktime: 1750000000,
-    };
-    await wallet.sendToLock([], mockWallet, 21, lockOptions);
-    expect(asP2PK).toHaveBeenCalledWith(lockOptions);
-  });
-
-  test("removes inputs and keeps change, but not the locked sendProofs", async () => {
-    const { wallet, mockWallet, walletProofs } = setup();
     const proofs = useProofsStore();
-    await wallet.sendToLock([], mockWallet, 21, PUBKEY);
-    expect(proofs.removeProofs).toHaveBeenCalledWith(walletProofs);
-    expect(proofs.addProofs).toHaveBeenCalledWith([]);
+
+    await expect(
+      wallet.sendToLock([], mockWallet, 21, PUBKEY)
+    ).rejects.toMatchObject({ operation: "p2pk" });
+
+    expect(mockWallet.ops.send).not.toHaveBeenCalled();
+    expect(asP2PK).not.toHaveBeenCalled();
+    expect(proofs.removeProofs).not.toHaveBeenCalled();
+    expect(proofs.addProofs).not.toHaveBeenCalled();
   });
 });
