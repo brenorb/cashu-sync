@@ -338,9 +338,6 @@ export const useMintsStore = defineStore("mints", {
           await notifySuccess(this.t("wallet.mint.notifications.added"));
         }
 
-        // Trigger Nostr backup if enabled
-        this.triggerNostrBackup();
-
         return mintToAdd;
       } catch (error) {
         // activation failed, we remove the mint again from local storage

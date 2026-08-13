@@ -17,6 +17,7 @@ export interface SnapshotSyncPort {
     candidate: SnapshotV0,
     options: { applyAccepted: false }
   ): Promise<PublishOutcome>;
+  confirmCandidate(candidate: SnapshotV0): Promise<PublishOutcome | null>;
 }
 
 export interface OperationJournalPort {
@@ -375,6 +376,19 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
     const candidate = await this.journal.candidateWithClearedOperation(
       pending.operation_id
     );
+    const previouslyAccepted = await this.sync.confirmCandidate(candidate);
+    if (previouslyAccepted?.status === "accepted") {
+      await this.journal.finalizeAcceptedSnapshot(
+        candidate,
+        previouslyAccepted.eventId
+      );
+      return {
+        status: "completed",
+        type: pending.type,
+        operationId: pending.operation_id,
+        eventId: previouslyAccepted.eventId,
+      };
+    }
     let published: PublishOutcome;
     try {
       published = await this.sync.publishCandidate(candidate, {

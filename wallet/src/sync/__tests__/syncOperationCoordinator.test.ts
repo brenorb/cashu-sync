@@ -116,6 +116,7 @@ function pendingMint(
 }
 
 class FakeSync implements SnapshotSyncPort {
+  confirmedResult: PublishOutcome | null = null;
   pullResult: PullOutcome = {
     status: "noop",
     eventId: HEAD,
@@ -135,6 +136,7 @@ class FakeSync implements SnapshotSyncPort {
   };
   pull = vi.fn(async () => this.pullResult);
   publishCurrent = vi.fn(async () => this.preparedResult);
+  confirmCandidate = vi.fn(async () => this.confirmedResult);
   publishCandidate = vi.fn(
     async (_candidate: SnapshotV0, _options: { applyAccepted: false }) =>
       this.finalResult
@@ -511,6 +513,28 @@ describe("SyncOperationCoordinator resume", () => {
     expect(value.gateway.submitMint).not.toHaveBeenCalled();
     expect(value.gateway.reconcileMint).not.toHaveBeenCalled();
     expect(value.sync.publishCandidate).toHaveBeenCalledOnce();
+  });
+
+  it("finalizes an exact previously accepted candidate without republishing", async () => {
+    const value = fixture();
+    value.journal.state.pending_operation = pendingMint(
+      "response_recorded",
+      mintResponse
+    );
+    value.sync.confirmedResult = {
+      status: "accepted",
+      resolution: "confirmed",
+      eventId: FINAL_HEAD,
+      revision: 5,
+    };
+
+    await expect(value.coordinator.resume()).resolves.toMatchObject({
+      status: "completed",
+      eventId: FINAL_HEAD,
+    });
+    expect(value.sync.publishCandidate).not.toHaveBeenCalled();
+    expect(value.journal.finalizeAcceptedSnapshot).toHaveBeenCalledOnce();
+    expect(value.gateway.submitMint).not.toHaveBeenCalled();
   });
 
   it("serializes operations in one process", async () => {

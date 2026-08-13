@@ -16,10 +16,10 @@
         color="primary"
         no-caps
         unelevated
-        :disable="!activeMintUrl"
+        :disable="!activeMintUrl || !walletReady"
         aria-label="Add funds with a Lightning invoice"
         label="Add funds"
-        @click="openMint"
+        @click="showMintDialog = true"
       />
       <q-btn
         data-v0-action="melt-bolt11"
@@ -27,10 +27,10 @@
         color="primary"
         no-caps
         outline
-        :disable="!activeMintUrl"
+        :disable="!activeMintUrl || !walletReady"
         aria-label="Pay a Lightning invoice"
         label="Pay invoice"
-        @click="openMelt()"
+        @click="showMeltDialog = true"
       />
       <router-link to="/settings/sync" class="v0-sync-link">
         <span>
@@ -43,85 +43,285 @@
 
     <V0AccountingHistory />
 
-    <CreateInvoiceDialog />
-    <PayInvoiceDialog />
-    <InvoiceDetailDialog />
+    <p v-if="syncMessage" class="v0-runtime-status" role="status" aria-live="polite">
+      {{ syncMessage }}
+    </p>
+
+    <q-dialog v-model="showMintDialog">
+      <q-card class="v0-dialog" data-v0-dialog="mint">
+        <q-card-section>
+          <p class="v0-eyebrow">Add funds</p>
+          <h2>Mint USD</h2>
+          <p>Pay the Lightning invoice, then claim the exact prepared outputs.</p>
+        </q-card-section>
+        <q-card-section v-if="!mintQuote">
+          <q-input
+            v-model="mintAmount"
+            data-v0-field="mint-amount"
+            dark
+            outlined
+            inputmode="decimal"
+            label="Amount in USD"
+          />
+        </q-card-section>
+        <q-card-section v-else>
+          <q-input
+            :model-value="mintQuote.request"
+            data-v0-field="mint-invoice"
+            dark
+            outlined
+            readonly
+            autogrow
+            label="Lightning invoice"
+          />
+        </q-card-section>
+        <q-card-section v-if="dialogError" class="v0-dialog-error" role="alert">
+          {{ dialogError }}
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat no-caps label="Close" v-close-popup />
+          <q-btn
+            v-if="!mintQuote"
+            data-v0-action="create-mint-quote"
+            color="primary"
+            no-caps
+            unelevated
+            :loading="dialogBusy"
+            label="Create invoice"
+            @click="createMintQuote"
+          />
+          <q-btn
+            v-else
+            data-v0-action="claim-mint-quote"
+            color="primary"
+            no-caps
+            unelevated
+            :loading="dialogBusy"
+            label="Claim paid invoice"
+            @click="claimMintQuote"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="showMeltDialog">
+      <q-card class="v0-dialog" data-v0-dialog="melt">
+        <q-card-section>
+          <p class="v0-eyebrow">Pay invoice</p>
+          <h2>Melt USD</h2>
+          <p>The selected proofs are fenced through the relay before payment.</p>
+        </q-card-section>
+        <q-card-section v-if="!meltQuote">
+          <q-input
+            v-model="meltRequest"
+            data-v0-field="melt-invoice"
+            dark
+            outlined
+            autogrow
+            label="Bolt11 invoice"
+          />
+        </q-card-section>
+        <q-card-section v-else class="v0-quote-summary">
+          <strong>{{ formatUsd(meltQuote.amount) }}</strong>
+          <span>Maximum mint fee: {{ formatUsd(meltQuote.feeReserve) }}</span>
+        </q-card-section>
+        <q-card-section v-if="dialogError" class="v0-dialog-error" role="alert">
+          {{ dialogError }}
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat no-caps label="Close" v-close-popup />
+          <q-btn
+            v-if="!meltQuote"
+            data-v0-action="create-melt-quote"
+            color="primary"
+            no-caps
+            unelevated
+            :loading="dialogBusy"
+            label="Review payment"
+            @click="createMeltQuote"
+          />
+          <q-btn
+            v-else
+            data-v0-action="pay-melt-quote"
+            color="primary"
+            no-caps
+            unelevated
+            :loading="dialogBusy"
+            label="Pay invoice"
+            @click="payMeltQuote"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </main>
 </template>
 
 <script lang="ts">
 import { defineComponent } from "vue";
-import { mapState, mapWritableState } from "pinia";
+import { mapState } from "pinia";
 import { ChevronRight as ChevronRightIcon } from "lucide-vue-next";
 import V0BalanceCard from "src/components/V0BalanceCard.vue";
 import V0AccountingHistory from "src/components/V0AccountingHistory.vue";
-import CreateInvoiceDialog from "src/components/CreateInvoiceDialog.vue";
-import PayInvoiceDialog from "src/components/PayInvoiceDialog.vue";
-import InvoiceDetailDialog from "src/components/InvoiceDetailDialog.vue";
 import { useMintsStore } from "src/stores/mints";
-import { useUiStore } from "src/stores/ui";
 import { useWalletStore } from "src/stores/wallet";
 import { useMigrationsStore } from "src/stores/migrations";
-import { PaymentMethod } from "src/stores/walletTypes";
+import { useDexieStore } from "src/stores/dexie";
+import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
+import {
+  useV0WalletService,
+  type MeltQuoteView,
+  type MintQuoteView,
+} from "src/sync/v0WalletService";
 
 export default defineComponent({
   name: "V0WalletPage",
   components: {
     V0BalanceCard,
     V0AccountingHistory,
-    CreateInvoiceDialog,
-    PayInvoiceDialog,
-    InvoiceDetailDialog,
     ChevronRightIcon,
+  },
+  data() {
+    return {
+      showMintDialog: false,
+      showMeltDialog: false,
+      mintAmount: "1.00",
+      mintQuote: null as MintQuoteView | null,
+      meltRequest: "",
+      meltQuote: null as MeltQuoteView | null,
+      dialogBusy: false,
+      dialogError: "",
+      syncMessage: "Starting synchronized wallet…",
+      walletReady: false,
+      visibilityHandler: null as (() => void) | null,
+    };
   },
   computed: {
     ...mapState(useMintsStore, ["activeMintUrl", "activeUnit"]),
-    ...mapWritableState(useUiStore, [
-      "showCreateInvoiceDialog",
-      "showInvoiceDetails",
-    ]),
-    ...mapWritableState(useWalletStore, ["invoiceData", "payInvoiceData"]),
   },
   methods: {
-    openMint() {
-      this.invoiceData = {
-        amount: 0,
-        request: "",
-        quote: "",
-        memo: "",
-        date: "",
-        status: "pending",
-        mint: this.activeMintUrl,
-        unit: this.activeUnit,
-        type: PaymentMethod.Bolt11,
-      };
-      this.showCreateInvoiceDialog = true;
-    },
-    async openMelt(request = "") {
-      this.payInvoiceData.show = true;
-      this.payInvoiceData.invoice = null;
-      this.payInvoiceData.input.amount = undefined;
-      this.payInvoiceData.input.quote = "";
-      this.payInvoiceData.input.request = request;
-      this.payInvoiceData.meltQuote.error = "";
-      if (request) {
-        await useWalletStore().decodeRequest(request);
+    async runDialog(operation: () => Promise<void>) {
+      this.dialogBusy = true;
+      this.dialogError = "";
+      try {
+        await operation();
+      } catch (error) {
+        this.dialogError =
+          error instanceof Error ? error.message : "Wallet operation failed";
+      } finally {
+        this.dialogBusy = false;
       }
+    },
+    async createMintQuote() {
+      await this.runDialog(async () => {
+        this.mintQuote = await useV0WalletService().requestMintQuote(
+          this.parseUsdCents(this.mintAmount)
+        );
+      });
+    },
+    async claimMintQuote() {
+      if (!this.mintQuote) return;
+      await this.runDialog(async () => {
+        const result = await useV0WalletService().mintPaidQuote(
+          this.mintQuote!.quote
+        );
+        if (result.status !== "completed") {
+          throw new Error(`Mint requires recovery: ${result.status}`);
+        }
+        this.syncMessage = "Funds added and synchronized.";
+        this.showMintDialog = false;
+        this.mintQuote = null;
+      });
+    },
+    async createMeltQuote() {
+      await this.runDialog(async () => {
+        this.meltQuote = await useV0WalletService().requestMeltQuote(
+          this.meltRequest
+        );
+      });
+    },
+    async payMeltQuote() {
+      if (!this.meltQuote) return;
+      await this.runDialog(async () => {
+        const result = await useV0WalletService().payMeltQuote(
+          this.meltQuote!.quote
+        );
+        if (result.status !== "completed") {
+          throw new Error(`Payment requires recovery: ${result.status}`);
+        }
+        this.syncMessage = "Invoice paid and synchronized.";
+        this.showMeltDialog = false;
+        this.meltQuote = null;
+        this.meltRequest = "";
+      });
+    },
+    parseUsdCents(value: string): number {
+      const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim());
+      if (!match) throw new Error("enter a valid USD amount with up to two decimals");
+      const cents = Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
+      if (!Number.isSafeInteger(cents) || cents <= 0) {
+        throw new Error("amount must be greater than zero");
+      }
+      return cents;
+    },
+    formatUsd(cents: number): string {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: "USD",
+      }).format(cents / 100);
     },
   },
   async created() {
+    // Construct composition-backed Pinia stores while Vue still owns the
+    // active component instance; later awaits must not be the first call.
+    const wallet = useWalletStore();
     const migrations = useMigrationsStore();
     migrations.initMigrations();
     await migrations.runMigrations();
+    await useDexieStore().migrateToDexie();
 
-    const wallet = useWalletStore();
     wallet.initializeMnemonic();
     await wallet.initPaymentHistory();
+
+    try {
+      const boot = await useSyncRuntimeService().boot(wallet.mnemonic);
+      if (boot.sync.status === "unconfigured") {
+        this.syncMessage = "Pair or restore this wallet to enable sync.";
+        return;
+      }
+      const resumed = await useV0WalletService().resume();
+      this.syncMessage =
+        resumed.status === "idle"
+          ? "Wallet synchronized."
+          : `Recovery status: ${resumed.status}`;
+      this.walletReady =
+        resumed.status === "idle" || resumed.status === "completed";
+      this.visibilityHandler = () => {
+        if (document.visibilityState === "visible") {
+          void useV0WalletService().syncNow().catch((error) => {
+            this.syncMessage =
+              error instanceof Error ? error.message : "Sync failed";
+          });
+        }
+      };
+      document.addEventListener("visibilitychange", this.visibilityHandler);
+    } catch (error) {
+      this.walletReady = false;
+      this.syncMessage =
+        error instanceof Error ? error.message : "Wallet startup failed";
+    }
 
     const request = new URL(document.location.href).searchParams.get(
       "lightning"
     );
-    if (request) await this.openMelt(request);
+    if (request) {
+      this.meltRequest = request;
+      this.showMeltDialog = true;
+    }
+  },
+  beforeUnmount() {
+    if (this.visibilityHandler) {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
+    }
   },
 });
 </script>
@@ -211,6 +411,45 @@ export default defineComponent({
 
 .v0-sync-link small {
   color: #8f8f8f;
+}
+
+.v0-runtime-status {
+  margin: 0;
+  border-left: 3px solid var(--sl-color-orange-500, #ff5c00);
+  padding: 10px 12px;
+  color: #b9b9b9;
+  font-size: 0.85rem;
+}
+
+.v0-dialog {
+  width: min(92vw, 520px);
+  border: 1px solid #333;
+  background: #111;
+  color: #fff;
+}
+
+.v0-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+
+.v0-dialog p {
+  color: #aaa;
+}
+
+.v0-dialog-error {
+  color: #ff8068;
+}
+
+.v0-quote-summary {
+  display: grid;
+  gap: 4px;
+  color: #aaa;
+}
+
+.v0-quote-summary strong {
+  color: #fff;
+  font-size: 1.5rem;
 }
 
 @media (min-width: 600px) {

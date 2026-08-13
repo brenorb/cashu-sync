@@ -103,14 +103,19 @@ export class OperationJournalRepository {
       response: null,
     });
 
-    await this.db.transaction("rw", [this.db.walletSyncState], async () => {
-      const state = await this.getState();
-      requireFreeSlot(state);
-      await this.db.walletSyncState.put({
-        ...state,
-        pending_operation: pending,
-      });
-    });
+    await this.db.transaction(
+      "rw",
+      [this.db.mintQuotes, this.db.walletSyncState],
+      async () => {
+        const state = await this.getState();
+        requireFreeSlot(state);
+        await this.requireMintQuote(pending);
+        await this.db.walletSyncState.put({
+          ...state,
+          pending_operation: pending,
+        });
+      }
+    );
   }
 
   async prepareMelt(
@@ -132,10 +137,11 @@ export class OperationJournalRepository {
 
     await this.db.transaction(
       "rw",
-      [this.db.proofs, this.db.walletSyncState],
+      [this.db.proofs, this.db.meltQuotes, this.db.walletSyncState],
       async () => {
         const state = await this.getState();
         requireFreeSlot(state);
+        await this.requireMeltQuote(pending);
         const selected = await this.requireSelectedProofs(pending);
         await this.db.proofs.bulkPut(
           selected.map((proof) => ({

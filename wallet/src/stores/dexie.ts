@@ -137,9 +137,7 @@ export const useDexieStore = defineStore("dexie", {
       // start migration
       const { useStorageStore } = await import("./storage");
       await useStorageStore().exportWalletState();
-      parsedProofs.forEach((proof) => {
-        cashuDb.proofs.add(proof);
-      });
+      await cashuDb.proofs.bulkPut(parsedProofs);
       console.log(
         `Migrated ${cashuDb.proofs.count()} proofs. Before: ${
           parsedProofs.length

@@ -83,15 +83,23 @@ describe("v0 visible UI contract", () => {
     );
   });
 
-  it("provides accessible, explicitly unwired sync and recovery shells", () => {
+  it("wires accessible pairing and encrypted recovery actions", () => {
     const sync = template("src/pages/settings/SyncSettings.vue");
     const recovery = template("src/pages/settings/RecoverySettings.vue");
-    expect(sync).toMatch(/Pair another wallet/i);
+    expect(sync).toMatch(/Create pairing request/i);
     expect(sync).toMatch(/two QR codes/i);
-    expect(sync).toContain("disable");
+    expect(sync).toContain('data-pairing-action="finish"');
+    expect(sync).toContain('data-pairing-action="create-response"');
     expect(recovery).toMatch(/encrypted recovery bundle/i);
     expect(recovery).toMatch(/Restore this wallet/i);
-    expect(recovery).toContain("disable");
+    expect(recovery).toContain('data-recovery-action="download"');
+    expect(recovery).toContain('data-recovery-action="restore"');
     expect(`${sync}${recovery}`).toContain("aria-live");
+    expect(source("src/pages/settings/SyncSettings.vue")).toMatch(
+      /created\(\)[\s\S]*useWalletStore\(\)/
+    );
+    expect(source("src/pages/settings/RecoverySettings.vue")).toMatch(
+      /created\(\)[\s\S]*useWalletStore\(\)/
+    );
   });
 });

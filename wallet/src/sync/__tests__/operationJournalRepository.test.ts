@@ -177,6 +177,7 @@ async function seedMeltRows() {
 
 describe("OperationJournalRepository preparation", () => {
   it("enforces one slot and preserves durable counters for mint", async () => {
+    await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
     const state = await db.walletSyncState.get("wallet");
     expect(state).toMatchObject({
@@ -200,6 +201,7 @@ describe("OperationJournalRepository preparation", () => {
   });
 
   it("rejects a mismatched or already reserved melt input without writes", async () => {
+    await seedMeltRows();
     await db.proofs.put(proof("first", 11, "02aa"));
     await db.proofs.put({ ...proof("second", 20, "02bb"), reserved: true });
 
@@ -247,6 +249,7 @@ describe("OperationJournalRepository preparation", () => {
 
 describe("OperationJournalRepository transitions", () => {
   it("allows only exact prepared-to-submitted monotonic transitions", async () => {
+    await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
     await expect(
       repository.markSubmitted(MINT_OPERATION, "melt", NOW + 1)
@@ -589,6 +592,7 @@ describe("OperationJournalRepository CAS finalization", () => {
       pending_operation: null,
     });
 
+    await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW + 1);
     await repository.markSubmitted(MINT_OPERATION, "mint", NOW + 2);
     await expect(

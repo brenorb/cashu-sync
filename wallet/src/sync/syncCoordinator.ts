@@ -140,6 +140,22 @@ export class SnapshotSyncCoordinator {
     );
   }
 
+  /** Confirms a previously published exact candidate without republishing it. */
+  confirmCandidate(candidate: SnapshotV0): Promise<PublishOutcome | null> {
+    return this.serialize(async () => {
+      const current = await this.relay.queryCurrent();
+      if (current === null) return null;
+      const snapshot = this.decryptRemote(current);
+      if (!sameSnapshot(snapshot, candidate)) return null;
+      return {
+        status: "accepted",
+        resolution: "confirmed",
+        eventId: current.id,
+        revision: candidate.revision,
+      };
+    });
+  }
+
   private serialize<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.queue.then(operation, operation);
     this.queue = result.then(

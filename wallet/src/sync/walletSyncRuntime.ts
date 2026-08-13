@@ -12,20 +12,14 @@ import { OperationJournalRepository } from "src/sync/operationJournalRepository"
 import { SyncRelayClient } from "src/sync/relayClient";
 import {
   SnapshotSyncCoordinator,
-  type PublishOutcome,
-  type PullOptions,
-  type PullOutcome,
 } from "src/sync/syncCoordinator";
 import { hexToBytes } from "src/sync/syncCrypto";
 import type { SnapshotV0 } from "src/sync/types";
 
 export interface RuntimeSession {
   repository: { exportSnapshot(): Promise<SnapshotV0> };
-  sync: {
-    pull(options?: PullOptions): Promise<PullOutcome>;
-    publishCurrent(): Promise<PublishOutcome>;
-  };
-  journal?: OperationJournalRepository;
+  sync: SnapshotSyncCoordinator;
+  journal: OperationJournalRepository;
 }
 
 export type RuntimeSessionFactory = (
@@ -73,6 +67,15 @@ export class WalletSyncRuntime {
     return this.session;
   }
 
+  async resetSession(): Promise<void> {
+    try {
+      await this.startInFlight;
+    } catch {
+      // Replacement deliberately discards the old lifecycle outcome.
+    }
+    this.session = null;
+  }
+
   async importForRecovery(value: unknown): Promise<AuthorityPayloadV0> {
     let candidate: AuthorityPayloadV0;
     try {
@@ -97,7 +100,7 @@ export class WalletSyncRuntime {
     if (authority === null) return { status: "unconfigured" };
 
     const session = this.options.createSession(authority);
-    this.session = session;
+    this.session = null;
     const local = await session.repository.exportSnapshot();
     const mode =
       isPristine(local) && authority.head_event_id !== ""
@@ -105,12 +108,18 @@ export class WalletSyncRuntime {
         : "normal";
     const pulled = await session.sync.pull({ mode });
     if (pulled.status === "empty") {
+      if (authority.head_event_id !== "") {
+        throw new WalletSyncRuntimeError(
+          "recovery relay head is unavailable; refusing to create an empty replacement"
+        );
+      }
       const published = await session.sync.publishCurrent();
       if (published.status !== "accepted") {
         throw new WalletSyncRuntimeError(
           "could not establish the wallet genesis head"
         );
       }
+      this.session = session;
       return {
         status: "ready",
         sync: "genesis-published",
@@ -118,6 +127,7 @@ export class WalletSyncRuntime {
         revision: published.revision,
       };
     }
+    this.session = session;
     return {
       status: "ready",
       sync: pulled.status,

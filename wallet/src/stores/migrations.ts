@@ -185,8 +185,6 @@ export const useMigrationsStore = defineStore("migrations", {
       const { usePaymentHistoryStore } = await import("./paymentHistory");
       const paymentHistoryStore = usePaymentHistoryStore();
       await paymentHistoryStore.migrateLegacyInvoiceHistoryFromLocalStorage();
-      const { useWalletStore } = await import("./wallet");
-      useWalletStore().syncPaymentHistoryCache();
       console.log("Migrated invoiceHistory to Dexie paymentHistory");
     },
     async migrateHistoryTokensToEcashHistory() {

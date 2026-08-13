@@ -148,6 +148,32 @@ describe("WalletSyncRuntime", () => {
     expect(session.sync.publishCurrent).not.toHaveBeenCalled();
   });
 
+  it("fails closed when a remembered recovery head is absent", async () => {
+    authorityRepository.importAuthority(authority(HEAD));
+    const session = fakeSession();
+    const runtime = new WalletSyncRuntime({
+      authority: authorityRepository,
+      createSession: () => session,
+    });
+
+    await expect(runtime.start()).rejects.toThrow(/head is unavailable/);
+    expect(session.sync.publishCurrent).not.toHaveBeenCalled();
+    expect(runtime.currentSession()).toBeNull();
+  });
+
+  it("does not expose a session when initial pull fails", async () => {
+    authorityRepository.importAuthority(authority());
+    const session = fakeSession();
+    vi.mocked(session.sync.pull).mockRejectedValue(new Error("relay offline"));
+    const runtime = new WalletSyncRuntime({
+      authority: authorityRepository,
+      createSession: () => session,
+    });
+
+    await expect(runtime.start()).rejects.toThrow("relay offline");
+    expect(runtime.currentSession()).toBeNull();
+  });
+
   it("uses normal pull for established local state and never republishes a no-op", async () => {
     authorityRepository.importAuthority(authority(HEAD));
     const session = fakeSession(

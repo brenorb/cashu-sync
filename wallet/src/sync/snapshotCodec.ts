@@ -326,7 +326,7 @@ function decodePendingOperation(
         `${path}.prepared_request`
       ),
       response,
-    } satisfies PendingMintV0;
+    } as PendingMintV0;
   }
   if (input.type === "melt") {
     const response =
@@ -342,7 +342,7 @@ function decodePendingOperation(
         `${path}.prepared_request`
       ),
       response,
-    } satisfies PendingMeltV0;
+    } as PendingMeltV0;
   }
   return fail(`${path}.type`, "expected mint or melt");
 }
