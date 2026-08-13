@@ -25,53 +25,13 @@
             class="floating-close-btn"
           />
           <div class="col text-center fixed-title-height">
-            <q-item-label
+            <h1
+              id="create-bolt11-title"
               class="dialog-header q-mt-sm"
               :class="$q.dark.isActive ? 'text-white' : 'text-black'"
             >
-              {{
-                isOnchain
-                  ? "Receive On-chain"
-                  : isBolt12
-                  ? "Receive Bolt12"
-                  : $t("InvoiceDetailDialog.title")
-              }}
-            </q-item-label>
-          </div>
-          <div
-            class="row items-center q-gutter-sm"
-            style="position: absolute; right: 16px"
-          >
-            <q-btn
-              v-if="!isOnchain && bolt11Supported && bolt12Supported"
-              flat
-              dense
-              size="lg"
-              color="primary"
-              @click="toggleInvoiceType"
-              :label="isBolt12 ? 'B12' : 'B11'"
-            />
-            <q-btn
-              flat
-              dense
-              size="lg"
-              color="primary"
-              @click="toggleUnit()"
-              :label="activeUnitLabel"
-            />
-          </div>
-        </div>
-
-        <!-- Mint selection -->
-        <div class="row justify-center">
-          <div
-            class="col-12 col-sm-11 col-md-8 q-px-lg q-mb-sm"
-            style="max-width: 600px"
-          >
-            <ChooseMint
-              :filter-payment-method="mintFilterMethod"
-              filter-mint-operation="mint"
-            />
+              Add funds
+            </h1>
           </div>
         </div>
 
@@ -178,24 +138,6 @@
             />
           </div>
 
-          <!-- Secondary Actions Container (Add Amount) -->
-          <div class="row justify-center" v-if="isBolt12 && !showAmountInput">
-            <div
-              class="col-12 col-sm-11 col-md-8 q-px-md"
-              style="max-width: 600px"
-            >
-              <q-btn
-                class="full-width"
-                outline
-                rounded
-                color="primary"
-                size="lg"
-                @click="bolt12AddAmount = true"
-                label="Add amount"
-              />
-            </div>
-          </div>
-
           <!-- Create action (Fixed position relative to bottom) -->
           <div class="row justify-center q-pb-lg q-pt-sm">
             <div
@@ -209,17 +151,10 @@
                 :disable="!canCreate"
                 @click="requestMintButton"
                 color="primary"
-                rounded
                 type="submit"
                 :loading="globalMutexLock || createInvoiceButtonBlocked"
+                label="Create Lightning invoice"
               >
-                {{
-                  isBolt12
-                    ? "Create Offer"
-                    : isOnchain
-                    ? "Create Address"
-                    : $t("InvoiceDetailDialog.actions.create.label")
-                }}
                 <template v-slot:loading>
                   <q-spinner />
                 </template>
@@ -236,7 +171,6 @@ import { defineComponent } from "vue";
 import { mapActions, mapState, mapWritableState } from "pinia";
 import { copyToClipboard } from "quasar";
 import VueQrcode from "@chenfengyuan/vue-qrcode";
-import ChooseMint from "components/ChooseMint.vue";
 import NumericKeyboard from "components/NumericKeyboard.vue";
 import AmountInputComponent from "components/AmountInputComponent.vue";
 import { useWalletStore } from "src/stores/wallet";
@@ -255,7 +189,6 @@ export default defineComponent({
   name: "CreateInvoiceDialog",
   mixins: [windowMixin],
   components: {
-    ChooseMint,
     NumericKeyboard,
     AmountInputComponent,
     VueQrcode,
@@ -426,6 +359,7 @@ export default defineComponent({
   watch: {
     showCreateInvoiceDialog: function (val) {
       if (val) {
+        this.invoiceData.type = PaymentMethod.Bolt11;
         this.$nextTick(() => {
           // If editing a BOLT12 offer with existing amount, don't auto-show keyboard if amount exists?
           // Actually user likely wants to edit.

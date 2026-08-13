@@ -1,5 +1,5 @@
 <template>
-  <SettingsPageShell :title="$t('Settings.menu.title')">
+  <SettingsPageShell title="Settings">
     <q-list
       v-for="group in visibleGroups"
       :key="group.name"
@@ -15,19 +15,21 @@
       >
         <q-item-section avatar>
           <div class="settings-menu-icon">
-            <component :is="entry.icon" :size="20" />
+            <component :is="entry.icon" :size="20" aria-hidden="true" />
           </div>
         </q-item-section>
         <q-item-section>
-          <q-item-label class="text-weight-medium">{{
-            $t(`Settings.menu.${entry.key}.title`)
-          }}</q-item-label>
-          <q-item-label caption>{{
-            $t(`Settings.menu.${entry.key}.caption`)
-          }}</q-item-label>
+          <q-item-label class="text-weight-medium">
+            {{ entry.title }}
+          </q-item-label>
+          <q-item-label caption>{{ entry.caption }}</q-item-label>
         </q-item-section>
         <q-item-section side>
-          <ChevronRightIcon :size="18" class="settings-menu-chevron" />
+          <ChevronRightIcon
+            :size="18"
+            class="settings-menu-chevron"
+            aria-hidden="true"
+          />
         </q-item-section>
       </q-item>
     </q-list>
@@ -36,118 +38,56 @@
 
 <script lang="ts">
 import { defineComponent, markRaw } from "vue";
-import { mapState } from "pinia";
-import { useUiStore } from "src/stores/ui";
 import SettingsPageShell from "./SettingsPageShell.vue";
 import {
-  Vault as VaultIcon,
-  AtSign as AtSignIcon,
-  KeyRound as KeyRoundIcon,
-  Inbox as InboxIcon,
-  Cable as CableIcon,
-  Nfc as NfcIcon,
-  Lock as LockIcon,
-  Shield as ShieldIcon,
-  FlaskConical as FlaskConicalIcon,
+  RefreshCw as RefreshCwIcon,
+  ArchiveRestore as ArchiveRestoreIcon,
   Palette as PaletteIcon,
   Globe as GlobeIcon,
-  Terminal as TerminalIcon,
   Info as InfoIcon,
   ChevronRight as ChevronRightIcon,
 } from "lucide-vue-next";
 
 export default defineComponent({
   name: "SettingsMenuPage",
-  mixins: [windowMixin],
   components: {
     SettingsPageShell,
     ChevronRightIcon,
   },
   computed: {
-    ...mapState(useUiStore, ["ndefSupported"]),
     visibleGroups() {
-      const groups = [
+      return [
         {
           name: "wallet",
           entries: [
             {
-              key: "backup",
-              path: "/settings/backup",
-              icon: markRaw(VaultIcon),
+              path: "/settings/sync",
+              title: "Sync devices",
+              caption: "Pair another wallet and view relay status.",
+              icon: markRaw(RefreshCwIcon),
             },
             {
-              key: "lightning_address",
-              path: "/settings/lightning-address",
-              icon: markRaw(AtSignIcon),
+              path: "/settings/recovery",
+              title: "Recovery & backup",
+              caption: "Export or restore encrypted wallet authority.",
+              icon: markRaw(ArchiveRestoreIcon),
             },
-            {
-              key: "nostr",
-              path: "/settings/nostr",
-              icon: markRaw(KeyRoundIcon),
-            },
-          ],
-        },
-        {
-          name: "connections",
-          entries: [
-            {
-              key: "payment_requests",
-              path: "/settings/payment-requests",
-              icon: markRaw(InboxIcon),
-            },
-            {
-              key: "nwc",
-              path: "/settings/nwc",
-              icon: markRaw(CableIcon),
-            },
-            {
-              key: "p2pk",
-              path: "/settings/p2pk",
-              icon: markRaw(LockIcon),
-            },
-            ...(this.ndefSupported
-              ? [
-                  {
-                    key: "hardware",
-                    path: "/settings/hardware",
-                    icon: markRaw(NfcIcon),
-                  },
-                ]
-              : []),
           ],
         },
         {
           name: "preferences",
           entries: [
             {
-              key: "appearance",
               path: "/settings/appearance",
+              title: "Appearance",
+              caption: "Theme and display preferences.",
               icon: markRaw(PaletteIcon),
             },
             {
-              key: "language",
               path: "/settings/language",
+              title: "Language",
+              caption: "Choose the wallet language.",
               icon: markRaw(GlobeIcon),
-            },
-            {
-              key: "privacy",
-              path: "/settings/privacy",
-              icon: markRaw(ShieldIcon),
-            },
-          ],
-        },
-        {
-          name: "advanced",
-          entries: [
-            {
-              key: "experimental",
-              path: "/settings/experimental",
-              icon: markRaw(FlaskConicalIcon),
-            },
-            {
-              key: "advanced",
-              path: "/settings/advanced",
-              icon: markRaw(TerminalIcon),
             },
           ],
         },
@@ -155,14 +95,14 @@ export default defineComponent({
           name: "about",
           entries: [
             {
-              key: "about",
               path: "/settings/about",
+              title: "About",
+              caption: "Version, terms, and project links.",
               icon: markRaw(InfoIcon),
             },
           ],
         },
       ];
-      return groups.filter((group) => group.entries.length > 0);
     },
   },
 });

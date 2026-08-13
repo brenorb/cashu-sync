@@ -15,7 +15,7 @@
         class="column fit pay-fullscreen"
         :class="$q.dark.isActive ? 'bg-dark' : 'bg-white'"
       >
-        <!-- Header with centered title and unit toggle on right -->
+        <!-- Header -->
         <div class="row items-center q-pa-md" style="position: relative">
           <q-btn
             v-close-popup
@@ -39,33 +39,6 @@
                 {{ dialogTitle }}
               </q-item-label>
             </div>
-          </div>
-          <div
-            class="row items-center q-gutter-sm"
-            style="position: absolute; right: 16px"
-          >
-            <q-btn
-              flat
-              dense
-              size="lg"
-              color="primary"
-              @click="toggleUnit()"
-              :label="activeUnitLabel"
-            />
-          </div>
-        </div>
-
-        <!-- Mint selection -->
-        <div class="row justify-center">
-          <div
-            class="col-12 col-sm-11 col-md-8 q-px-lg q-mb-sm"
-            style="max-width: 600px"
-          >
-            <ChooseMint
-              v-if="!showNoMintForMethodError"
-              :filter-payment-method="payPaymentMethod"
-              :filter-mint-operation="payMintOperation"
-            />
           </div>
         </div>
 
@@ -503,11 +476,10 @@
                   v-if="!camera.show"
                   v-model="payInvoiceData.input.request"
                   :placeholder="parseInputPlaceholder"
-                  :has-camera="hasCameraAvailable"
+                  :has-camera="false"
                   :ndef-supported="false"
                   @update:model-value="decodeAndQuote($event)"
                   @paste="pasteToParseDialog"
-                  @scan="showCamera"
                 />
               </div>
             </div>
@@ -779,7 +751,6 @@ import { useSettingsStore } from "src/stores/settings";
 import { usePriceStore } from "src/stores/price";
 import { useProofsStore } from "src/stores/proofs";
 import { mapActions, mapState, mapWritableState } from "pinia";
-import ChooseMint from "components/ChooseMint.vue";
 import MultinutPaymentDialog from "./MultinutPaymentDialog.vue";
 import MeltQuoteInformation from "components/MeltQuoteInformation.vue";
 import NumericKeyboard from "components/NumericKeyboard.vue";
@@ -796,7 +767,6 @@ export default defineComponent({
   name: "PayInvoiceDialog",
   mixins: [windowMixin],
   components: {
-    ChooseMint,
     MultinutPaymentDialog,
     MeltQuoteInformation,
     NumericKeyboard,
