@@ -1,74 +1,56 @@
 # C3 — Wallet synchronization components
 
-Status: **Proposed**
-
-Audience: wallet developers and protocol implementers.
-
-This focused component view covers encrypted event retrieval, validation, projection, and publication inside one PWA or CLI Wallet Client container.
+Status: **V0 accepted**
 
 ## Diagram
 
 ```mermaid
 C4Component
-  title Component diagram for Cashu Sync event synchronization
+  title C3 Components - Wallet pairing and synchronization
 
-  Container_Boundary(walletClient, "PWA or CLI Wallet Client") {
-    Component(operationCoordinator, "Operation Coordinator", "Application service", "Runs optimistic preflight before state changes")
-    Component(syncGateway, "Sync Gateway", "Nostr and NIP-44 client", "Fetches and publishes encrypted events")
-    Component(stateEngine, "State Engine", "Protocol and event-sourcing service", "Authenticates events and builds candidate state")
-    Component(keyManager, "Key Manager", "BIP39, NUT-13, NIP-44", "Derives Cashu material and accesses device keys")
+  Container_Boundary(walletClient, "Silent Link PWA Wallet") {
+    Component(pairingService, "Pairing Service", "Application service", "Transfers full wallet and sync authority E2E")
+    Component(syncCoordinator, "Sync Coordinator", "Application service", "Gates operations on fetch, reconcile, and CAS")
+    Component(snapshotCodec, "Snapshot Codec", "Versioned TypeScript", "Validates and serializes the minimal wallet state")
+    Component(syncCrypto, "Sync Crypto", "nostr-tools / NIP-44 v2", "Encrypts, signs, verifies, and decrypts snapshots")
+    Component(localRepository, "Local Repository", "Dexie transaction", "Atomically imports state and persists journals")
   }
 
-  Container_Ext(syncRelay, "Sync Relay Service", "Nostr relay", "Stores and serves opaque signed encrypted wallet events")
-  ContainerDb_Ext(localWalletStore, "Local Wallet Store", "Encrypted SQLite or IndexedDB", "Caches checkpoints and projected state")
-  System_Ext(platformSecurity, "Platform Secure Storage", "Protects device-local secret material")
+  Container_Ext(syncRelay, "CAS Nostr Relay", "Go / Khatru", "Stores opaque snapshot revisions")
+  ContainerDb_Ext(localStore, "Local Wallet Store", "IndexedDB", "Device-local state and crash journal")
+  System_Ext(nutshellMint, "Nutshell Mint", "Cashu mint", "Authoritative quotes and proof states")
 
-  Rel(operationCoordinator, syncGateway, "Starts synchronization", "In-process call")
-  Rel(syncGateway, syncRelay, "Synchronizes events", "Nostr WebSocket, NIP-44")
-  Rel(syncGateway, stateEngine, "Submits fetched events", "In-process call")
-  Rel(stateEngine, keyManager, "Verifies and decrypts events", "Cryptographic API")
-  Rel(stateEngine, localWalletStore, "Persists projections", "Local database API")
-  Rel(keyManager, platformSecurity, "Loads protected keys", "OS security API")
+  Rel(pairingService, syncCrypto, "Encrypts and verifies pairing payloads", "Cryptographic API")
+  Rel(pairingService, syncCoordinator, "Starts initial synchronization", "In-process call")
+  Rel(syncCoordinator, syncRelay, "Fetches head and publishes conditional child", "Nostr over WSS")
+  Rel(syncCoordinator, snapshotCodec, "Validates snapshot schema", "Typed API")
+  Rel(snapshotCodec, syncCrypto, "Encrypts or decrypts content", "NIP-44 v2")
+  Rel(syncCoordinator, localRepository, "Applies or journals state", "In-process call")
+  Rel(localRepository, localStore, "Commits atomically", "Dexie / IndexedDB")
+  Rel(syncCoordinator, nutshellMint, "Reconciles pending operation and proofs", "Cashu NUT APIs")
 
-  UpdateRelStyle(syncGateway, syncRelay, $offsetX="-140", $offsetY="60")
-  UpdateRelStyle(stateEngine, localWalletStore, $offsetX="100", $offsetY="20")
-  UpdateRelStyle(keyManager, platformSecurity, $offsetX="100", $offsetY="60")
   UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
 ```
 
-## Component responsibilities
+## Responsibilities
 
-### Operation Coordinator
+### Pairing Service
 
-Owns the multiwriter optimistic-concurrency invariant:
+Uses explicit user approval and ephemeral pairing keys to transfer the mnemonic, random sync secret, configured mint, relay URL, and current head. It never puts secrets in the deeplink or relay plaintext.
 
-> Every authorized device may write, but each state-changing operation starts by synchronizing, reconstructing, and validating the latest known state.
+### Sync Coordinator
 
-It does not require a global wallet head or lock. It asks the State Engine for a current candidate projection before selecting state objects or reserving NUT-13 counters.
+Runs on startup, foreground resume, pairing, recovery, relay notification, and before mint/melt. It enforces the critical rule: no mint call occurs until the relay accepts the prepared pending-operation snapshot.
 
-### Sync Gateway
+### Snapshot Codec
 
-On startup, foreground resume, pairing, and restore, fetches checkpoints and later events. Before every mutation it refreshes the event frontier; while active it subscribes or polls for new events. It signs and encrypts transitions locally before publication, records relay acknowledgements, and may compare frontiers across replicated relays.
+Serializes only the v0 schema—proofs, counters, quotes, accounting history, and one pending operation. It does not dump arbitrary localStorage or browser database contents.
 
-### State Engine
+### Sync Crypto
 
-Validates the Nostr event ID and Schnorr signature, checks device authorization and epoch, authenticates and decrypts the NIP-44 payload, and validates canonical object references. NIP-44 already authenticates its ciphertext, so Cashu Sync does not add a redundant application MAC.
+Uses a dedicated shared sync key, independent of social Nostr identity and Cashu proof derivation. It verifies the event and the agreement between outer `prev` and encrypted `previous_event_id` before state is applied.
 
-It projects structural candidates from a trusted checkpoint and accepted later events, records localized conflicts when multiple events consume the same state object, and distinguishes structural candidates from mint-confirmed spendable proofs.
+### Local Repository
 
-### Key Manager
+Applies a validated remote snapshot and its remembered head in one Dexie transaction. A crash cannot expose half-imported wallet state.
 
-Implements standard NUT-13 derivation from the BIP39 seed, versioned domain-separated Cashu Sync derivation, wallet group encryption, and random per-device signing keys. Exact Cashu Sync KDF encodings require test vectors before implementation.
-
-## Consistency boundary
-
-The relay is not a consensus system. A structurally valid event projection is only a candidate view; the Cashu Mint remains authoritative for whether a proof is spendable. Missing an unspent proof is the critical safety failure. Retaining an already-spent proof is a repairable stale-state condition.
-
-Pairing, user-controlled master-seed export and recovery, checkpoint scheduling, and rollback detection across relay replicas are specified in [the protocol specification](../spec.md).
-
-## Notation
-
-- **Component:** non-deployable responsibility inside one PWA or CLI Wallet Client container.
-- **External Container/Database:** deployable dependency shown in the Level 2 diagram.
-- **External Software System:** capability outside Cashu Sync.
-- **Arrow:** initiator and action, labeled with the in-process API or network protocol.

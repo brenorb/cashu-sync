@@ -1,6 +1,8 @@
 # ADR-0001: Prefer an event-sourced UTXO-like state model
 
-Status: **Proposed**
+Status: **Deferred beyond v0**
+
+This decision is retained as future exploration. V0 instead uses a revisioned encrypted snapshot with atomic compare-and-swap, as recorded in [ADR-0002](./0002-v0-revisioned-snapshot.md).
 
 ## Context
 
