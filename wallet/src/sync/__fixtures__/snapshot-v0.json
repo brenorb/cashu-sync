@@ -1,0 +1,46 @@
+{
+  "schema": 0,
+  "revision": 7,
+  "previous_event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "mint": "https://usd-mint.example",
+  "unit": "usd",
+  "proofs": [
+    {
+      "id": "00c0ffee",
+      "amount": 125,
+      "secret": "proof-secret-1",
+      "C": "02bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "reserved": false
+    }
+  ],
+  "counters": {
+    "00c0ffee": 12
+  },
+  "quotes": [
+    {
+      "type": "mint",
+      "quote": "mint-quote-1",
+      "request": "lnbc1mint",
+      "amount": 125,
+      "unit": "usd",
+      "state": "ISSUED",
+      "expiry": 1780000100
+    }
+  ],
+  "history": [
+    {
+      "id": "mint:mint-quote-1",
+      "direction": "mint",
+      "quote": "mint-quote-1",
+      "amount": 125,
+      "request": "lnbc1mint",
+      "memo": "",
+      "date": "2026-08-13T10:00:00.000Z",
+      "status": "paid",
+      "mint": "https://usd-mint.example",
+      "unit": "usd",
+      "paid_date": "2026-08-13T10:01:00.000Z"
+    }
+  ],
+  "pending_operation": null
+}
