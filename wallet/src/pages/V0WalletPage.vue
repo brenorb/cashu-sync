@@ -273,7 +273,7 @@ export default defineComponent({
         );
         if (result.status !== "completed") {
           throw new Error(
-            "Your credits are still being recovered. Tap Update balance again in a moment."
+            "Your payment is still being recovered. Keep this window open and try Update balance again shortly."
           );
         }
         this.syncMessage = "Credits bought and synchronized.";
@@ -318,7 +318,7 @@ export default defineComponent({
         );
         if (result.status !== "completed") {
           throw new Error(
-            "Your credits are still being recovered. Tap Spend credits again in a moment."
+            "Your spend is still being recovered. Keep this window open and try again shortly."
           );
         }
         this.syncMessage = "Credits spent and synchronized.";

@@ -423,6 +423,53 @@ describe("V0WalletService quote fencing", () => {
     expect(publishCurrent).not.toHaveBeenCalled();
   });
 
+  it("treats an already-issued mint as completed when no journal remains", async () => {
+    await cashuDb.mintQuotes.add({
+      quote: "mint-q",
+      method: "bolt11",
+      request: "lnbc1mint",
+      unit: "usd",
+      amount: 25,
+      state: MintQuoteState.PAID,
+    });
+    await cashuDb.paymentHistory.add({
+      id: "mint:mint-q",
+      direction: "mint",
+      quote: "mint-q",
+      method: "bolt11",
+      amount: 25,
+      request: "lnbc1mint",
+      memo: "",
+      date: "2026-08-14T00:00:00.000Z",
+      status: "pending",
+      mint: mintState.activeMintUrl,
+      unit: "usd",
+    });
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(async () =>
+        walletMock({
+          checkMintQuoteBolt11: vi.fn(async () => ({
+            ...mintQuote,
+            state: MintQuoteState.ISSUED,
+          })),
+        })
+      ),
+      getKeyset: () => "00c0ffee",
+    });
+
+    await expect(service.mintPaidQuote("mint-q")).resolves.toMatchObject({
+      status: "completed",
+      type: "mint",
+    });
+    expect(await cashuDb.mintQuotes.get("mint-q")).toMatchObject({
+      state: "PAID",
+    });
+    expect(await cashuDb.paymentHistory.get("mint:mint-q")).toMatchObject({
+      status: "paid",
+    });
+    expect(publishCurrent).not.toHaveBeenCalled();
+  });
+
   it("rejects a checked melt quote that does not match stored accounting", async () => {
     await cashuDb.meltQuotes.add({
       quote: "melt-q",

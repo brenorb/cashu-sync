@@ -165,9 +165,10 @@ export class V0WalletService {
     requireUsd(quote.unit);
     assertMintQuoteIdentity(stored, quote);
     if (quote.state === MintQuoteState.ISSUED) {
-      // A previous claim may have reached the mint before the relay final
-      // write. Resume the durable journal instead of submitting again.
-      return (await this.ensureCoordinator()).resume();
+      // The mint may already have issued the outputs while the final relay
+      // write completed elsewhere. With no local journal left, this is an
+      // idempotent success, not a recovery error.
+      return this.markAlreadyPaid("mint", quote.quote);
     }
     if (quote.state !== MintQuoteState.PAID) {
       throw new Error(`mint quote is ${quote.state}, not PAID`);
@@ -268,6 +269,9 @@ export class V0WalletService {
     const quote = await wallet.checkMeltQuoteBolt11(quoteId);
     requireUsd(quote.unit);
     assertMeltQuoteIdentity(stored, quote);
+    if (quote.state === MeltQuoteState.PAID) {
+      return this.markAlreadyPaid("melt", quote.quote);
+    }
     if (quote.state !== MeltQuoteState.UNPAID) {
       throw new Error(`melt quote is ${quote.state}, not UNPAID`);
     }
@@ -359,6 +363,35 @@ export class V0WalletService {
       .pending_operation;
     if (pending === null) return null;
     return (await this.ensureCoordinator()).resume();
+  }
+
+  private async markAlreadyPaid(
+    direction: "mint" | "melt",
+    quoteId: string
+  ): Promise<SyncOperationOutcome> {
+    const table =
+      direction === "mint" ? cashuDb.mintQuotes : cashuDb.meltQuotes;
+    await cashuDb.transaction(
+      "rw",
+      [table, cashuDb.paymentHistory],
+      async () => {
+        await table.update(quoteId, { state: "PAID" });
+        await cashuDb.paymentHistory.update(`${direction}:${quoteId}`, {
+          status: "paid",
+          paidDate: this.now().toISOString(),
+        });
+      }
+    );
+    await usePaymentHistoryStore().refreshFromDexie();
+    const eventId =
+      (await this.requireSession().repository.exportSnapshot())
+        .previous_event_id || "already-issued";
+    return {
+      status: "completed",
+      type: direction,
+      operationId: `${direction}:${quoteId}`,
+      eventId,
+    };
   }
 
   private serialize<T>(operation: () => Promise<T>): Promise<T> {
