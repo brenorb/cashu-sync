@@ -283,7 +283,7 @@ export default defineComponent({
 
 .pairing-qr-large :deep(canvas) {
   display: block;
-  width: min(96vw, 960px);
+  width: min(calc(100vw - 56px), 960px);
   height: auto;
 }
 
