@@ -50,6 +50,9 @@ describe("v0 visible UI contract", () => {
     }
     expect(source("src/router/routes.js")).toContain("V0WalletPage.vue");
     expect(source("src/router/routes.js")).toContain("V0WalletPage.vue");
+    expect(routes[0].children).toEqual(
+      expect.arrayContaining([{ path: "wallet", redirect: "/" }])
+    );
   });
 
   it("exposes only Bolt11 mint and melt actions on the wallet", () => {

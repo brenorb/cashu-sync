@@ -7,7 +7,7 @@ const routes = [
         path: "",
         component: () => import("src/pages/V0WalletPage.vue"),
       },
-      { path: "wallet", component: () => import("src/pages/V0WalletPage.vue") },
+      { path: "wallet", redirect: "/" },
     ],
   },
   {
