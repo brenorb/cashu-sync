@@ -15,8 +15,9 @@ register(process.env.SERVICE_WORKER_FILE, {
     // console.log('Service worker is active.')
   },
 
-  registered(/* registration */) {
-    // console.log('Service worker has been registered.')
+  registered(registration) {
+    // Ask for the newest demo build whenever the app starts.
+    void registration.update();
   },
 
   cached(/* registration */) {
@@ -27,8 +28,9 @@ register(process.env.SERVICE_WORKER_FILE, {
     // console.log('New content is downloading.')
   },
 
-  updated(/* registration */) {
-    // console.log('New content is available; please refresh.')
+  updated(registration) {
+    registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+    window.location.reload();
   },
 
   offline() {

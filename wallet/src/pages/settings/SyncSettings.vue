@@ -68,6 +68,13 @@
     >
       {{ message }}
     </p>
+    <q-btn
+      data-pairing-action="back-wallet"
+      flat
+      no-caps
+      label="Back to wallet"
+      @click="$router.replace('/wallet')"
+    />
     <q-dialog v-model="camera.show" backdrop-filter="blur(2px) brightness(60%)">
       <QrcodeReader @decode="decodePairing" />
     </q-dialog>
