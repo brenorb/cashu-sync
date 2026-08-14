@@ -25,10 +25,12 @@ vi.mock("src/stores/paymentHistory", () => ({
 import { V0WalletService } from "src/sync/v0WalletService";
 
 const publishCurrent = vi.fn();
+const publishCandidate = vi.fn();
+const applySnapshot = vi.fn();
 const pull = vi.fn();
 const session = {
-  repository: { exportSnapshot: vi.fn() },
-  sync: { publishCurrent, pull },
+  repository: { exportSnapshot: vi.fn(), applySnapshot: vi.fn() },
+  sync: { publishCurrent, publishCandidate, pull },
   journal: {},
 };
 const runtime = {
@@ -71,6 +73,12 @@ beforeEach(async () => {
     eventId: "a".repeat(64),
     revision: 1,
   });
+  publishCandidate.mockResolvedValue({
+    status: "accepted",
+    eventId: "b".repeat(64),
+    revision: 1,
+  });
+  session.repository.applySnapshot = applySnapshot;
 });
 
 afterEach(async () => {
@@ -175,13 +183,9 @@ describe("V0WalletService quote fencing", () => {
     });
   });
 
-  it("creates the demo top-up invoice internally", async () => {
-    const createMintQuoteBolt11 = vi.fn(async () => mintQuote);
-    const createMeltQuoteBolt11 = vi.fn(async () => ({
-      ...meltQuote,
-      request: mintQuote.request,
-      amount: Amount.from(25),
-    }));
+  it("creates a local demo spend quote without reusing a paid mint invoice", async () => {
+    const createMintQuoteBolt11 = vi.fn();
+    const createMeltQuoteBolt11 = vi.fn();
     const service = new V0WalletService(runtimeService as never, {
       activeWallet: vi.fn(async () =>
         walletMock({ createMintQuoteBolt11, createMeltQuoteBolt11 })
@@ -191,10 +195,84 @@ describe("V0WalletService quote fencing", () => {
 
     await expect(service.requestInternalTopupQuote(25)).resolves.toMatchObject({
       amount: 25,
-      request: "lnbc1mint",
+      request: expect.stringMatching(/^cashu-sync-demo:/),
     });
-    expect(createMintQuoteBolt11).toHaveBeenCalledWith(25);
-    expect(createMeltQuoteBolt11).toHaveBeenCalledWith("lnbc1mint");
+    expect(createMintQuoteBolt11).not.toHaveBeenCalled();
+    expect(createMeltQuoteBolt11).not.toHaveBeenCalled();
+  });
+
+  it("selects only enough credits for a local demo spend", async () => {
+    const quoteId = "demo-melt-test";
+    const current = {
+      schema: 0,
+      revision: 0,
+      previous_event_id: "",
+      mint: "http://127.0.0.1:3338",
+      unit: "usd",
+      proofs: [
+        { id: "k", amount: 800, secret: "secret-8", C: "C8", reserved: false },
+        { id: "k", amount: 400, secret: "secret-4", C: "C4", reserved: false },
+      ],
+      counters: {},
+      quotes: [
+        {
+          type: "melt",
+          quote: quoteId,
+          request: `cashu-sync-demo:${quoteId}`,
+          amount: 800,
+          fee_reserve: 0,
+          unit: "usd",
+          state: "UNPAID",
+          expiry: 1_800_000_000,
+          payment_preimage: null,
+        },
+      ],
+      history: [
+        {
+          id: `melt:${quoteId}`,
+          direction: "melt",
+          quote: quoteId,
+          amount: 800,
+          request: `cashu-sync-demo:${quoteId}`,
+          memo: "",
+          date: "2026-08-13T10:00:00.000Z",
+          status: "pending",
+          mint: "http://127.0.0.1:3338",
+          unit: "usd",
+        },
+      ],
+      pending_operation: null,
+    } as const;
+    session.repository.exportSnapshot.mockResolvedValue(current);
+    const selectProofsToSend = vi.fn(() => ({
+      send: [current.proofs[0]],
+      keep: [current.proofs[1]],
+    }));
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(async () => walletMock({ selectProofsToSend })),
+      getKeyset: () => "00c0ffee",
+    });
+    await cashuDb.meltQuotes.put({
+      quote: quoteId,
+      request: `cashu-sync-demo:${quoteId}`,
+      amount: 800,
+      fee_reserve: 0,
+      unit: "usd",
+      state: "UNPAID",
+    });
+
+    await expect(service.payMeltQuote(quoteId)).resolves.toMatchObject({
+      status: "completed",
+      type: "melt",
+    });
+    expect(selectProofsToSend).toHaveBeenCalledWith(
+      current.proofs,
+      Amount.from(800),
+      true,
+      false
+    );
+    expect(applySnapshot).toHaveBeenCalledOnce();
+    expect(applySnapshot.mock.calls[0][0].proofs).toEqual([current.proofs[1]]);
   });
 
   it("rejects non-Bolt11 payment ingress before touching wallet or relay", async () => {

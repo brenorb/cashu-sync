@@ -1,4 +1,5 @@
 import {
+  Amount,
   MeltQuoteState,
   MintQuoteState,
   type MeltQuoteBolt11Response,
@@ -7,7 +8,10 @@ import {
 } from "@cashu/cashu-ts";
 import { cashuDb } from "src/stores/dexie";
 import { useMintsStore } from "src/stores/mints";
-import type { PaymentHistoryRow } from "src/stores/paymentHistory";
+import type {
+  MeltQuoteRow,
+  PaymentHistoryRow,
+} from "src/stores/paymentHistory";
 import { usePaymentHistoryStore } from "src/stores/paymentHistory";
 import { useWalletStore } from "src/stores/wallet";
 import { PaymentMethod } from "src/stores/walletTypes";
@@ -25,6 +29,7 @@ import {
 } from "src/sync/syncOperationCoordinator";
 import type { RuntimeSession } from "src/sync/walletSyncRuntime";
 import { parseV0Bolt11Request } from "src/v0/profile";
+import type { SnapshotV0 } from "src/sync/types";
 
 export type MintQuoteView = {
   quote: string;
@@ -45,6 +50,11 @@ type BrowserWalletPort = {
   activeWallet(updateKeysets?: boolean): Promise<Wallet>;
   getKeyset(mintUrl?: string | null, unit?: string | null): string;
 };
+
+type MeltQuoteRowLike = Pick<
+  MeltQuoteRow,
+  "quote" | "request" | "amount" | "state"
+>;
 
 export class V0WalletService {
   private coordinator: SyncOperationCoordinator<
@@ -172,11 +182,7 @@ export class V0WalletService {
     return this.serialize(() => this.requestMeltQuoteUnlocked(request));
   }
 
-  /**
-   * Demo-only self-melt: the configured FakeWallet creates a valid invoice,
-   * then immediately melts it. A real Silent Link provider must replace this
-   * with requestSilentLinkTopupQuote().
-   */
+  /** Demo-only local spend used when no Silent Link provider is configured. */
   requestInternalTopupQuote(amount: number): Promise<MeltQuoteView> {
     return this.serialize(() => this.requestInternalTopupQuoteUnlocked(amount));
   }
@@ -185,14 +191,27 @@ export class V0WalletService {
     amount: number
   ): Promise<MeltQuoteView> {
     requirePositiveAmount(amount);
-    const wallet = await this.ensureWallet();
-    const mintQuote = await wallet.createMintQuoteBolt11(amount);
-    requireUsd(mintQuote.unit);
-    return this.requestMeltQuoteFromRequestUnlocked(
-      wallet,
-      mintQuote.request,
-      amount
-    );
+    const quote = `demo-melt-${crypto.randomUUID()}`;
+    const request = `cashu-sync-demo:${quote}`;
+    const now = this.now();
+    await this.persistMeltQuote({
+      quote,
+      request,
+      amount: Amount.from(amount),
+      fee_reserve: Amount.from(0),
+      unit: "usd",
+      state: MeltQuoteState.UNPAID,
+      expiry: Math.floor(now.getTime() / 1000) + 600,
+      payment_preimage: undefined,
+    });
+    await this.publishQuoteOrRollback("melt", quote);
+    return {
+      quote,
+      request,
+      amount,
+      feeReserve: 0,
+      state: MeltQuoteState.UNPAID,
+    };
   }
 
   private async requestMeltQuoteUnlocked(
@@ -237,8 +256,11 @@ export class V0WalletService {
   private async payMeltQuoteUnlocked(
     quoteId: string
   ): Promise<SyncOperationOutcome> {
-    const wallet = await this.ensureWallet();
     const stored = await this.requireStoredMeltQuote(quoteId);
+    if (stored.request?.startsWith("cashu-sync-demo:")) {
+      return this.payInternalTopupUnlocked(stored);
+    }
+    const wallet = await this.ensureWallet();
     const quote = await wallet.checkMeltQuoteBolt11(quoteId);
     requireUsd(quote.unit);
     assertMeltQuoteIdentity(stored, quote);
@@ -251,6 +273,73 @@ export class V0WalletService {
       keysetId: this.walletPort.getKeyset(null, "usd"),
       preferAsync: false,
     });
+  }
+
+  private async payInternalTopupUnlocked(
+    stored: MeltQuoteRowLike
+  ): Promise<SyncOperationOutcome> {
+    const session = this.requireSession();
+    const current = await session.repository.exportSnapshot();
+    const selected = (await this.ensureWallet()).selectProofsToSend(
+      current.proofs.filter((proof) => !proof.reserved),
+      Amount.from(stored.amount ?? 0),
+      true,
+      false
+    ).send;
+    if (selected.length === 0) throw new Error("not enough credits");
+    const selectedAmount = selected.reduce(
+      (total, proof) => total + proof.amount,
+      0
+    );
+    if (selectedAmount !== (stored.amount ?? 0)) {
+      throw new Error("choose an amount matching your available credits");
+    }
+    const selectedSecrets = new Set(selected.map((proof) => proof.secret));
+    const historyId = `melt:${stored.quote}`;
+    const candidate: SnapshotV0 = {
+      ...current,
+      revision: current.revision + 1,
+      previous_event_id: current.previous_event_id,
+      proofs: current.proofs.filter(
+        (proof) => !selectedSecrets.has(proof.secret)
+      ),
+      quotes: current.quotes.map((quote) =>
+        quote.type === "melt" && quote.quote === stored.quote
+          ? { ...quote, state: "PAID" as const }
+          : quote
+      ),
+      history: current.history.map((row) =>
+        row.id === historyId
+          ? {
+              ...row,
+              status: "paid" as const,
+              paid_date: this.now().toISOString(),
+            }
+          : row
+      ),
+      pending_operation: null,
+    };
+    const outcome = await session.sync.publishCandidate(candidate, {
+      applyAccepted: false,
+    });
+    if (outcome.status !== "accepted") {
+      throw new Error(
+        outcome.status === "conflict"
+          ? "wallet changed on another device; try again"
+          : "relay acknowledgement is ambiguous; sync before spending"
+      );
+    }
+    await session.repository.applySnapshot(candidate, outcome.eventId);
+    await cashuDb.meltQuotes.update(stored.quote, {
+      state: MeltQuoteState.PAID,
+    });
+    await usePaymentHistoryStore().refreshFromDexie();
+    return {
+      status: "completed",
+      type: "melt",
+      operationId: `demo:${stored.quote}`,
+      eventId: outcome.eventId,
+    };
   }
 
   resume(): Promise<SyncOperationOutcome> {
