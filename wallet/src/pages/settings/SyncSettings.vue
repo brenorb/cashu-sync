@@ -31,9 +31,15 @@
           @click="createQuickPair"
         />
         <template v-if="quickPairUrl">
-          <div class="pairing-qr" aria-label="Pairing QR code">
-            <vue-qrcode :value="quickPairUrl" :options="{ width: 260 }" />
-          </div>
+          <button
+            class="pairing-qr"
+            type="button"
+            aria-label="Enlarge pairing QR code"
+            @click="showPairingQr = true"
+          >
+            <vue-qrcode :value="quickPairUrl" :options="{ width: 320 }" />
+          </button>
+          <small class="pairing-qr-hint">Tap the QR code to enlarge it</small>
           <p class="sync-copy">
             Scan this once with the other phone. It opens the wallet and imports
             the same balance. The QR expires after ten minutes.
@@ -78,6 +84,21 @@
     <q-dialog v-model="camera.show" backdrop-filter="blur(2px) brightness(60%)">
       <QrcodeReader @decode="decodePairing" />
     </q-dialog>
+    <q-dialog v-model="showPairingQr">
+      <q-card class="pairing-qr-dialog">
+        <q-card-section class="pairing-qr-large">
+          <vue-qrcode
+            v-if="quickPairUrl"
+            :value="quickPairUrl"
+            :options="{ width: 720 }"
+            aria-label="Enlarged pairing QR code"
+          />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat no-caps label="Close" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </SettingsPageShell>
 </template>
 
@@ -109,6 +130,7 @@ export default defineComponent({
     return {
       configured: false,
       quickPairPayload: "",
+      showPairingQr: false,
       busy: false,
       failed: false,
       message: "",
@@ -220,17 +242,46 @@ export default defineComponent({
 }
 
 .sync-copy {
+  width: 100%;
+  max-width: 100%;
   margin: 0;
   color: #a9a9a9;
+  overflow-wrap: anywhere;
   line-height: 1.5;
 }
 
 .pairing-qr {
+  display: block;
   align-self: center;
+  max-width: 100%;
   overflow: hidden;
   padding: 8px;
   background: #fff;
+  border: 0;
+  cursor: zoom-in;
   line-height: 0;
+}
+
+.pairing-qr-hint {
+  align-self: center;
+  color: #a9a9a9;
+}
+
+.pairing-qr-dialog {
+  max-width: calc(100vw - 24px);
+  background: #fff;
+}
+
+.pairing-qr-large {
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+  line-height: 0;
+}
+
+.pairing-qr-large :deep(canvas) {
+  display: block;
+  width: min(88vw, 720px);
+  height: auto;
 }
 
 .pairing-message {
