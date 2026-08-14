@@ -102,6 +102,65 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+    <q-dialog v-model="showOverwriteDialog" persistent>
+      <q-card class="overwrite-dialog">
+        <q-card-section>
+          <p class="v0-eyebrow">WALLET FOUND</p>
+          <h2>Replace this wallet?</h2>
+          <p class="sync-copy">
+            This phone already has local wallet data. Pairing will replace it
+            with the wallet from the other phone.
+          </p>
+        </q-card-section>
+        <q-card-section class="overwrite-dialog__backup">
+          <q-input
+            v-model="backupPassphrase"
+            data-pairing-field="backup-passphrase"
+            dark
+            outlined
+            type="password"
+            label="Backup passphrase"
+            hint="Optional: save an encrypted copy before replacing"
+          />
+          <q-input
+            v-if="backupPassphrase"
+            v-model="backupConfirmation"
+            data-pairing-field="backup-confirmation"
+            dark
+            outlined
+            type="password"
+            label="Confirm passphrase"
+          />
+          <q-btn
+            data-pairing-action="save-local-backup"
+            outline
+            color="primary"
+            no-caps
+            :loading="backupBusy"
+            label="Save encrypted backup"
+            @click="saveLocalBackup"
+          />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            data-pairing-action="cancel-overwrite"
+            flat
+            no-caps
+            label="Cancel"
+            @click="cancelOverwrite"
+          />
+          <q-btn
+            data-pairing-action="overwrite-and-pair"
+            color="primary"
+            no-caps
+            unelevated
+            :loading="busy"
+            label="Replace and pair"
+            @click="overwriteExistingWallet"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
     <transition name="pairing-success">
       <section
         v-if="pairingSuccess"
@@ -133,6 +192,8 @@ import { mapState } from "pinia";
 import SettingsPageShell from "./SettingsPageShell.vue";
 import SettingsSection from "./SettingsSection.vue";
 import { consumeQuickPairV0, createQuickPairV0 } from "src/sync/quickPair";
+import { encryptRecoveryBundleV0 } from "src/sync/recoveryBundle";
+import type { AuthorityPayloadV0 } from "src/sync/authorityPayload";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
 import {
   resetV0WalletService,
@@ -156,7 +217,12 @@ export default defineComponent({
       configured: false,
       quickPairPayload: "",
       showPairingQr: false,
+      showOverwriteDialog: false,
       busy: false,
+      backupBusy: false,
+      backupPassphrase: "",
+      backupConfirmation: "",
+      pendingPairAuthority: null as AuthorityPayloadV0 | null,
       failed: false,
       message: "",
       pairingSuccess: false,
@@ -237,22 +303,94 @@ export default defineComponent({
         const authority = await consumeQuickPairV0(payload, {
           allowLoopbackHttp: runtime.allowLoopbackHttp,
         });
-        await runtime.replaceEmptyAndStart(authority);
-        resetV0WalletService();
-        const result = await useV0WalletService().resume();
-        if (result.status !== "idle" && result.status !== "completed") {
-          throw new Error(`Pairing requires recovery: ${result.status}`);
+        this.pendingPairAuthority = authority;
+        try {
+          await this.applyPairing(authority);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message ===
+              "pairing or recovery requires an empty local wallet"
+          ) {
+            this.showOverwriteDialog = true;
+            this.message =
+              "This phone already has a wallet. Choose whether to save it or replace it.";
+            return;
+          }
+          throw error;
         }
-        const session = runtime.runtime.currentSession();
-        if (session === null) throw new Error("wallet sync did not start");
-        const acknowledgement = await session.sync.publishCurrent();
-        if (acknowledgement.status !== "accepted") {
-          throw new Error("pairing confirmation could not be synchronized");
+      });
+    },
+    async applyPairing(authority: AuthorityPayloadV0, overwrite = false) {
+      const runtime = useSyncRuntimeService();
+      await runtime.replaceEmptyAndStart(authority, { overwrite });
+      resetV0WalletService();
+      const result = await useV0WalletService().resume();
+      if (result.status !== "idle" && result.status !== "completed") {
+        throw new Error(`Pairing requires recovery: ${result.status}`);
+      }
+      const session = runtime.runtime.currentSession();
+      if (session === null) throw new Error("wallet sync did not start");
+      const acknowledgement = await session.sync.publishCurrent();
+      if (acknowledgement.status !== "accepted") {
+        throw new Error("pairing confirmation could not be synchronized");
+      }
+      this.configured = true;
+      this.message = "Paired. This wallet is synchronized.";
+      this.showPairingSuccess();
+      await this.$router.replace({ path: "/settings/sync" });
+    },
+    cancelOverwrite() {
+      this.showOverwriteDialog = false;
+      this.pendingPairAuthority = null;
+      this.backupPassphrase = "";
+      this.backupConfirmation = "";
+      this.message = "Pairing cancelled. This wallet was not changed.";
+    },
+    async saveLocalBackup() {
+      this.backupBusy = true;
+      this.failed = false;
+      try {
+        if (this.backupPassphrase !== this.backupConfirmation) {
+          throw new Error("backup passphrases do not match");
         }
-        this.configured = true;
-        this.message = "Paired. This wallet is synchronized.";
-        this.showPairingSuccess();
-        await this.$router.replace({ path: "/settings/sync" });
+        const runtime = useSyncRuntimeService();
+        const bundle = await encryptRecoveryBundleV0(
+          await runtime.exportAuthority(),
+          this.backupPassphrase,
+          { allowLoopbackHttp: runtime.allowLoopbackHttp }
+        );
+        const url = URL.createObjectURL(
+          new Blob([bundle], { type: "application/json" })
+        );
+        try {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `silent-link-wallet-backup-${new Date()
+            .toISOString()
+            .slice(0, 10)}.json`;
+          link.click();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        this.message =
+          "Encrypted backup downloaded. You can now replace this wallet.";
+        this.backupPassphrase = "";
+        this.backupConfirmation = "";
+      } catch (error) {
+        this.failed = true;
+        this.message = error instanceof Error ? error.message : "Backup failed";
+      } finally {
+        this.backupBusy = false;
+      }
+    },
+    async overwriteExistingWallet() {
+      const authority = this.pendingPairAuthority;
+      if (authority === null) return;
+      await this.run(async () => {
+        await this.applyPairing(authority, true);
+        this.showOverwriteDialog = false;
+        this.pendingPairAuthority = null;
       });
     },
     showPairingSuccess() {
@@ -364,6 +502,33 @@ export default defineComponent({
   width: min(calc(100vw - 56px), 960px) !important;
   max-width: 100% !important;
   height: auto !important;
+}
+
+.overwrite-dialog {
+  width: min(92vw, 500px);
+  overflow: hidden;
+  border: 1px solid #4a321d;
+  border-radius: 16px;
+  background: #171717;
+  color: #fff;
+}
+
+.overwrite-dialog h2 {
+  margin: 0 0 10px;
+  font-size: 1.55rem;
+  letter-spacing: -0.02em;
+}
+
+.overwrite-dialog__backup {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #2d2d2d;
+}
+
+.overwrite-dialog :deep(.q-card__actions) {
+  gap: 8px;
+  border-top: 1px solid #2d2d2d;
+  padding: 14px 24px 20px;
 }
 
 .pairing-message {

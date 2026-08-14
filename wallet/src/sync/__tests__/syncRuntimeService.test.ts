@@ -157,6 +157,37 @@ describe("SyncRuntimeService", () => {
     );
   });
 
+  it("allows an explicit overwrite after the local wallet warning", async () => {
+    const imported = {
+      schema: 0,
+      mnemonic: MNEMONIC,
+      sync_secret: "1".repeat(64),
+      mint_url: "http://127.0.0.1:3338",
+      relay_url: "ws://127.0.0.1:3344",
+      head_event_id: "a".repeat(64),
+    };
+    runtimeImport.mockResolvedValue(imported);
+    const service = new SyncRuntimeService({
+      storage: new MapStorage(),
+      allowLoopbackHttp: true,
+    });
+    await cashuDb.proofs.put({
+      id: "00c0ffee",
+      amount: 1,
+      secret: "owned-proof",
+      C: "02aa",
+      reserved: false,
+    });
+
+    await expect(
+      service.replaceEmptyAndStart(imported, { overwrite: true })
+    ).resolves.toMatchObject({
+      authority: imported,
+      sync: { status: "ready" },
+    });
+    expect(await cashuDb.proofs.count()).toBe(0);
+  });
+
   it("restores the exact mint state when first-time recovery fails", async () => {
     const imported = {
       schema: 0,

@@ -24,6 +24,10 @@ export type SyncRuntimeBootOutcome = {
   sync: WalletSyncStartOutcome;
 };
 
+export type ReplaceWalletOptions = {
+  overwrite?: boolean;
+};
+
 export class SyncRuntimeService {
   readonly allowLoopbackHttp: boolean;
   readonly authority: LocalAuthorityRepository;
@@ -91,12 +95,18 @@ export class SyncRuntimeService {
    * Pairing/recovery may replace only an empty local wallet. This also handles
    * a fresh installation that already published its own empty genesis.
    */
-  replaceEmptyAndStart(value: unknown): Promise<SyncRuntimeBootOutcome> {
-    return this.runExclusive(() => this.replaceEmptyAndStartUnlocked(value));
+  replaceEmptyAndStart(
+    value: unknown,
+    options: ReplaceWalletOptions = {}
+  ): Promise<SyncRuntimeBootOutcome> {
+    return this.runExclusive(() =>
+      this.replaceEmptyAndStartUnlocked(value, options)
+    );
   }
 
   private async replaceEmptyAndStartUnlocked(
-    value: unknown
+    value: unknown,
+    options: ReplaceWalletOptions
   ): Promise<SyncRuntimeBootOutcome> {
     const candidate = this.authority.validate(value);
     await this.prepareLegacyState();
@@ -114,7 +124,7 @@ export class SyncRuntimeService {
       ecashHistory > 0 ||
       (state?.pending_operation ?? null) !== null ||
       Object.keys(state?.counters ?? {}).length > 0;
-    if (hasLocalWalletData) {
+    if (hasLocalWalletData && !options.overwrite) {
       throw new Error("pairing or recovery requires an empty local wallet");
     }
     const previousAuthority = this.authority.load();
