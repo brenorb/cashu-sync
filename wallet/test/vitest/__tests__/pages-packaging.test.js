@@ -46,12 +46,12 @@ describe("GitHub Pages packaging contract", () => {
     );
   });
 
-  it("does not force a service worker update into active wallet operations", () => {
+  it("activates the newest demo wallet on reload", () => {
     const { extendGenerateSWOptions } = configFactory({}).pwa;
-    const generatedConfig = { skipWaiting: true, clientsClaim: true };
+    const generatedConfig = { skipWaiting: false, clientsClaim: false };
     extendGenerateSWOptions(generatedConfig);
-    expect(generatedConfig.skipWaiting).toBe(false);
-    expect(generatedConfig.clientsClaim).toBe(false);
+    expect(generatedConfig.skipWaiting).toBe(true);
+    expect(generatedConfig.clientsClaim).toBe(true);
   });
 
   it("deploys only the built wallet artifact", () => {

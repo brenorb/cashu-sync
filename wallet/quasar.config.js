@@ -202,14 +202,15 @@ module.exports = configure(function (/* ctx */) {
       manifestFilename: "manifest.json",
       useCredentialsForManifestTag: false,
       workboxOptions: {
-        // A waiting update must not take control during a wallet operation.
-        skipWaiting: false,
-        clientsClaim: false,
+        // Demo UX: a deployed wallet must update on the next reload.
+        // ponytail: immediate activation trades graceful wallet-operation
+        // handoff for a demo that never strands users on stale UI.
+        skipWaiting: true,
+        clientsClaim: true,
       },
       extendGenerateSWOptions(options) {
-        // Quasar 1.11 defaults both to true after merging workboxOptions.
-        options.skipWaiting = false;
-        options.clientsClaim = false;
+        options.skipWaiting = true;
+        options.clientsClaim = true;
       },
       // useFilenameHashes: true,
       // extendGenerateSWOptions (cfg) {}

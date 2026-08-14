@@ -190,4 +190,4 @@ An HTTPS Pages deployment needs an HTTPS authority mint and a WSS Silent Link re
 
 The current `.github/workflows/pages.yml` does not set mint or relay build variables. Its artifact can pair or restore an existing authority, but it cannot bootstrap a newly configured production wallet. Production bootstrap also requires a supported operator path to enroll the generated sync pubkey in the relay allowlist. Those deployment tasks are explicitly tracked in [the roadmap](./roadmap.md); the current Pages workflow is not a turnkey production release.
 
-The generated service worker does not take control immediately during an update. That protects in-progress wallet operations, but testers may need to close all installed-PWA tabs and reopen them before judging a newly deployed build.
+The demo service worker activates the newest build on reload so a deployed UI does not remain stranded in an old cache. Do not deploy this update policy unchanged for a production wallet with long-running operations; production should coordinate updates around operation state.
