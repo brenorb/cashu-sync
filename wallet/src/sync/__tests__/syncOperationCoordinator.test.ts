@@ -273,6 +273,20 @@ function fixture() {
 }
 
 describe("SyncOperationCoordinator new operations", () => {
+  it("recovers an existing operation instead of blocking a new click", async () => {
+    const value = fixture();
+    value.journal.state.pending_operation = pendingMint("submitted");
+    value.gateway.reconcileMint.mockResolvedValueOnce(mintResponse);
+
+    await expect(value.coordinator.mint("new-intent")).resolves.toMatchObject({
+      status: "completed",
+      type: "mint",
+    });
+    expect(value.gateway.createMintPreview).not.toHaveBeenCalled();
+    expect(value.gateway.submitMint).not.toHaveBeenCalled();
+    expect(value.gateway.reconcileMint).toHaveBeenCalledOnce();
+  });
+
   it("runs mint in durable order and finalizes exact accepted candidate", async () => {
     const value = fixture();
     await expect(value.coordinator.mint("intent")).resolves.toEqual({

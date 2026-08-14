@@ -157,6 +157,8 @@ export class V0WalletService {
   private async mintPaidQuoteUnlocked(
     quoteId: string
   ): Promise<SyncOperationOutcome> {
+    const resumed = await this.resumeIfPending();
+    if (resumed !== null) return resumed;
     const wallet = await this.ensureWallet();
     const stored = await this.requireStoredMintQuote(quoteId);
     const quote = await wallet.checkMintQuoteBolt11(quoteId);
@@ -256,6 +258,8 @@ export class V0WalletService {
   private async payMeltQuoteUnlocked(
     quoteId: string
   ): Promise<SyncOperationOutcome> {
+    const resumed = await this.resumeIfPending();
+    if (resumed !== null) return resumed;
     const stored = await this.requireStoredMeltQuote(quoteId);
     if (stored.request?.startsWith("cashu-sync-demo:")) {
       return this.payInternalTopupUnlocked(stored);
@@ -347,6 +351,13 @@ export class V0WalletService {
   }
 
   private async resumeUnlocked(): Promise<SyncOperationOutcome> {
+    return (await this.ensureCoordinator()).resume();
+  }
+
+  private async resumeIfPending(): Promise<SyncOperationOutcome | null> {
+    const pending = (await this.requireSession().repository.exportSnapshot())
+      .pending_operation;
+    if (pending === null) return null;
     return (await this.ensureCoordinator()).resume();
   }
 

@@ -272,7 +272,9 @@ export default defineComponent({
           this.mintQuote!.quote
         );
         if (result.status !== "completed") {
-          throw new Error(`Mint requires recovery: ${result.status}`);
+          throw new Error(
+            "Your credits are still being recovered. Tap Update balance again in a moment."
+          );
         }
         this.syncMessage = "Credits bought and synchronized.";
         this.showMintDialog = false;
@@ -315,7 +317,9 @@ export default defineComponent({
           this.meltQuote!.quote
         );
         if (result.status !== "completed") {
-          throw new Error(`Payment requires recovery: ${result.status}`);
+          throw new Error(
+            "Your credits are still being recovered. Tap Spend credits again in a moment."
+          );
         }
         this.syncMessage = "Credits spent and synchronized.";
         this.showMeltDialog = false;

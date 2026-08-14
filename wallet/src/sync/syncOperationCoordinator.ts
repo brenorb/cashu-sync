@@ -110,11 +110,6 @@ export type SyncOperationOutcome =
         | "gateway-unknown"
         | "gateway-unresolved";
     }
-  | {
-      status: "blocked";
-      operationId: string;
-      phase: PendingOperationV0["phase"];
-    }
   | { status: "idle" };
 
 export type SyncOperationCoordinatorOptions<MintIntent, MeltIntent> = {
@@ -169,7 +164,7 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
 
   private async startMint(intent: MintIntent): Promise<SyncOperationOutcome> {
     const existing = await this.pullForNewOperation();
-    if (existing !== null) return blocked(existing);
+    if (existing !== null) return this.resumePending(existing);
     const operationId = this.operationId();
     const preview = await this.gateway.createMintPreview(intent);
     await this.journal.prepareMint(operationId, preview, this.now());
@@ -186,7 +181,7 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
 
   private async startMelt(intent: MeltIntent): Promise<SyncOperationOutcome> {
     const existing = await this.pullForNewOperation();
-    if (existing !== null) return blocked(existing);
+    if (existing !== null) return this.resumePending(existing);
     const operationId = this.operationId();
     const preview = await this.gateway.createMeltPreview(intent);
     await this.journal.prepareMelt(operationId, preview, this.now());
@@ -412,14 +407,6 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
       eventId: published.eventId,
     };
   }
-}
-
-function blocked(pending: PendingOperationV0): SyncOperationOutcome {
-  return {
-    status: "blocked",
-    operationId: pending.operation_id,
-    phase: pending.phase,
-  };
 }
 
 function needs(
