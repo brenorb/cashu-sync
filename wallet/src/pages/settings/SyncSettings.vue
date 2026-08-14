@@ -216,17 +216,18 @@ export default defineComponent({
         if (session === null) throw new Error("wallet sync is not ready");
         const baseline = await session.repository.exportSnapshot();
         this.stopPairingWatcher();
+        this.quickPairPayload = await createQuickPairV0(
+          await runtime.exportAuthority(),
+          { allowLoopbackHttp: runtime.allowLoopbackHttp }
+        );
         this.pairingWatchStop = session.sync.watchCurrent((event) => {
           if (event.id === baseline.previous_event_id) return;
           this.stopPairingWatcher();
           void useV0WalletService()
             .syncNow()
-            .then(() => this.showPairingSuccess());
+            .then(() => this.showPairingSuccess())
+            .catch(() => undefined);
         });
-        this.quickPairPayload = await createQuickPairV0(
-          await runtime.exportAuthority(),
-          { allowLoopbackHttp: runtime.allowLoopbackHttp }
-        );
         this.message = "Pairing QR ready. It expires after ten minutes.";
       });
     },
