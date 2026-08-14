@@ -11,6 +11,7 @@ describe("one-scan quick pairing", () => {
       randomBytes: deterministicRandom,
     });
     expect(payload).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(payload.length).toBeLessThan(900);
     expect(payload).not.toContain(fixture.mnemonic);
     expect(
       await consumeQuickPairV0(payload, { allowLoopbackHttp: true })
