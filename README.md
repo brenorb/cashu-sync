@@ -14,6 +14,8 @@ The implemented product boundary is intentionally small:
 
 Start with the [v0 documentation index](./docs/README.md), read the [normative specification](./docs/spec.md), or follow the [complete local tutorial](./docs/tutorial.md) to run Nutshell and the relay, pair two browser profiles, mint, synchronize, melt, and recover from scratch.
 
+For a disposable phone-accessible demo, see the [Fly deployment](./docs/fly-demo.md). It uses FakeWallet and public-open relay admission and must not be used with real funds.
+
 The three code areas are:
 
 - [`wallet/`](./wallet/README.md): Vue/Quasar PWA;

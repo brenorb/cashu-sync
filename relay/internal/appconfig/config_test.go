@@ -59,6 +59,23 @@ func TestOpenAdmissionAllowsOnlyLoopbackBind(t *testing.T) {
 	}
 }
 
+func TestDemoPublicOpenExplicitlyAllowsPublicBind(t *testing.T) {
+	config, err := load(
+		mapLookup(map[string]string{
+			"CASHU_SYNC_ADMISSION_MODE":   string(AdmissionOpen),
+			"CASHU_SYNC_LISTEN_ADDR":      "0.0.0.0:8080",
+			"CASHU_SYNC_DEMO_PUBLIC_OPEN": "true",
+		}),
+		func(string) ([]net.IP, error) { return nil, nil },
+	)
+	if err != nil {
+		t.Fatalf("demo public-open configuration rejected: %v", err)
+	}
+	if config.AdmissionMode != AdmissionOpen {
+		t.Fatalf("admission mode = %q", config.AdmissionMode)
+	}
+}
+
 func TestLoadAllowlistMode(t *testing.T) {
 	pubkeyA := strings.Repeat("a", 64)
 	pubkeyB := strings.Repeat("b", 64)

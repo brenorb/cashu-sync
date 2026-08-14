@@ -77,7 +77,9 @@ func load(lookup LookupEnv, lookupIP lookupIPFunc) (Config, error) {
 	switch mode {
 	case AdmissionOpen:
 		if err := requireLoopback(host, lookupIP); err != nil {
-			return Config{}, fmt.Errorf("open admission requires a loopback bind: %w", err)
+			if !demoPublicOpen(lookup) {
+				return Config{}, fmt.Errorf("open admission requires a loopback bind: %w", err)
+			}
 		}
 	case AdmissionAllowlist:
 		serviceURL, err := canonicalServiceURL(envOrDefault(lookup, "CASHU_SYNC_SERVICE_URL", ""))
@@ -99,6 +101,10 @@ func load(lookup LookupEnv, lookupIP lookupIPFunc) (Config, error) {
 	}
 
 	return config, nil
+}
+
+func demoPublicOpen(lookup LookupEnv) bool {
+	return strings.EqualFold(envOrDefault(lookup, "CASHU_SYNC_DEMO_PUBLIC_OPEN", ""), "true")
 }
 
 func requireLoopback(host string, lookupIP lookupIPFunc) error {

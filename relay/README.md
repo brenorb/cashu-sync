@@ -21,6 +21,7 @@ The process reads these environment variables:
 | `CASHU_SYNC_DB_PATH` | `./data/cashu-sync.db` | Persistent SQLite database |
 | `CASHU_SYNC_MAX_HISTORY` | `8` | Revisions retained per wallet (1-100) |
 | `CASHU_SYNC_ADMISSION_MODE` | `open` | `open` for loopback-only local testing or `allowlist` for production |
+| `CASHU_SYNC_DEMO_PUBLIC_OPEN` | unset | `true` explicitly permits public `open` mode for disposable demos; unsafe |
 | `CASHU_SYNC_SERVICE_URL` | none | Canonical public HTTPS or WSS origin; required in allowlist mode |
 | `CASHU_SYNC_ALLOWLIST_PATH` | none | Startup-loaded sync-pubkey file; required in allowlist mode |
 
@@ -37,6 +38,11 @@ authentication origin to `CASHU_SYNC_SERVICE_URL`; forwarded host headers cannot
 change it. A static GitHub Pages client needs no server secret: it generates its sync
 key locally. Production still requires an explicit operator workflow to obtain and
 enroll that public key; the current Pages build does not provide that workflow.
+
+For a disposable demo only, `CASHU_SYNC_DEMO_PUBLIC_OPEN=true` permits `open` mode on
+a public bind. Anyone who can reach that relay can authenticate a key and write
+encrypted snapshots, so never use this mode with real funds or a persistent public
+deployment.
 
 The process creates the database directory when needed. `GET /healthz` returns
 `200 ok` only while SQLite is ready. SIGINT and SIGTERM stop the HTTP server and

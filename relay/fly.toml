@@ -1,0 +1,30 @@
+app = "cashu-sync-relay"
+primary_region = "ams"
+
+[build]
+dockerfile = "Dockerfile.fly"
+
+[env]
+CASHU_SYNC_LISTEN_ADDR = "0.0.0.0:8080"
+CASHU_SYNC_DB_PATH = "/data/cashu-sync.db"
+CASHU_SYNC_MAX_HISTORY = "8"
+CASHU_SYNC_ADMISSION_MODE = "open"
+CASHU_SYNC_DEMO_PUBLIC_OPEN = "true"
+
+[[mounts]]
+source = "cashu_sync_relay_data"
+destination = "/data"
+initial_size = "1gb"
+
+[http_service]
+internal_port = 8080
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+min_machines_running = 1
+processes = ["app"]
+
+[[vm]]
+memory = "512mb"
+cpu_kind = "shared"
+cpus = 1

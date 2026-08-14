@@ -1,0 +1,22 @@
+app = "cashu-sync-wallet"
+primary_region = "ams"
+
+[build]
+dockerfile = "Dockerfile.fly"
+
+[build.args]
+CASHU_SYNC_MINT_URL = "https://cashu-sync-mint.fly.dev"
+CASHU_SYNC_RELAY_URL = "wss://cashu-sync-relay.fly.dev"
+
+[http_service]
+internal_port = 80
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+min_machines_running = 1
+processes = ["app"]
+
+[[vm]]
+memory = "256mb"
+cpu_kind = "shared"
+cpus = 1

@@ -1,0 +1,41 @@
+app = "cashu-sync-mint"
+primary_region = "ams"
+
+[build]
+dockerfile = "fly.Dockerfile"
+
+[env]
+CASHU_DIR = "/data"
+MINT_DATABASE = "/data/mint"
+MINT_AUTH_DATABASE = "/data/auth"
+MINT_PRIVATE_KEY = "cashu-sync-demo-only-change-me"
+MINT_DERIVATION_PATH = "m/0'/2'/0'"
+MINT_BACKEND_BOLT11_USD = "FakeWallet"
+MINT_LISTEN_HOST = "0.0.0.0"
+MINT_LISTEN_PORT = "3338"
+MINT_INPUT_FEE_PPK = "0"
+MINT_RATE_LIMIT = "FALSE"
+FAKEWALLET_BRR = "TRUE"
+FAKEWALLET_DELAY_INCOMING_PAYMENT = "0"
+FAKEWALLET_DELAY_OUTGOING_PAYMENT = "0"
+FAKEWALLET_PAYMENT_STATE = "SETTLED"
+FAKEWALLET_PAY_INVOICE_STATE = "SETTLED"
+MINT_REDIS_CACHE_ENABLED = "FALSE"
+
+[[mounts]]
+source = "cashu_sync_mint_data"
+destination = "/data"
+initial_size = "2gb"
+
+[http_service]
+internal_port = 3338
+force_https = true
+auto_stop_machines = false
+auto_start_machines = true
+min_machines_running = 1
+processes = ["app"]
+
+[[vm]]
+memory = "1gb"
+cpu_kind = "shared"
+cpus = 1
