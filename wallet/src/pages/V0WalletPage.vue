@@ -7,15 +7,15 @@
     <V0BalanceCard />
 
     <section class="v0-actions" aria-labelledby="v0-actions-title">
-      <h2 id="v0-actions-title">Wallet actions</h2>
+      <h2 id="v0-actions-title">Credits</h2>
       <q-btn
         data-v0-action="mint-bolt11"
         class="full-width"
         color="primary"
         no-caps
         unelevated
-        aria-label="Add balance"
-        label="Add balance"
+        aria-label="Buy credits"
+        label="Buy credits"
         @click="showMintDialog = true"
       />
       <q-btn
@@ -24,8 +24,8 @@
         color="primary"
         no-caps
         outline
-        aria-label="Top up eSIM"
-        label="Top up eSIM"
+        aria-label="Spend credits"
+        label="Spend credits"
         @click="showMeltDialog = true"
       />
       <router-link to="/settings/sync" class="v0-sync-link">
@@ -73,8 +73,8 @@
     <q-dialog v-model="showMintDialog">
       <q-card class="v0-dialog" data-v0-dialog="mint">
         <q-card-section>
-          <p class="v0-eyebrow">Add funds</p>
-          <h2>Add balance</h2>
+          <p class="v0-eyebrow">BUY CREDITS</p>
+          <h2>Buy credits</h2>
           <p>Pay the invoice below. Your balance updates automatically.</p>
         </q-card-section>
         <q-card-section v-if="!mintQuote">
@@ -141,9 +141,9 @@
     <q-dialog v-model="showMeltDialog">
       <q-card class="v0-dialog" data-v0-dialog="melt">
         <q-card-section>
-          <p class="v0-eyebrow">TOP UP ESIM</p>
-          <h2>Pay for mobile data</h2>
-          <p>Use your balance to pay for your eSIM top-up.</p>
+          <p class="v0-eyebrow">SPEND CREDITS</p>
+          <h2>Spend credits</h2>
+          <p>Choose how many credits to spend.</p>
         </q-card-section>
         <q-card-section v-if="!meltQuote">
           <q-input
@@ -261,7 +261,7 @@ export default defineComponent({
         if (result.status !== "completed") {
           throw new Error(`Mint requires recovery: ${result.status}`);
         }
-        this.syncMessage = "Funds added and synchronized.";
+        this.syncMessage = "Credits bought and synchronized.";
         this.showMintDialog = false;
         this.mintQuote = null;
         const runtime = useSyncRuntimeService();
@@ -295,7 +295,7 @@ export default defineComponent({
         if (result.status !== "completed") {
           throw new Error(`Payment requires recovery: ${result.status}`);
         }
-        this.syncMessage = "eSIM top-up paid and synchronized.";
+        this.syncMessage = "Credits spent and synchronized.";
         this.showMeltDialog = false;
         this.meltQuote = null;
         this.meltRequest = "";

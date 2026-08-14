@@ -56,6 +56,8 @@ describe("v0 visible UI contract", () => {
     const wallet = template("src/pages/V0WalletPage.vue");
     expect(wallet).toContain('data-v0-action="mint-bolt11"');
     expect(wallet).toContain('data-v0-action="melt-bolt11"');
+    expect(wallet).toContain("Buy credits");
+    expect(wallet).toContain("Spend credits");
     expect(wallet).not.toContain(':disable="!activeMintUrl"');
     expect(wallet).toContain('to="/settings/sync"');
     expect(wallet).not.toMatch(
