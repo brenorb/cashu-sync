@@ -7,6 +7,7 @@ dockerfile = "Dockerfile.fly"
 [build.args]
 CASHU_SYNC_MINT_URL = "https://cashu-sync-mint.fly.dev"
 CASHU_SYNC_RELAY_URL = "wss://cashu-sync-relay.fly.dev"
+CASHU_SYNC_TOPUP_MODE = "internal-demo"
 
 [http_service]
 internal_port = 80

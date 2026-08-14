@@ -175,6 +175,28 @@ describe("V0WalletService quote fencing", () => {
     });
   });
 
+  it("creates the demo top-up invoice internally", async () => {
+    const createMintQuoteBolt11 = vi.fn(async () => mintQuote);
+    const createMeltQuoteBolt11 = vi.fn(async () => ({
+      ...meltQuote,
+      request: mintQuote.request,
+      amount: Amount.from(25),
+    }));
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(async () =>
+        walletMock({ createMintQuoteBolt11, createMeltQuoteBolt11 })
+      ),
+      getKeyset: () => "00c0ffee",
+    });
+
+    await expect(service.requestInternalTopupQuote(25)).resolves.toMatchObject({
+      amount: 25,
+      request: "lnbc1mint",
+    });
+    expect(createMintQuoteBolt11).toHaveBeenCalledWith(25);
+    expect(createMeltQuoteBolt11).toHaveBeenCalledWith("lnbc1mint");
+  });
+
   it("rejects non-Bolt11 payment ingress before touching wallet or relay", async () => {
     const activeWallet = vi.fn();
     const service = new V0WalletService(runtimeService as never, {

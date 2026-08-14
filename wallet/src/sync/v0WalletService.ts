@@ -154,13 +154,50 @@ export class V0WalletService {
     return this.serialize(() => this.requestMeltQuoteUnlocked(request));
   }
 
+  /**
+   * Demo-only self-melt: the configured FakeWallet creates a valid invoice,
+   * then immediately melts it. A real Silent Link provider must replace this
+   * with requestSilentLinkTopupQuote().
+   */
+  requestInternalTopupQuote(amount: number): Promise<MeltQuoteView> {
+    return this.serialize(() => this.requestInternalTopupQuoteUnlocked(amount));
+  }
+
+  private async requestInternalTopupQuoteUnlocked(
+    amount: number
+  ): Promise<MeltQuoteView> {
+    requirePositiveAmount(amount);
+    const wallet = await this.ensureWallet();
+    const mintQuote = await wallet.createMintQuoteBolt11(amount);
+    requireUsd(mintQuote.unit);
+    return this.requestMeltQuoteFromRequestUnlocked(
+      wallet,
+      mintQuote.request,
+      amount
+    );
+  }
+
   private async requestMeltQuoteUnlocked(
     request: string
   ): Promise<MeltQuoteView> {
     const bolt11 = parseV0Bolt11Request(request);
     const wallet = await this.ensureWallet();
-    const quote = await wallet.createMeltQuoteBolt11(bolt11);
+    return this.requestMeltQuoteFromRequestUnlocked(wallet, bolt11);
+  }
+
+  private async requestMeltQuoteFromRequestUnlocked(
+    wallet: Wallet,
+    request: string,
+    expectedAmount?: number
+  ): Promise<MeltQuoteView> {
+    const quote = await wallet.createMeltQuoteBolt11(request);
     requireUsd(quote.unit);
+    if (
+      expectedAmount !== undefined &&
+      quote.amount.toNumber() !== expectedAmount
+    ) {
+      throw new Error("Silent Link credit service returned the wrong amount");
+    }
     if (quote.state !== MeltQuoteState.UNPAID) {
       throw new Error(`new melt quote is unexpectedly ${quote.state}`);
     }

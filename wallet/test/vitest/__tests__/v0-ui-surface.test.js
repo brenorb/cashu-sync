@@ -58,6 +58,8 @@ describe("v0 visible UI contract", () => {
     expect(wallet).toContain('data-v0-action="melt-bolt11"');
     expect(wallet).toContain("Buy credits");
     expect(wallet).toContain("Spend credits");
+    expect(wallet).toContain('data-v0-field="melt-amount"');
+    expect(wallet).not.toContain('data-v0-field="melt-invoice"');
     expect(wallet).not.toContain(':disable="!activeMintUrl"');
     expect(wallet).toContain('to="/settings/sync"');
     expect(wallet).not.toMatch(

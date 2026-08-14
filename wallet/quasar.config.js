@@ -81,6 +81,8 @@ module.exports = configure(function (/* ctx */) {
       env: {
         CASHU_SYNC_MINT_URL: process.env.CASHU_SYNC_MINT_URL || "",
         CASHU_SYNC_RELAY_URL: process.env.CASHU_SYNC_RELAY_URL || "",
+        CASHU_SYNC_TOPUP_URL: process.env.CASHU_SYNC_TOPUP_URL || "",
+        CASHU_SYNC_TOPUP_MODE: process.env.CASHU_SYNC_TOPUP_MODE || "",
         CASHU_SYNC_ALLOW_INSECURE_LOOPBACK:
           process.env.CASHU_SYNC_ALLOW_INSECURE_LOOPBACK === "true",
       },

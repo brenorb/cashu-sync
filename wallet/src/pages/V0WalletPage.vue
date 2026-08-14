@@ -147,12 +147,12 @@
         </q-card-section>
         <q-card-section v-if="!meltQuote">
           <q-input
-            v-model="meltRequest"
-            data-v0-field="melt-invoice"
+            v-model="meltAmount"
+            data-v0-field="melt-amount"
             dark
             outlined
-            autogrow
-            label="Payment invoice"
+            inputmode="decimal"
+            label="Amount in USD"
           />
         </q-card-section>
         <q-card-section v-else class="v0-quote-summary">
@@ -201,6 +201,7 @@ import { useMigrationsStore } from "src/stores/migrations";
 import { useDexieStore } from "src/stores/dexie";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
 import { createQuickPairV0 } from "src/sync/quickPair";
+import { requestSilentLinkTopupQuote } from "src/sync/topupService";
 import {
   useV0WalletService,
   type MeltQuoteView,
@@ -221,6 +222,7 @@ export default defineComponent({
       showMeltDialog: false,
       mintAmount: "1.00",
       mintQuote: null as MintQuoteView | null,
+      meltAmount: "1.00",
       meltRequest: "",
       meltQuote: null as MeltQuoteView | null,
       dialogBusy: false,
@@ -281,8 +283,17 @@ export default defineComponent({
     },
     async createMeltQuote() {
       await this.runDialog(async () => {
+        const amount = this.parseUsdCents(this.meltAmount);
+        if (process.env.CASHU_SYNC_TOPUP_MODE === "internal-demo") {
+          this.meltQuote = await useV0WalletService().requestInternalTopupQuote(
+            amount
+          );
+          return;
+        }
+        const topup = await requestSilentLinkTopupQuote(amount);
+        this.meltRequest = topup.invoice;
         this.meltQuote = await useV0WalletService().requestMeltQuote(
-          this.meltRequest
+          topup.invoice
         );
       });
     },
@@ -298,6 +309,7 @@ export default defineComponent({
         this.syncMessage = "Credits spent and synchronized.";
         this.showMeltDialog = false;
         this.meltQuote = null;
+        this.meltAmount = "1.00";
         this.meltRequest = "";
       });
     },
