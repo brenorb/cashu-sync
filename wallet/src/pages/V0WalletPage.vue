@@ -157,7 +157,6 @@
         </q-card-section>
         <q-card-section v-else class="v0-quote-summary">
           <strong>{{ formatUsd(meltQuote.amount) }}</strong>
-          <span>Network fee: {{ formatUsd(meltQuote.feeReserve) }}</span>
         </q-card-section>
         <q-card-section v-if="dialogError" class="v0-dialog-error" role="alert">
           {{ dialogError }}
