@@ -126,6 +126,11 @@ export default defineComponent({
     this.configured = useSyncRuntimeService().authority.load() !== null;
     const quickPair = this.$route.query.quick_pair;
     if (typeof quickPair === "string") void this.finishQuickPair(quickPair);
+    if (this.$route.query.auto === "1" && typeof quickPair !== "string") {
+      this.failed = true;
+      this.message =
+        "This pairing QR is outdated. Create a new pairing QR from the existing wallet.";
+    }
   },
   methods: {
     openScanner() {

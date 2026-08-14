@@ -31,6 +31,10 @@ export default defineComponent({
         router.back();
         return;
       }
+      if (route.path.startsWith("/settings")) {
+        router.replace("/wallet");
+        return;
+      }
       const parentPath = route.path.replace(/\/[^/]+\/?$/, "");
       router.push(parentPath.length > 0 ? parentPath : "/");
     };
