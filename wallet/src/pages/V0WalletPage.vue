@@ -14,7 +14,6 @@
         color="primary"
         no-caps
         unelevated
-        :disable="!activeMintUrl"
         aria-label="Add balance"
         label="Add balance"
         @click="showMintDialog = true"
@@ -25,7 +24,6 @@
         color="primary"
         no-caps
         outline
-        :disable="!activeMintUrl"
         aria-label="Top up eSIM"
         label="Top up eSIM"
         @click="showMeltDialog = true"
@@ -194,12 +192,10 @@
 
 <script lang="ts">
 import { defineComponent } from "vue";
-import { mapState } from "pinia";
 import { ChevronRight as ChevronRightIcon } from "lucide-vue-next";
 import VueQrcode from "@chenfengyuan/vue-qrcode";
 import V0BalanceCard from "src/components/V0BalanceCard.vue";
 import V0AccountingHistory from "src/components/V0AccountingHistory.vue";
-import { useMintsStore } from "src/stores/mints";
 import { useWalletStore } from "src/stores/wallet";
 import { useMigrationsStore } from "src/stores/migrations";
 import { useDexieStore } from "src/stores/dexie";
@@ -235,9 +231,6 @@ export default defineComponent({
       fundedWalletUrl: "",
       visibilityHandler: null as (() => void) | null,
     };
-  },
-  computed: {
-    ...mapState(useMintsStore, ["activeMintUrl", "activeUnit"]),
   },
   methods: {
     async runDialog(operation: () => Promise<void>) {
