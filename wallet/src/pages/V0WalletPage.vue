@@ -14,7 +14,7 @@
         color="primary"
         no-caps
         unelevated
-        :disable="!activeMintUrl || !walletReady"
+        :disable="!activeMintUrl"
         aria-label="Add balance"
         label="Add balance"
         @click="showMintDialog = true"
@@ -25,7 +25,7 @@
         color="primary"
         no-caps
         outline
-        :disable="!activeMintUrl || !walletReady"
+        :disable="!activeMintUrl"
         aria-label="Top up eSIM"
         label="Top up eSIM"
         @click="showMeltDialog = true"
