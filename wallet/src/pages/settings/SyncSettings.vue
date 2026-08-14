@@ -16,6 +16,14 @@
               : "Scan the QR code from a wallet you already use."
           }}
         </p>
+        <div v-if="walletIdWords.length" class="wallet-id" data-wallet-id>
+          <span class="wallet-id__label">Wallet ID</span>
+          <strong>{{ walletIdWords.join(" ") }}</strong>
+          <small
+            >Compare these six words on both phones. They are not recovery
+            words.</small
+          >
+        </div>
       </q-item>
     </SettingsSection>
 
@@ -181,6 +189,10 @@
         <p class="pairing-success__eyebrow">PAIRING COMPLETE</p>
         <h2>Wallets paired</h2>
         <p>Both phones now share the same balance.</p>
+        <div v-if="walletIdWords.length" class="pairing-success__id">
+          <span>Wallet ID</span>
+          <strong>{{ walletIdWords.join(" ") }}</strong>
+        </div>
       </section>
     </transition>
   </SettingsPageShell>
@@ -194,6 +206,7 @@ import SettingsSection from "./SettingsSection.vue";
 import { consumeQuickPairV0, createQuickPairV0 } from "src/sync/quickPair";
 import { encryptRecoveryBundleV0 } from "src/sync/recoveryBundle";
 import type { AuthorityPayloadV0 } from "src/sync/authorityPayload";
+import { deriveWalletIdWords } from "src/sync/walletIdentity";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
 import {
   resetV0WalletService,
@@ -226,6 +239,7 @@ export default defineComponent({
       failed: false,
       message: "",
       pairingSuccess: false,
+      walletIdWords: [] as string[],
       pairingWatchStop: null as (() => void) | null,
       pairingSuccessTimer: null as number | null,
     };
@@ -247,6 +261,7 @@ export default defineComponent({
     // Construct the store while Vue still owns the active component instance.
     useWalletStore();
     this.configured = useSyncRuntimeService().authority.load() !== null;
+    if (this.configured) void this.loadWalletId();
     const quickPair = this.$route.query.quick_pair;
     if (typeof quickPair === "string") void this.finishQuickPair(quickPair);
     if (this.$route.query.auto === "1" && typeof quickPair !== "string") {
@@ -256,6 +271,14 @@ export default defineComponent({
     }
   },
   methods: {
+    async loadWalletId() {
+      try {
+        const authority = await useSyncRuntimeService().exportAuthority();
+        this.walletIdWords = await deriveWalletIdWords(authority.sync_secret);
+      } catch {
+        this.walletIdWords = [];
+      }
+    },
     openScanner() {
       useCameraStore().showCamera();
     },
@@ -336,6 +359,7 @@ export default defineComponent({
         throw new Error("pairing confirmation could not be synchronized");
       }
       this.configured = true;
+      await this.loadWalletId();
       this.message = "Paired. This wallet is synchronized.";
       this.showPairingSuccess();
       await this.$router.replace({ path: "/settings/sync" });
@@ -394,6 +418,7 @@ export default defineComponent({
       });
     },
     showPairingSuccess() {
+      if (this.walletIdWords.length === 0) void this.loadWalletId();
       if (this.pairingSuccessTimer !== null) {
         window.clearTimeout(this.pairingSuccessTimer);
       }
@@ -502,6 +527,36 @@ export default defineComponent({
   width: min(calc(100vw - 56px), 960px) !important;
   max-width: 100% !important;
   height: auto !important;
+}
+
+.wallet-id {
+  display: grid;
+  gap: 6px;
+  border-left: 3px solid var(--sl-color-orange-500, #ff5c00);
+  padding: 10px 12px;
+  background: rgba(255, 157, 32, 0.06);
+}
+
+.wallet-id__label,
+.pairing-success__id > span {
+  color: #ff9d20;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.wallet-id strong,
+.pairing-success__id strong {
+  color: #fff;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+
+.wallet-id small {
+  color: #a9a9a9;
+  line-height: 1.4;
 }
 
 .overwrite-dialog {
@@ -625,6 +680,16 @@ export default defineComponent({
 .pairing-success > p:last-child {
   margin: 0;
   color: #b5b5b5;
+}
+
+.pairing-success__id {
+  display: grid;
+  gap: 6px;
+  max-width: 32rem;
+  margin-top: 8px;
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 157, 32, 0.45);
+  background: rgba(255, 157, 32, 0.08);
 }
 
 .pairing-success-enter-active,

@@ -112,6 +112,8 @@ describe("v0 visible UI contract", () => {
     expect(sync).toContain('data-pairing-action="cancel-overwrite"');
     expect(sync).toContain('data-pairing-action="save-local-backup"');
     expect(sync).toContain('data-pairing-action="overwrite-and-pair"');
+    expect(sync).toContain("data-wallet-id");
+    expect(sync).toContain("Compare these six words on both phones");
     expect(sync).toContain("showPairingQr");
     expect(sync).toContain("Tap the QR code to enlarge it");
     expect(sync).toContain("errorCorrectionLevel: 'L'");
