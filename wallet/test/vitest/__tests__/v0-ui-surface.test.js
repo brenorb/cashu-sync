@@ -96,12 +96,13 @@ describe("v0 visible UI contract", () => {
   it("wires accessible pairing and encrypted recovery actions", () => {
     const sync = template("src/pages/settings/SyncSettings.vue");
     const recovery = template("src/pages/settings/RecoverySettings.vue");
-    expect(sync).toMatch(/Create pairing request/i);
-    expect(sync).toMatch(/one scan/i);
-    expect(sync).toContain('data-pairing-action="finish"');
-    expect(sync).toContain('data-pairing-action="create-response"');
-    expect(sync).toContain('data-pairing-action="scan-request"');
-    expect(sync).toContain('data-pairing-action="scan-response"');
+    expect(sync).toMatch(/Create pairing QR/i);
+    expect(sync).toMatch(/Scan pairing QR/i);
+    expect(sync).not.toMatch(
+      /Advanced pairing|two-step|Create encrypted response/i
+    );
+    expect(sync).toContain('data-pairing-action="create-quick-pair"');
+    expect(sync).toContain('data-pairing-action="scan-quick-pair"');
     expect(recovery).toMatch(/encrypted recovery bundle/i);
     expect(recovery).toMatch(/Restore this wallet/i);
     expect(recovery).toContain('data-recovery-action="download"');

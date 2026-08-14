@@ -70,12 +70,11 @@ Open `http://127.0.0.1:8080` in browser profile A and browser profile B. Each fr
 
 ## 4. Pair profile B to profile A
 
-The normal path is one QR scan from the funded wallet. The QR is an encrypted, ten-minute bearer handoff; show it only to the phone you control. The old two-QR flow remains under **Advanced pairing** for higher-assurance transfers.
+The normal path is one QR scan from the funded wallet. The QR is an encrypted, ten-minute bearer handoff; show it only to the phone you control.
 
 1. In profile A, open **Settings → Sync devices → Pair a phone** and select **Create one-scan pairing QR**.
 2. Scan it with profile B's camera. The QR opens the wallet and imports the encrypted authority automatically.
 3. Confirm profile B says `Paired. This wallet is now synchronized.`
-4. For the advanced flow, **QR 1** is the request and **QR 2** is the encrypted response; both payloads remain available under **Advanced pairing**.
 
 If five minutes elapse, create a new QR 1. Pairing transfers full spend and sync authority, so only pair a wallet installation controlled by the same user.
 
@@ -145,7 +144,7 @@ A wrong passphrase, modified bundle, nonempty destination wallet, or unavailable
 
 These are the selectors used by the live browser acceptance test and are useful when diagnosing the manual flow:
 
-- pairing: `data-pairing-action="create-request"`, `create-response`, and `finish`;
+- pairing: `data-pairing-action="create-quick-pair"` and `scan-quick-pair`;
 - mint: `data-v0-action="mint-bolt11"`, `create-mint-quote`, and `claim-mint-quote`;
 - melt: `data-v0-action="melt-bolt11"`, `create-melt-quote`, and `pay-melt-quote`;
 - recovery: `data-recovery-action="download"` and `data-recovery-action="restore"`.
