@@ -37,7 +37,10 @@
             aria-label="Enlarge pairing QR code"
             @click="showPairingQr = true"
           >
-            <vue-qrcode :value="quickPairUrl" :options="{ width: 320 }" />
+            <vue-qrcode
+              :value="quickPairUrl"
+              :options="{ width: 360, errorCorrectionLevel: 'L', margin: 1 }"
+            />
           </button>
           <small class="pairing-qr-hint">Tap the QR code to enlarge it</small>
           <p class="sync-copy">
@@ -90,7 +93,7 @@
           <vue-qrcode
             v-if="quickPairUrl"
             :value="quickPairUrl"
-            :options="{ width: 720 }"
+            :options="{ width: 960, errorCorrectionLevel: 'L', margin: 1 }"
             aria-label="Enlarged pairing QR code"
           />
         </q-card-section>
@@ -280,7 +283,7 @@ export default defineComponent({
 
 .pairing-qr-large :deep(canvas) {
   display: block;
-  width: min(88vw, 720px);
+  width: min(96vw, 960px);
   height: auto;
 }
 

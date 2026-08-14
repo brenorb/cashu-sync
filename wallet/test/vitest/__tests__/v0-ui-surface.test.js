@@ -111,6 +111,8 @@ describe("v0 visible UI contract", () => {
     expect(sync).toContain('data-pairing-action="back-wallet"');
     expect(sync).toContain("showPairingQr");
     expect(sync).toContain("Tap the QR code to enlarge it");
+    expect(sync).toContain("errorCorrectionLevel: 'L'");
+    expect(sync).toContain("margin: 1");
     expect(recovery).toMatch(/encrypted recovery bundle/i);
     expect(recovery).toMatch(/Restore this wallet/i);
     expect(recovery).toContain('data-recovery-action="download"');
