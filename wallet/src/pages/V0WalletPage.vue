@@ -366,6 +366,9 @@ export default defineComponent({
         }
       };
       document.addEventListener("visibilitychange", this.visibilityHandler);
+      useV0WalletService().startLiveSync(() => {
+        this.syncMessage = "Wallet synchronized.";
+      });
     } catch (error) {
       this.walletReady = false;
       this.syncMessage =
@@ -381,6 +384,7 @@ export default defineComponent({
     }
   },
   beforeUnmount() {
+    useV0WalletService().stopLiveSync();
     if (this.visibilityHandler) {
       document.removeEventListener("visibilitychange", this.visibilityHandler);
     }

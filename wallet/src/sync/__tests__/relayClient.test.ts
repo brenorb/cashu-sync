@@ -142,6 +142,37 @@ describe("SyncRelayClient", () => {
     expect(socket.closed).toBe(true);
   });
 
+  it("keeps a live subscription and forwards accepted remote events until stopped", () => {
+    const { client, sockets } = fixture();
+    const received: Event[] = [];
+    const stop = client.watchCurrent((event) => received.push(event));
+    const socket = sockets[0];
+    socket.open();
+    authenticate(socket);
+
+    const request = sentEnvelope(socket, 3);
+    expect(request).toEqual([
+      "REQ",
+      expect.any(String),
+      {
+        authors: [getSyncPublicKey(secret)],
+        kinds: [SYNC_EVENT_KIND_V0],
+        "#d": [SYNC_EVENT_D_TAG_V0],
+        limit: 1,
+      },
+    ]);
+    const event = syncEvent();
+    socket.receive(["EVENT", request[1], event]);
+    expect(received).toEqual([JSON.parse(JSON.stringify(event))]);
+    expect(socket.closed).toBe(false);
+
+    stop();
+    expect(socket.sent.map((raw) => JSON.parse(raw)[0])).toContain("CLOSE");
+    expect(socket.closed).toBe(true);
+    socket.receive(["EVENT", request[1], event]);
+    expect(received).toHaveLength(1);
+  });
+
   it("returns null on matching EOSE and rejects a wrong schema envelope", async () => {
     const emptyFixture = fixture();
     const emptyQuery = emptyFixture.client.queryCurrent();

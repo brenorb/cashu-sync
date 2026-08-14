@@ -12,6 +12,7 @@ export interface SnapshotRelay {
   queryCurrent(): Promise<Event | null>;
   queryRecent(limit: number): Promise<Event[]>;
   publish(event: Event): Promise<RelayPublishResult>;
+  watchCurrent?(onEvent: (event: Event) => void): () => void;
 }
 
 export interface SnapshotRepository {
@@ -138,6 +139,10 @@ export class SnapshotSyncCoordinator {
     return this.serialize(() =>
       this.publishUnlocked(candidate, options.applyAccepted ?? true)
     );
+  }
+
+  watchCurrent(onEvent: (event: Event) => void): () => void {
+    return this.relay.watchCurrent?.(onEvent) ?? (() => undefined);
   }
 
   /** Confirms a previously published exact candidate without republishing it. */

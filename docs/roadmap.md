@@ -25,7 +25,7 @@ This file separates the implemented v0 boundary from later hardening and explora
 - Automated backup/restore drills and production monitoring.
 - Formal snapshot schema fixtures for a future CLI.
 - Production Pages build-time endpoint configuration and an operator workflow for enrolling a newly generated sync pubkey in the relay allowlist.
-- Dedicated relay-head subscription and optional NUT-17 notification handling; startup, foreground, and pre-operation pulls remain the v0 correctness path.
+- Optional NUT-17 notification handling; the v0 wallet now keeps a relay-head WebSocket subscription while open, with startup, reconnect, foreground, and pre-operation pulls as the correctness path.
 - User-facing mnemonic-only NUT-13/NUT-09/NUT-07 recovery and a deliberate standalone mnemonic export.
 - Camera scanning for the two displayed pairing QRs; the v0 PWA currently imports their canonical payloads through paste fields.
 

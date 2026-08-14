@@ -156,7 +156,7 @@ Snapshot application occurs in one local IndexedDB transaction. The client rejec
 
 After applying a snapshot, the wallet resumes any pending operation through Nutshell quote lookup and exact prepared-output recovery before starting another operation.
 
-V0 correctness uses explicit relay pulls and REST quote/proof reconciliation. Dedicated relay-head subscriptions and NUT-17 notification handling are deferred latency optimizations, not correctness dependencies.
+V0 correctness uses explicit relay pulls and REST quote/proof reconciliation. While the wallet is open, it also keeps an authenticated relay-head subscription to trigger the same serialized pull automatically; reconnects and foreground/pre-operation pulls remain the correctness fallback. NUT-17 notification handling is still deferred.
 
 ## 9. Pending-operation journal
 

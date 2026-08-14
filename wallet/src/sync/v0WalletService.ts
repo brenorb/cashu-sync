@@ -54,6 +54,7 @@ export class V0WalletService {
   private coordinatorSession: RuntimeSession | null = null;
   private wallet: Wallet | null = null;
   private queue: Promise<void> = Promise.resolve();
+  private liveSyncStop: (() => void) | null = null;
 
   constructor(
     private readonly runtimeService: SyncRuntimeService,
@@ -63,6 +64,23 @@ export class V0WalletService {
 
   syncNow(): Promise<void> {
     return this.serialize(() => this.syncNowUnlocked());
+  }
+
+  startLiveSync(onSynced?: () => void): void {
+    this.stopLiveSync();
+    const session = this.requireSession();
+    this.liveSyncStop = session.sync.watchCurrent(() => {
+      void this.syncNow()
+        .then(() => onSynced?.())
+        .catch(() => {
+          // REST/visibility sync remains the fallback when the relay is busy.
+        });
+    });
+  }
+
+  stopLiveSync(): void {
+    this.liveSyncStop?.();
+    this.liveSyncStop = null;
   }
 
   private async syncNowUnlocked(): Promise<void> {
@@ -459,6 +477,7 @@ export function useV0WalletService(): V0WalletService {
 }
 
 export function resetV0WalletService(): void {
+  browserWalletService?.stopLiveSync();
   browserWalletService = null;
 }
 

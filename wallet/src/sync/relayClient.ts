@@ -1,9 +1,4 @@
-import {
-  finalizeEvent,
-  nip42,
-  utils,
-  type Event,
-} from "nostr-tools";
+import { finalizeEvent, nip42, utils, type Event } from "nostr-tools";
 import { getSyncPublicKey, verifyEventFresh } from "src/sync/syncCrypto";
 import { SYNC_EVENT_D_TAG_V0, SYNC_EVENT_KIND_V0 } from "src/sync/types";
 
@@ -129,6 +124,185 @@ export class SyncRelayClient {
       );
     }
     return this.run({ type: "publish", event }) as Promise<RelayPublishResult>;
+  }
+
+  /** Keeps an authenticated subscription open for remote wallet updates. */
+  watchCurrent(onEvent: (event: Event) => void): () => void {
+    let stopped = false;
+    let socket: RelayWebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let connectionTimer: ReturnType<typeof setTimeout> | null = null;
+    let subscriptionId: string | null = null;
+    let authEventId: string | null = null;
+    let authenticated = false;
+
+    const clearConnectionTimer = (): void => {
+      if (connectionTimer !== null) {
+        clearTimeout(connectionTimer);
+        connectionTimer = null;
+      }
+    };
+
+    const scheduleReconnect = (): void => {
+      if (stopped || reconnectTimer !== null) return;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, 1_000);
+    };
+
+    const closeConnection = (): void => {
+      clearConnectionTimer();
+      subscriptionId = null;
+      authEventId = null;
+      authenticated = false;
+      if (socket === null) return;
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      try {
+        socket.close();
+      } catch {
+        // The watcher will reconnect if it was not explicitly stopped.
+      }
+      socket = null;
+    };
+
+    const reconnect = (): void => {
+      if (stopped) return;
+      closeConnection();
+      scheduleReconnect();
+    };
+
+    const send = (envelope: unknown[]): boolean => {
+      try {
+        if (socket === null || socket.readyState !== 1) throw new Error();
+        socket.send(JSON.stringify(envelope));
+        return true;
+      } catch {
+        reconnect();
+        return false;
+      }
+    };
+
+    const request = (): void => {
+      subscriptionId = this.nextSubscriptionId();
+      send([
+        "REQ",
+        subscriptionId,
+        {
+          authors: [this.syncPublicKey],
+          kinds: [SYNC_EVENT_KIND_V0],
+          "#d": [SYNC_EVENT_D_TAG_V0],
+          limit: 1,
+        },
+      ]);
+    };
+
+    const connect = (): void => {
+      if (stopped || socket !== null) return;
+      try {
+        socket = this.webSocketFactory(this.relayUrl);
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+      authenticated = false;
+      authEventId = null;
+      subscriptionId = null;
+      const currentSocket = socket;
+      currentSocket.onopen = request;
+      currentSocket.onclose = reconnect;
+      currentSocket.onerror = reconnect;
+      currentSocket.onmessage = ({ data }) => {
+        if (stopped || currentSocket !== socket || typeof data !== "string") {
+          return;
+        }
+        let envelope: unknown;
+        try {
+          envelope = JSON.parse(data);
+        } catch {
+          return;
+        }
+        if (!Array.isArray(envelope) || typeof envelope[0] !== "string") {
+          return;
+        }
+        switch (envelope[0]) {
+          case "AUTH": {
+            if (authenticated || authEventId !== null) return;
+            const challenge = envelope[1];
+            if (typeof challenge !== "string" || challenge.length === 0) {
+              reconnect();
+              return;
+            }
+            try {
+              const authEvent = finalizeEvent(
+                nip42.makeAuthEvent(this.relayUrl, challenge),
+                this.syncSecret
+              );
+              authEventId = authEvent.id;
+              send(["AUTH", authEvent]);
+            } catch {
+              reconnect();
+            }
+            return;
+          }
+          case "OK": {
+            const eventId = envelope[1];
+            const ok = envelope[2];
+            if (
+              authEventId === null ||
+              eventId !== authEventId ||
+              typeof ok !== "boolean"
+            ) {
+              return;
+            }
+            authEventId = null;
+            if (!ok) {
+              reconnect();
+              return;
+            }
+            clearConnectionTimer();
+            authenticated = true;
+            if (subscriptionId !== null) {
+              send(["CLOSE", subscriptionId]);
+            }
+            request();
+            return;
+          }
+          case "EVENT": {
+            if (
+              !authenticated ||
+              subscriptionId === null ||
+              envelope[1] !== subscriptionId ||
+              !isExactSyncEvent(envelope[2], this.syncPublicKey)
+            ) {
+              return;
+            }
+            onEvent(envelope[2]);
+            return;
+          }
+          case "CLOSED": {
+            const reason = typeof envelope[2] === "string" ? envelope[2] : "";
+            if (!authenticated && reason.startsWith("auth-required:")) return;
+            reconnect();
+            return;
+          }
+        }
+      };
+      connectionTimer = setTimeout(reconnect, this.timeoutMs);
+    };
+
+    const stop = (): void => {
+      stopped = true;
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+      closeConnection();
+    };
+
+    connect();
+    return stop;
   }
 
   private run(operation: Operation): Promise<OperationResult> {
@@ -317,9 +491,7 @@ export class SyncRelayClient {
               authenticated &&
               envelope[1] === activeSubscriptionId
             ) {
-              finish(
-                operation.type === "query-recent" ? recentEvents : null
-              );
+              finish(operation.type === "query-recent" ? recentEvents : null);
             }
             return;
           case "CLOSED": {
