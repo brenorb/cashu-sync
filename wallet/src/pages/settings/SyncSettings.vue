@@ -17,9 +17,8 @@
           }}
         </h2>
         <p class="sync-copy">
-          Pair another wallet you control by exchanging two QR codes. The
-          request contains no secret; the response is encrypted for that one
-          request and expires after five minutes.
+          Pair a phone with one scan. The handoff is encrypted, expires after
+          ten minutes, and should only be shown to a device you control.
         </p>
       </q-item>
     </SettingsSection>
@@ -88,8 +87,35 @@
 
     <SettingsSection
       v-if="configured"
-      title="Existing device"
-      caption="Scan or paste the new device request here."
+      title="Pair a phone"
+      caption="One scan opens the wallet and imports this authority."
+    >
+      <q-item class="column items-stretch q-pa-lg q-gutter-md">
+        <q-btn
+          data-pairing-action="create-quick-pair"
+          color="primary"
+          no-caps
+          unelevated
+          label="Create one-scan pairing QR"
+          :loading="busy"
+          @click="createQuickPair"
+        />
+        <template v-if="quickPairUrl">
+          <div class="pairing-qr" aria-label="One-scan pairing QR code">
+            <vue-qrcode :value="quickPairUrl" :options="{ width: 260 }" />
+          </div>
+          <p class="sync-copy">
+            Scan this once with the new phone. Anyone who scans it can control
+            this demo wallet, so do not post it publicly.
+          </p>
+        </template>
+      </q-item>
+    </SettingsSection>
+
+    <SettingsSection
+      v-if="configured"
+      title="Advanced pairing"
+      caption="Two-step challenge flow for higher-assurance transfers."
     >
       <q-item class="column items-stretch q-pa-lg q-gutter-md">
         <q-input
@@ -165,6 +191,7 @@ import {
   resetV0WalletService,
   useV0WalletService,
 } from "src/sync/v0WalletService";
+import { consumeQuickPairV0, createQuickPairV0 } from "src/sync/quickPair";
 import { useWalletStore } from "src/stores/wallet";
 import { useCameraStore } from "src/stores/camera";
 import QrcodeReader from "src/components/QrcodeReader.vue";
@@ -180,6 +207,7 @@ export default defineComponent({
       pairingRequestInput: "",
       pairingResponse: "",
       pairingResponseInput: "",
+      quickPairPayload: "",
       busy: false,
       failed: false,
       message: "",
@@ -198,6 +226,16 @@ export default defineComponent({
         window.location.href
       ).href;
     },
+    quickPairUrl(): string {
+      if (!this.quickPairPayload) return "";
+      return new URL(
+        this.$router.resolve({
+          path: "/settings/sync",
+          query: { quick_pair: this.quickPairPayload },
+        }).href,
+        window.location.href
+      ).href;
+    },
   },
   created() {
     // The wallet store captures vue-i18n during construction. Create it while
@@ -207,6 +245,10 @@ export default defineComponent({
     const request = this.$route.query.request;
     if (typeof request === "string") this.pairingRequestInput = request;
     if (this.$route.query.auto === "1") this.createRequest();
+    const quickPair = this.$route.query.quick_pair;
+    if (typeof quickPair === "string") {
+      void this.finishQuickPair(quickPair);
+    }
   },
   beforeUnmount() {
     this.session?.destroy();
@@ -261,6 +303,30 @@ export default defineComponent({
           { allowLoopbackHttp: runtime.allowLoopbackHttp }
         );
         this.message = "Encrypted response ready. Return it to the new wallet.";
+      });
+    },
+    async createQuickPair() {
+      await this.run(async () => {
+        const runtime = useSyncRuntimeService();
+        this.quickPairPayload = await createQuickPairV0(
+          await runtime.exportAuthority(),
+          { allowLoopbackHttp: runtime.allowLoopbackHttp }
+        );
+        this.message = "One-scan pairing QR ready. It expires in ten minutes.";
+      });
+    },
+    async finishQuickPair(payload: string) {
+      await this.run(async () => {
+        const runtime = useSyncRuntimeService();
+        const authority = await consumeQuickPairV0(payload, {
+          allowLoopbackHttp: runtime.allowLoopbackHttp,
+        });
+        await runtime.replaceEmptyAndStart(authority);
+        resetV0WalletService();
+        await useV0WalletService().resume();
+        this.configured = true;
+        this.message = "Paired. This wallet is now synchronized.";
+        await this.$router.replace({ path: "/settings/sync" });
       });
     },
     async finishPairing() {
