@@ -102,6 +102,28 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+    <transition name="pairing-success">
+      <section
+        v-if="pairingSuccess"
+        class="pairing-success"
+        role="status"
+        aria-live="assertive"
+        aria-label="Wallets paired successfully"
+      >
+        <div class="pairing-success__signal" aria-hidden="true">
+          <span
+            class="pairing-success__ring pairing-success__ring--outer"
+          ></span>
+          <span
+            class="pairing-success__ring pairing-success__ring--inner"
+          ></span>
+          <span class="pairing-success__check">✓</span>
+        </div>
+        <p class="pairing-success__eyebrow">PAIRING COMPLETE</p>
+        <h2>Wallets paired</h2>
+        <p>Both phones now share the same balance.</p>
+      </section>
+    </transition>
   </SettingsPageShell>
 </template>
 
@@ -137,6 +159,9 @@ export default defineComponent({
       busy: false,
       failed: false,
       message: "",
+      pairingSuccess: false,
+      pairingWatchStop: null as (() => void) | null,
+      pairingSuccessTimer: null as number | null,
     };
   },
   computed: {
@@ -187,6 +212,17 @@ export default defineComponent({
     async createQuickPair() {
       await this.run(async () => {
         const runtime = useSyncRuntimeService();
+        const session = runtime.runtime.currentSession();
+        if (session === null) throw new Error("wallet sync is not ready");
+        const baseline = await session.repository.exportSnapshot();
+        this.stopPairingWatcher();
+        this.pairingWatchStop = session.sync.watchCurrent((event) => {
+          if (event.id === baseline.previous_event_id) return;
+          this.stopPairingWatcher();
+          void useV0WalletService()
+            .syncNow()
+            .then(() => this.showPairingSuccess());
+        });
         this.quickPairPayload = await createQuickPairV0(
           await runtime.exportAuthority(),
           { allowLoopbackHttp: runtime.allowLoopbackHttp }
@@ -202,11 +238,38 @@ export default defineComponent({
         });
         await runtime.replaceEmptyAndStart(authority);
         resetV0WalletService();
-        await useV0WalletService().resume();
+        const result = await useV0WalletService().resume();
+        if (result.status !== "idle" && result.status !== "completed") {
+          throw new Error(`Pairing requires recovery: ${result.status}`);
+        }
+        const session = runtime.runtime.currentSession();
+        if (session === null) throw new Error("wallet sync did not start");
+        const acknowledgement = await session.sync.publishCurrent();
+        if (acknowledgement.status !== "accepted") {
+          throw new Error("pairing confirmation could not be synchronized");
+        }
         this.configured = true;
         this.message = "Paired. This wallet is synchronized.";
+        this.showPairingSuccess();
         await this.$router.replace({ path: "/settings/sync" });
       });
+    },
+    showPairingSuccess() {
+      if (this.pairingSuccessTimer !== null) {
+        window.clearTimeout(this.pairingSuccessTimer);
+      }
+      this.pairingSuccess = true;
+      this.pairingSuccessTimer = window.setTimeout(() => {
+        this.pairingSuccess = false;
+        this.pairingSuccessTimer = null;
+        if (this.$route.path === "/settings/sync") {
+          void this.$router.replace("/wallet");
+        }
+      }, 2800);
+    },
+    stopPairingWatcher() {
+      this.pairingWatchStop?.();
+      this.pairingWatchStop = null;
     },
     async run(operation: () => Promise<void>) {
       this.busy = true;
@@ -222,6 +285,12 @@ export default defineComponent({
         this.busy = false;
       }
     },
+  },
+  beforeUnmount() {
+    this.stopPairingWatcher();
+    if (this.pairingSuccessTimer !== null) {
+      window.clearTimeout(this.pairingSuccessTimer);
+    }
   },
 });
 </script>
@@ -306,5 +375,131 @@ export default defineComponent({
 .pairing-message.error {
   border-color: #ff8068;
   color: #ff8068;
+}
+
+.pairing-success {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 32px;
+  color: #fff;
+  text-align: center;
+  background: radial-gradient(
+      circle at 50% 42%,
+      rgba(255, 146, 0, 0.18),
+      transparent 32%
+    ),
+    rgba(9, 9, 9, 0.97);
+}
+
+.pairing-success__signal {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  margin-bottom: 16px;
+}
+
+.pairing-success__ring,
+.pairing-success__check {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+}
+
+.pairing-success__ring {
+  border: 1px solid rgba(255, 157, 32, 0.7);
+  border-radius: 50%;
+  animation: pairing-pulse 2.2s ease-out both;
+}
+
+.pairing-success__ring--outer {
+  width: 132px;
+  height: 132px;
+}
+
+.pairing-success__ring--inner {
+  width: 92px;
+  height: 92px;
+  border-color: rgba(255, 255, 255, 0.35);
+  animation-delay: 120ms;
+}
+
+.pairing-success__check {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  color: #090909;
+  font-size: 2rem;
+  font-weight: 700;
+  background: #ff9d20;
+  border-radius: 50%;
+  box-shadow: 0 0 0 8px rgba(255, 157, 32, 0.12);
+  animation: pairing-check 500ms 260ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.pairing-success__eyebrow {
+  margin: 0;
+  color: #ff9d20;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.pairing-success h2 {
+  margin: 0;
+  font-size: clamp(2rem, 9vw, 3rem);
+  line-height: 1;
+}
+
+.pairing-success > p:last-child {
+  margin: 0;
+  color: #b5b5b5;
+}
+
+.pairing-success-enter-active,
+.pairing-success-leave-active {
+  transition: opacity 240ms ease;
+}
+
+.pairing-success-enter,
+.pairing-success-leave-to {
+  opacity: 0;
+}
+
+@keyframes pairing-pulse {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.56);
+  }
+  28% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes pairing-check {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3) rotate(-12deg);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pairing-success__ring,
+  .pairing-success__check {
+    animation: none;
+  }
 }
 </style>
