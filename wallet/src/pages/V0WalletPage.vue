@@ -45,7 +45,13 @@
       role="status"
       aria-live="polite"
     >
-      {{ syncMessage }}
+      <q-spinner-dots
+        v-if="syncPending"
+        size="1.1em"
+        color="primary"
+        aria-label="Synchronizing wallet"
+      />
+      <span>{{ syncMessage }}</span>
     </p>
 
     <q-dialog v-model="showMintDialog">
@@ -214,6 +220,7 @@ export default defineComponent({
       dialogBusy: false,
       dialogError: "",
       syncMessage: "Starting synchronized wallet…",
+      syncPending: true,
       walletReady: false,
       visibilityHandler: null as (() => void) | null,
     };
@@ -321,10 +328,12 @@ export default defineComponent({
     try {
       const boot = await useSyncRuntimeService().boot(wallet.mnemonic);
       if (boot.sync.status === "unconfigured") {
+        this.syncPending = false;
         this.syncMessage = "Pair or restore this wallet to enable sync.";
         return;
       }
       const resumed = await useV0WalletService().resume();
+      this.syncPending = false;
       this.syncMessage =
         resumed.status === "idle"
           ? "Wallet synchronized."
@@ -346,6 +355,7 @@ export default defineComponent({
         this.syncMessage = "Wallet synchronized.";
       });
     } catch (error) {
+      this.syncPending = false;
       this.walletReady = false;
       this.syncMessage =
         error instanceof Error ? error.message : "Wallet startup failed";
@@ -456,6 +466,9 @@ export default defineComponent({
 }
 
 .v0-runtime-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   border-left: 3px solid var(--sl-color-orange-500, #ff5c00);
   padding: 10px 12px;

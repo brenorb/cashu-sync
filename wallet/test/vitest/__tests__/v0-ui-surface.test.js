@@ -73,6 +73,8 @@ describe("v0 visible UI contract", () => {
   it("opens the wallet directly with a quiet brand header", () => {
     const wallet = template("src/pages/V0WalletPage.vue");
     expect(wallet).toContain("SILENT LINK WALLET");
+    expect(wallet).toContain("Synchronizing wallet");
+    expect(wallet).toContain("syncPending");
     expect(wallet).not.toContain("Your money, in sync.");
     expect(wallet).not.toContain("One mint. USD accounting");
     expect(wallet).not.toContain("this.showMintDialog = true;");

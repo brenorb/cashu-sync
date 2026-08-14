@@ -30,7 +30,13 @@ test.describe("automatic one-QR pairing", () => {
     const existing = devices.devices.deviceA.page;
     const joining = devices.devices.deviceB.page;
 
-    await existing.goto(`${server.walletUrl}#/settings/sync`, {
+    await existing.goto(`${server.walletUrl}#/wallet`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(existing.getByText("Wallet synchronized.")).toBeVisible({
+      timeout: 20_000,
+    });
+    await existing.goto(`${server.baseUrl}#/settings/sync`, {
       waitUntil: "domcontentloaded",
     });
     await expect(existing.getByText("Sync devices")).toBeVisible();
@@ -52,10 +58,10 @@ test.describe("automatic one-QR pairing", () => {
     ).toBeVisible({ timeout: 20_000 });
     await expect(joining.getByText("PAIRING COMPLETE")).toBeVisible();
 
-    await joining.goto(`${server.walletUrl}#/wallet`, {
+    await joining.goto(`${server.baseUrl}#/wallet`, {
       waitUntil: "domcontentloaded",
     });
-    await existing.goto(`${server.walletUrl}#/wallet`, {
+    await existing.goto(`${server.baseUrl}#/wallet`, {
       waitUntil: "domcontentloaded",
     });
     const joiningBalance = joining.locator(
