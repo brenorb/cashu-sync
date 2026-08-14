@@ -23,10 +23,11 @@ C4Context
 
 One user controls paired Silent Link PWA wallet installations. Silent Link owns and operates the purpose-built sync relay, so both the PWA and relay are inside the Cashu Sync system boundary. A future CLI is roadmap exploration rather than a v0 client.
 
-The wallet has two network relationships:
+The wallet has three network relationships:
 
 - **USD Nutshell mint:** the monetary authority and only recipient of plaintext proof-bearing Bolt11 mint/melt requests.
 - **Silent Link-operated relay:** the purpose-built synchronization coordinator, which sees signed encrypted Nostr envelopes but cannot decrypt wallet state.
+- **Pairing relay:** a separate short-lived Nostr transport for one-QR bootstrap messages; it never receives the sync secret and does not provide CAS storage.
 
 V0 supports Bolt11 USD mint, melt, balance, and accounting only. It has no peer-to-peer Cashu or peer-payment relationship.
 

@@ -19,7 +19,7 @@ Cashu Sync lets one user control the same Silent Link wallet from paired PWA ins
 ## V0 in one minute
 
 1. A configured Silent Link PWA creates a twelve-word Cashu master seed and a random dedicated sync secret.
-2. A joining PWA displays QR 1, an ephemeral request with no wallet secret. The existing PWA returns QR 2, an encrypted full-authority response. This two-QR exchange does not use a peer-payment or relay transport.
+2. An existing PWA displays one QR containing only an ephemeral key, challenge, pairing ID, short expiry, and the separate pairing relay URL. The new PWA scans it once; NIP-17/NIP-59 messages exchange the encrypted authority and ACK automatically.
 3. Paired wallets communicate directly with one configured USD [Nutshell](https://github.com/cashubtc/nutshell) mint through Bolt11 quote, mint, melt, proof-state, and operation-recovery APIs.
 4. Wallets sign and NIP-44-encrypt a complete revisioned snapshot locally, then publish it to the Silent Link relay.
 5. The relay stores opaque events and atomically accepts a new snapshot only when its `prev` tag names the current head.

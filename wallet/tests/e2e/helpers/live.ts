@@ -8,11 +8,13 @@ export type LiveServiceStatus = {
   ok: boolean;
   mint: ServiceProbe;
   relay: ServiceProbe;
+  pairingRelay: ServiceProbe;
   message: string;
 };
 
 const DEFAULT_MINT_URL = "http://127.0.0.1:3338";
 const DEFAULT_RELAY_URL = "ws://127.0.0.1:3334";
+const DEFAULT_PAIRING_RELAY_URL = "ws://127.0.0.1:3335";
 const PROBE_TIMEOUT_MS = 4_000;
 
 function supportsBolt11Usd(nut: unknown): boolean {
@@ -135,28 +137,38 @@ async function probeRelay(rawUrl: string): Promise<ServiceProbe> {
 export async function checkLiveV0Services(options?: {
   mintUrl?: string;
   relayUrl?: string;
+  pairingRelayUrl?: string;
 }): Promise<LiveServiceStatus> {
   const mintUrl =
     options?.mintUrl || process.env.CASHU_SYNC_NUTSHELL_URL || DEFAULT_MINT_URL;
   const relayUrl =
     options?.relayUrl || process.env.CASHU_SYNC_RELAY_URL || DEFAULT_RELAY_URL;
-  const [mint, relay] = await Promise.all([
+  const pairingRelayUrl =
+    options?.pairingRelayUrl ||
+    process.env.CASHU_SYNC_PAIRING_RELAY_URL ||
+    DEFAULT_PAIRING_RELAY_URL;
+  const [mint, relay, pairingRelay] = await Promise.all([
     probeMint(mintUrl),
     probeRelay(relayUrl),
+    probeRelay(pairingRelayUrl),
   ]);
   const unavailable = [
     !mint.ok ? `Nutshell ${mint.url}: ${mint.detail}` : "",
     !relay.ok ? `relay ${relay.url}: ${relay.detail}` : "",
+    !pairingRelay.ok
+      ? `pairing relay ${pairingRelay.url}: ${pairingRelay.detail}`
+      : "",
   ].filter(Boolean);
   const ok = unavailable.length === 0;
   return {
     ok,
     mint,
     relay,
+    pairingRelay,
     message: ok
       ? `Live v0 services ready: ${mint.detail}; ${relay.detail}`
       : `Live v0 services unavailable. ${unavailable.join(
           "; "
-        )}. Start integration/nutshell/nutshell.sh and the Go relay, or set CASHU_SYNC_NUTSHELL_URL/CASHU_SYNC_RELAY_URL.`,
+        )}. Start Nutshell, the Go sync relay, and the Go pairing relay, or set CASHU_SYNC_NUTSHELL_URL/CASHU_SYNC_RELAY_URL/CASHU_SYNC_PAIRING_RELAY_URL.`,
   };
 }

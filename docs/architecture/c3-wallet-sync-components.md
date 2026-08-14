@@ -9,7 +9,7 @@ C4Component
   title C3 Components - One-user wallet pairing and synchronization
 
   Container_Boundary(walletClient, "Silent Link PWA Wallet") {
-    Component(pairingService, "Two-QR Pairing Service", "Application service", "Transfers wallet authority end to end")
+    Component(pairingService, "Automatic Pairing Service", "Application service", "Transfers wallet authority after one public QR scan")
     Component(syncCoordinator, "Sync Coordinator", "Application service", "Gates operations on fetch, reconcile, and CAS")
     Component(snapshotCodec, "Snapshot Codec", "Versioned TypeScript", "Validates and serializes the minimal wallet state")
     Component(syncCrypto, "Sync Crypto", "nostr-tools / NIP-44 v2", "Encrypts, signs, verifies, and decrypts snapshots")
@@ -17,10 +17,12 @@ C4Component
   }
 
   Container_Ext(syncRelay, "Silent Link-operated CAS Nostr Relay", "Go / Khatru", "Stores opaque snapshot revisions")
+  Container_Ext(pairingRelay, "Separate Pairing Nostr Relay", "Go / Khatru", "Stores short-lived gift-wrap messages")
   ContainerDb_Ext(localStore, "Local Wallet Store", "IndexedDB", "Device-local state and crash journal")
   System_Ext(nutshellMint, "USD Nutshell Mint", "Cashu mint", "Authoritative Bolt11 quotes and proof states")
 
   Rel(pairingService, syncCrypto, "Encrypts and verifies pairing payloads", "Cryptographic API")
+  Rel(pairingService, pairingRelay, "Exchanges NIP-17/NIP-59 gift wraps", "Nostr over WSS")
   Rel(pairingService, syncCoordinator, "Starts initial synchronization", "In-process call")
   Rel(syncCoordinator, syncRelay, "Fetches head and publishes conditional child", "Nostr over WSS")
   Rel(syncCoordinator, syncCrypto, "Creates or decrypts signed snapshot events", "Typed API")
@@ -36,7 +38,7 @@ C4Component
 
 ### Pairing Service
 
-For one user controlling paired PWA wallets, QR 1 carries an ephemeral key, challenge, and five-minute expiry without wallet secrets. After explicit approval, QR 2 carries the mnemonic, random sync secret, authority mint, relay URL, schema, and current head encrypted to that request. Local testing may copy the text rendered below each QR. V0 has no deeplink pairing transport and no peer-to-peer payment path.
+For one user controlling paired PWA wallets, one QR carries only an ephemeral request key, pairing ID, challenge, three-minute expiry, and separate pairing-relay URL. The new wallet automatically sends a NIP-17/NIP-59 request; the authority travels only inside a NIP-44 encrypted response and the new wallet ACKs after import and sync. V0 has no peer-to-peer payment path.
 
 ### Sync Coordinator
 

@@ -7,7 +7,7 @@ The v0 product profile is intentionally fixed:
 - exactly one configured authority mint;
 - USD accounting;
 - Bolt11 mint and melt only;
-- two-QR full-authority pairing;
+- one-QR automatic full-authority pairing through a separate pairing relay;
 - encrypted snapshot synchronization through the Silent Link-operated relay;
 - passphrase-encrypted full-recovery bundle;
 - no peer-to-peer Cashu, token import/export, alternate payment rails, mint switching, or multi-mint behavior.
@@ -22,6 +22,7 @@ Node.js 22.4 or later is required.
 npm ci
 CASHU_SYNC_MINT_URL=https://mint.example.com \
   CASHU_SYNC_RELAY_URL=wss://sync.example.com \
+  CASHU_SYNC_PAIRING_RELAY_URL=wss://pairing.example.com \
   npm run dev
 ```
 

@@ -47,6 +47,16 @@ curl -fsS http://127.0.0.1:3334/healthz
 
 The expected body is `ok`. Open admission is intentionally restricted to loopback and is only for this local test. Production uses TLS/WSS and an allowlist.
 
+In terminal 2, start the separate pairing relay and leave it running:
+
+```sh
+cd relay
+CASHU_SYNC_PAIRING_LISTEN_ADDR=127.0.0.1:3335 \
+  go run ./cmd/cashu-sync-pairing-relay
+```
+
+It stores only short-lived encrypted kind-1059 gift wraps and has no sync-key authentication.
+
 ## 3. Build and serve the configured wallet PWA
 
 In terminal 3:
@@ -57,6 +67,7 @@ npm ci
 PUBLIC_PATH=/ \
   CASHU_SYNC_MINT_URL=http://127.0.0.1:3338 \
   CASHU_SYNC_RELAY_URL=ws://127.0.0.1:3334 \
+  CASHU_SYNC_PAIRING_RELAY_URL=ws://127.0.0.1:3335 \
   CASHU_SYNC_ALLOW_INSECURE_LOOPBACK=true \
   npm run build:pwa
 python3 -m http.server 8080 --bind 127.0.0.1 --directory dist/pwa
@@ -70,13 +81,13 @@ Open `http://127.0.0.1:8080` in browser profile A and browser profile B. Each fr
 
 ## 4. Pair profile B to profile A
 
-The normal path is one QR scan from the funded wallet. The QR is an encrypted, ten-minute bearer handoff; show it only to the phone you control.
+The normal path is one QR scan from the funded wallet. The QR is public rendezvous metadata only; authority transfer happens automatically through the separate pairing relay.
 
-1. In profile A, open **Settings → Sync devices → Pair a phone** and select **Create one-scan pairing QR**.
-2. Scan it with profile B's camera. The QR opens the wallet and imports the encrypted authority automatically.
-3. Confirm profile B says `Paired. This wallet is now synchronized.`
+1. In profile A, open **Settings → Sync devices** and select **Pair another phone**.
+2. Scan the single QR with profile B's camera. The wallet opens, exchanges encrypted messages, imports, syncs, and ACKs automatically.
+3. Confirm profile B says `Wallet pareada e sincronizada.`
 
-If five minutes elapse, create a new QR 1. Pairing transfers full spend and sync authority, so only pair a wallet installation controlled by the same user.
+If three minutes elapse, create a new QR. Pairing transfers full spend and sync authority, so only pair a wallet installation controlled by the same user.
 
 ## 5. Fund the wallet and verify cross-device sync
 
@@ -85,7 +96,7 @@ In profile A:
 1. Return to the wallet home page and select **Add balance**.
 2. Enter `10` in **Amount in USD** and select **Show payment invoice**.
 3. The local FakeWallet automatically settles its generated invoice. Select **Update balance**. If the quote has not changed to `PAID` yet, wait briefly and select it again.
-4. Confirm `Funds added and synchronized.`, a higher **Available balance**, and a **Funds added** row in **Accounting**. The funded handoff card now shows a web link and QR code. It opens the pairing screen on another browser; it does not put a seed or funds in the URL.
+4. Confirm `Funds added and synchronized.`, a higher **Available balance**, and a **Funds added** row in **Accounting**. Open **Settings → Sync devices → Pair another phone** to create the one-scan QR; it contains no seed, funds, or ciphertext.
 
 Bring profile B to the foreground and return to or reload the wallet home page. Startup and foreground resume pull the current encrypted head. Confirm profile B shows the same balance and accounting row. The wallets are not sending Cashu tokens to each other; both are displaying one synchronized wallet.
 
@@ -153,12 +164,12 @@ A wrong passphrase, modified bundle, nonempty destination wallet, or unavailable
 
 These are the selectors used by the live browser acceptance test and are useful when diagnosing the manual flow:
 
-- pairing: `data-pairing-action="create-quick-pair"` and `scan-quick-pair`;
+- pairing: `data-pairing-action="create-auto-pair"` and `scan-auto-pair`;
 - mint: `data-v0-action="mint-bolt11"`, `create-mint-quote`, and `claim-mint-quote`;
 - melt: `data-v0-action="melt-bolt11"`, `create-melt-quote`, and `pay-melt-quote`;
 - recovery: `data-recovery-action="download"` and `data-recovery-action="restore"`.
 
-The corresponding fields use `data-pairing-field`, `data-v0-field`, and `data-recovery-field`. The automated implementation of this tutorial is `wallet/tests/e2e/v0-live-wallet-flow.spec.ts`.
+The corresponding fields use `data-pairing-field`, `data-v0-field`, and `data-recovery-field`. The one-QR pairing acceptance test is `wallet/tests/e2e/auto-pairing.spec.ts`.
 
 ## Automated equivalent
 

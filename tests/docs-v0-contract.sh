@@ -37,12 +37,11 @@ for file in "$root_readme" "$overview" "$spec" "$tutorial" $architecture_files; 
   contains "$file" "Bolt11"
 done
 
-contains "$overview" "two-QR"
-contains "$root_readme" "two-QR"
+contains "$overview" "one QR"
+contains "$root_readme" "one-QR"
 contains "$root_readme" "no peer-to-peer"
-contains "$spec" "two-QR"
-contains "$spec" "QR 1"
-contains "$spec" "QR 2"
+contains "$spec" "one-QR"
+contains "$spec" "pairing relay"
 contains "$spec" "full-recovery bundle"
 contains "$spec" "compare-and-swap"
 contains "$spec" "no peer-to-peer"
@@ -54,17 +53,17 @@ contains "$tutorial" "CASHU_SYNC_RELAY_URL=ws://127.0.0.1:3334"
 contains "$tutorial" "npm run dev"
 contains "$tutorial" "npm run build:pwa"
 contains "$tutorial" "./integration/nutshell/nutshell.sh down"
-contains "$tutorial" "data-pairing-action=\"create-quick-pair\""
+contains "$tutorial" "CASHU_SYNC_PAIRING_RELAY_URL=ws://127.0.0.1:3335"
 contains "$tutorial" "data-v0-action=\"mint-bolt11\""
 contains "$tutorial" "data-v0-action=\"melt-bolt11\""
 contains "$tutorial" "data-recovery-action=\"restore\""
 contains "$tutorial" "GitHub Pages"
-contains "$wallet_readme" "two-QR"
+contains "$wallet_readme" "one-QR"
 contains "$wallet_readme" "no peer-to-peer"
 contains "$relay_readme" "operated by Silent Link"
 contains "$wallet_package" '"build:pwa": "quasar build -m pwa"'
 contains "$wallet_package" '"dev": "quasar dev"'
-contains "$sync_page" 'data-pairing-action="create-quick-pair"'
+contains "$sync_page" 'data-pairing-action="create-auto-pair"'
 contains "$wallet_page" 'data-v0-action="mint-bolt11"'
 contains "$wallet_page" 'data-v0-action="melt-bolt11"'
 contains "$recovery_page" 'data-recovery-action="restore"'

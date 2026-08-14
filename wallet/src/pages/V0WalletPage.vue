@@ -48,28 +48,6 @@
       {{ syncMessage }}
     </p>
 
-    <section
-      v-if="showFundedHandoff"
-      class="funded-handoff"
-      aria-labelledby="funded-title"
-    >
-      <p class="v0-eyebrow">Wallet ready</p>
-      <h2 id="funded-title">Your credits are yours.</h2>
-      <p>Scan once on your phone to open a wallet with the same balance.</p>
-      <vue-qrcode
-        :value="fundedWalletUrl"
-        :options="{ width: 180 }"
-        aria-label="Open funded wallet QR code"
-      />
-      <a :href="fundedWalletUrl" class="funded-link"
-        >Open paired wallet <span aria-hidden="true">→</span></a
-      >
-      <small
-        >The QR is encrypted and expires after ten minutes. Show it only to the
-        phone you control.</small
-      >
-    </section>
-
     <q-dialog v-model="showMintDialog">
       <q-card class="v0-dialog" data-v0-dialog="mint">
         <q-card-section class="v0-dialog__intro">
@@ -204,14 +182,12 @@
 <script lang="ts">
 import { defineComponent } from "vue";
 import { ChevronRight as ChevronRightIcon } from "lucide-vue-next";
-import VueQrcode from "@chenfengyuan/vue-qrcode";
 import V0BalanceCard from "src/components/V0BalanceCard.vue";
 import V0AccountingHistory from "src/components/V0AccountingHistory.vue";
 import { useWalletStore } from "src/stores/wallet";
 import { useMigrationsStore } from "src/stores/migrations";
 import { useDexieStore } from "src/stores/dexie";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
-import { createQuickPairV0 } from "src/sync/quickPair";
 import { requestSilentLinkTopupQuote } from "src/sync/topupService";
 import {
   useV0WalletService,
@@ -225,7 +201,6 @@ export default defineComponent({
     V0BalanceCard,
     V0AccountingHistory,
     ChevronRightIcon,
-    VueQrcode,
   },
   data() {
     return {
@@ -240,8 +215,6 @@ export default defineComponent({
       dialogError: "",
       syncMessage: "Starting synchronized wallet…",
       walletReady: false,
-      showFundedHandoff: false,
-      fundedWalletUrl: "",
       visibilityHandler: null as (() => void) | null,
     };
   },
@@ -279,19 +252,6 @@ export default defineComponent({
         this.syncMessage = "Credits bought and synchronized.";
         this.showMintDialog = false;
         this.mintQuote = null;
-        const runtime = useSyncRuntimeService();
-        const quickPair = await createQuickPairV0(
-          await runtime.exportAuthority(),
-          { allowLoopbackHttp: runtime.allowLoopbackHttp }
-        );
-        this.fundedWalletUrl = new URL(
-          this.$router.resolve({
-            path: "/settings/sync",
-            query: { quick_pair: quickPair },
-          }).href,
-          window.location.href
-        ).href;
-        this.showFundedHandoff = true;
       });
     },
     async createMeltQuote() {

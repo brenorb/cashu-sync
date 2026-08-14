@@ -72,14 +72,15 @@ Export requires a user-supplied passphrase and confirmation. The bundle is encry
 
 ## 5. Pairing
 
-Pairing grants full authority; v0 has no roles or revocation. It is a two-QR exchange between PWA installations controlled by one user, not a payment between users.
+Pairing grants full authority; v0 has no roles or revocation. It is a one-QR exchange between PWA installations controlled by one user, not a payment between users.
 
-1. On the joining wallet, the user creates QR 1: an ephemeral public key, random challenge, and five-minute expiry. It contains no wallet secret.
-2. On an existing wallet, the user imports QR 1's canonical payload and explicitly creates a response. The current PWA displays both QRs but uses the text fields below them for local copy/paste input; camera scanning is future UI work.
-3. The existing wallet creates QR 2: an end-to-end encrypted payload containing the Cashu mnemonic, sync secret, authority mint URL, relay URL, schema version, and current head ID, bound to QR 1's key and challenge.
-4. The joining wallet imports QR 2's canonical payload, validates and decrypts it locally, imports it only into an empty wallet, authenticates to the relay, fetches the current snapshot, and validates it.
-5. It resumes or reconciles a pending operation before enabling a new mint or melt.
-6. Both wallets delete ephemeral pairing material after completion or expiry.
+1. An existing wallet creates an ephemeral request key, random `pairing_id`, challenge, three-minute expiry, and a configurable pairing-relay URL. The QR contains only those public values.
+2. A new wallet scans the QR and automatically creates a fresh response key. It sends a NIP-17/NIP-59 gift-wrapped request to the separate pairing relay; it never uses the CAS relay before it has the sync secret.
+3. The existing wallet validates the exact challenge, pairing ID, request key, response key, and TTL, then sends the `AuthorityPayloadV0` inside a NIP-44 gift-wrapped response. The authority is never present in the QR, URL, logs, or relay plaintext.
+4. The new wallet decrypts and validates the authority, imports it only into an empty local wallet, pulls the encrypted snapshot from the CAS relay, resumes recovery, and sends an encrypted ACK automatically.
+5. Both wallets discard ephemeral keys. Duplicate, replayed, expired, tampered, or unavailable-relay messages fail closed.
+
+The pairing relay is intentionally separate from the authenticated CAS relay because a new wallet does not yet possess the shared sync secret. It stores only short-lived kind-1059 gift-wrap events and may be configured with `CASHU_SYNC_PAIRING_RELAY_URL`.
 
 A paired wallet may pair another wallet because all v0 wallets have equal authority.
 

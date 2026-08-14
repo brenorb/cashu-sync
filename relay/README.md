@@ -76,6 +76,21 @@ and WAL overhead is extra.
 The wallet remains responsible for encryption, signing, merge/retry behavior, and
 mint operations. The relay is deliberately only authenticated CAS storage.
 
+## Separate pairing relay
+
+The one-QR bootstrap uses a separate relay because the new wallet does not yet
+have the shared sync secret. Run it with:
+
+```sh
+go run ./cmd/cashu-sync-pairing-relay
+```
+
+It listens on `127.0.0.1:3335` by default, accepts only kind-1059 gift wraps,
+keeps them in memory for five minutes, and exposes `GET /healthz`. Configure the
+wallet build with `CASHU_SYNC_PAIRING_RELAY_URL`; production uses a WSS origin.
+This process is not a replacement for the SQLite CAS relay and never receives
+plaintext authority or a sync key.
+
 ## Verify
 
 ```sh

@@ -101,17 +101,15 @@ describe("v0 visible UI contract", () => {
   it("wires accessible pairing and encrypted recovery actions", () => {
     const sync = template("src/pages/settings/SyncSettings.vue");
     const recovery = template("src/pages/settings/RecoverySettings.vue");
-    expect(sync).toMatch(/Create pairing QR/i);
+    expect(sync).toMatch(/Pair another phone/i);
     expect(sync).toMatch(/Scan pairing QR/i);
     expect(sync).not.toMatch(
       /Advanced pairing|two-step|Create encrypted response/i
     );
-    expect(sync).toContain('data-pairing-action="create-quick-pair"');
-    expect(sync).toContain('data-pairing-action="scan-quick-pair"');
+    expect(sync).toContain('data-pairing-action="create-auto-pair"');
+    expect(sync).toContain('data-pairing-action="scan-auto-pair"');
     expect(sync).toContain('data-pairing-action="back-wallet"');
-    expect(sync).toContain('data-pairing-action="cancel-overwrite"');
-    expect(sync).toContain('data-pairing-action="save-local-backup"');
-    expect(sync).toContain('data-pairing-action="overwrite-and-pair"');
+    expect(sync).not.toMatch(/overwrite|backup-passphrase/i);
     expect(sync).toContain("data-wallet-id");
     expect(sync).toContain("Compare these six words on both phones");
     expect(sync).toContain("showPairingQr");

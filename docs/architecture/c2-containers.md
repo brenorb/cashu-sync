@@ -17,12 +17,15 @@ C4Container
     ContainerDb(storeB, "Wallet B Store", "Dexie / IndexedDB", "Stores local state and crash journal")
     Container(nostrRelay, "Silent Link CAS Relay", "Go / Khatru", "Authenticates clients and atomically advances snapshot heads")
     ContainerDb(relayStore, "Relay Store", "SQLite", "Stores opaque events and current-head pointers")
+    Container(pairingRelay, "Silent Link Pairing Relay", "Go / Khatru", "Short-lived NIP-17/NIP-59 gift-wrap transport")
   }
 
   System_Ext(nutshellMint, "USD Nutshell Mint", "Cashu authority for Bolt11 mint, melt, proof state, and restore")
 
   Rel(walletUser, walletA, "Operates and manages pairing or backup", "PWA UI")
   Rel(walletUser, walletB, "Operates and manages pairing or backup", "PWA UI")
+  Rel(walletA, pairingRelay, "One-QR bootstrap messages", "NIP-17/NIP-59 over WSS")
+  Rel(walletB, pairingRelay, "One-QR bootstrap messages", "NIP-17/NIP-59 over WSS")
   Rel(walletA, storeA, "Persists snapshots and operation journal", "IndexedDB API")
   Rel(walletB, storeB, "Persists snapshots and operation journal", "IndexedDB API")
   Rel(walletA, nostrRelay, "Fetches head and conditionally publishes child", "NIP-01/42/44/78 over WSS")
@@ -53,7 +56,7 @@ The local IndexedDB store is a cache and crash journal, not the only backup.
 
 The purpose-built, Silent Link-operated Go relay reuses Nostr WebSocket, signature, subscription, and NIP-42 behavior. Its wallet-specific responsibilities are production admission from a startup-loaded sync-pubkey allowlist and atomic compare-and-swap: the incoming `prev` event ID must equal the SQLite head. Paired wallets share one admitted sync key. Open admission exists only for loopback-bound local end-to-end tests.
 
-The relay does not decrypt snapshots, calculate balances, reconcile proofs, or call Nutshell. V0 runs one relay process with one persistent SQLite volume. GitHub Pages hosts only the static PWA, never this stateful service.
+The sync relay does not decrypt snapshots, calculate balances, reconcile proofs, or call Nutshell. The separate pairing relay accepts only short-lived kind-1059 gift wraps and has no sync-key authentication; it exists because a joining wallet does not possess the shared sync secret until import. GitHub Pages hosts only the static PWA, never these stateful services.
 
 ## Deployment note
 

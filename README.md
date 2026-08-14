@@ -6,7 +6,7 @@ The implemented product boundary is intentionally small:
 
 - exactly one configured USD Nutshell authority mint;
 - Bolt11 mint, melt, balance, and accounting only;
-- two-QR full-authority pairing between the user's own PWA wallets;
+- one-QR automatic full-authority pairing between the user's own PWA wallets;
 - NIP-44-encrypted full snapshots with SQLite compare-and-swap at the relay;
 - one durable pending-operation journal that fences mint and melt submission;
 - passphrase-encrypted full recovery into a fresh wallet;
@@ -20,6 +20,7 @@ The three code areas are:
 
 - [`wallet/`](./wallet/README.md): Vue/Quasar PWA;
 - [`relay/`](./relay/README.md): Go/Khatru/SQLite CAS relay;
+- `relay/fly-pairing.toml`: separate short-lived pairing relay deployment;
 - [`integration/nutshell/`](./docs/research/nutshell-reference.md): pinned local Nutshell `0.20.3` USD fixture.
 
 Future product ideas and deployment gaps belong in the [roadmap](./docs/roadmap.md), not in the v0 compatibility contract.
