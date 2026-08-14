@@ -283,8 +283,9 @@ export default defineComponent({
 
 .pairing-qr-large :deep(canvas) {
   display: block;
-  width: min(calc(100vw - 56px), 960px);
-  height: auto;
+  width: min(calc(100vw - 56px), 960px) !important;
+  max-width: 100% !important;
+  height: auto !important;
 }
 
 .pairing-message {
