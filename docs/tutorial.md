@@ -89,9 +89,18 @@ In profile A:
 
 Bring profile B to the foreground and return to or reload the wallet home page. Startup and foreground resume pull the current encrypted head. Confirm profile B shows the same balance and accounting row. The wallets are not sending Cashu tokens to each other; both are displaying one synchronized wallet.
 
-## 6. Melt a 1 USD test invoice as an eSIM top-up
+## 6. Spend credits on an eSIM top-up
 
-Use one of the valid unpaid Bolt11/USD test invoices shipped with the live flow. Do not use a mint quote as the melt invoice: FakeWallet auto-settles mint quotes, so Nutshell will reject them as already paid. Print a fresh fixture with:
+For the Fly demo, select **Top up eSIM**, enter an amount that matches the
+available denominations, and select **Confirm top up**. The demo consumes the
+selected credits locally and publishes the result through the relay; it does
+not create or display an invoice. A production deployment must configure
+`CASHU_SYNC_TOPUP_URL` so the same flow pays a real Silent Link provider
+invoice. Do not use a mint quote as a melt invoice: FakeWallet auto-settles
+mint quotes, so Nutshell rejects them as already paid.
+
+For the provider-backed test flow, use one of the valid unpaid Bolt11/USD test
+invoices shipped with the live flow. Print a fresh fixture with:
 
 ```sh
 python3 - <<'PY'
