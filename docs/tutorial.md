@@ -1,6 +1,6 @@
 # Cashu Sync v0 local tutorial
 
-This tutorial exercises the complete v0 product path with one user controlling two paired web wallets: start a local USD Nutshell mint and the Silent Link relay, fund a wallet from the Silent Link landing page, open a pairing-ready QR on another browser, synchronize, melt for an eSIM top-up, and recover after deleting the local wallet.
+This tutorial exercises the complete v0 product path with one user controlling two paired web wallets: start a local USD Nutshell mint and the Silent Link relay, open the wallet directly, fund it, pair another browser with one QR scan, synchronize, melt for an eSIM top-up, and recover after deleting the local wallet.
 
 The local Nutshell profile uses FakeWallet. It is deterministic test infrastructure, not real USD or Lightning settlement. Do not reuse its mint key, database, relay open mode, or HTTP endpoints in production.
 
@@ -62,7 +62,7 @@ PUBLIC_PATH=/ \
 python3 -m http.server 8080 --bind 127.0.0.1 --directory dist/pwa
 ```
 
-Open `http://127.0.0.1:8080`. You will first see the Silent Link landing page. Select **Top up with Lightning** or **Buy an eSIM → Top up now** to enter the wallet checkout. Serving the built PWA over loopback HTTP keeps the local mint and relay on the same security level and exercises the generated service worker. The insecure-loopback flag permits only local HTTP mint and relay origins; it does not relax the production HTTPS authority rule.
+Open `http://127.0.0.1:8080`. The wallet opens directly. Serving the built PWA over loopback HTTP keeps the local mint and relay on the same security level and exercises the generated service worker. The insecure-loopback flag permits only local HTTP mint and relay origins; it does not relax the production HTTPS authority rule.
 
 For hot reloading during UI development, the same three `CASHU_SYNC_*` variables can prefix `npm run dev`; Quasar's development server uses `https://localhost:8080`, so the browser may ask you to trust its local certificate. The built HTTP path above is the recommended manual acceptance path.
 
@@ -70,14 +70,12 @@ Open `http://127.0.0.1:8080` in browser profile A and browser profile B. Each fr
 
 ## 4. Pair profile B to profile A
 
-Pairing uses two QR payloads. The funded wallet's handoff card links directly to the pairing screen with QR 1 ready. The current UI supports camera scanning and also renders each payload as text for desktop testing.
+The normal path is one QR scan from the funded wallet. The QR is an encrypted, ten-minute bearer handoff; show it only to the phone you control. The old two-QR flow remains under **Advanced pairing** for higher-assurance transfers.
 
-1. In profile B, open the pairing-ready URL from the funded wallet QR, or open **Settings → Sync devices** and select **Create pairing request**.
-2. **QR 1** is the pairing request. It contains an ephemeral public key, challenge, and five-minute expiry, but no wallet secret. On profile A, select **Scan request QR** or paste the text from **Pairing request**.
-3. In profile A, select **Create encrypted response**.
-4. **QR 2** is the encrypted full-authority response bound to QR 1. Copy the text from **Encrypted pairing response**.
-5. Return to profile B, select **Scan response QR** or paste QR 2 into **Encrypted response from existing wallet**, and select **Finish pairing**.
-6. Confirm profile B says `Paired. This wallet now follows the shared relay head.`
+1. In profile A, open **Settings → Sync devices → Pair a phone** and select **Create one-scan pairing QR**.
+2. Scan it with profile B's camera. The QR opens the wallet and imports the encrypted authority automatically.
+3. Confirm profile B says `Paired. This wallet is now synchronized.`
+4. For the advanced flow, **QR 1** is the request and **QR 2** is the encrypted response; both payloads remain available under **Advanced pairing**.
 
 If five minutes elapse, create a new QR 1. Pairing transfers full spend and sync authority, so only pair a wallet installation controlled by the same user.
 
@@ -85,9 +83,9 @@ If five minutes elapse, create a new QR 1. Pairing transfers full spend and sync
 
 In profile A:
 
-1. Return to the wallet home page and select **Add funds**.
-2. Enter `10` in **Amount in USD** and select **Create invoice**.
-3. The local FakeWallet automatically settles its generated invoice. Select **Claim paid invoice**. If the quote has not changed to `PAID` yet, wait briefly and select it again.
+1. Return to the wallet home page and select **Add balance**.
+2. Enter `10` in **Amount in USD** and select **Show payment invoice**.
+3. The local FakeWallet automatically settles its generated invoice. Select **Update balance**. If the quote has not changed to `PAID` yet, wait briefly and select it again.
 4. Confirm `Funds added and synchronized.`, a higher **Available balance**, and a **Funds added** row in **Accounting**. The funded handoff card now shows a web link and QR code. It opens the pairing screen on another browser; it does not put a seed or funds in the URL.
 
 Bring profile B to the foreground and return to or reload the wallet home page. Startup and foreground resume pull the current encrypted head. Confirm profile B shows the same balance and accounting row. The wallets are not sending Cashu tokens to each other; both are displaying one synchronized wallet.
@@ -109,7 +107,7 @@ PY
 In profile B:
 
 1. Select **Top up eSIM**.
-2. Paste the printed invoice into **Bolt11 invoice** and select **Review payment**.
+2. Paste the printed payment request into **Payment invoice** and select **Continue**.
 3. Confirm the quote summary says `1 USD`, then select **Confirm top up**.
 4. Confirm `eSIM top-up paid and synchronized.`, the reduced balance, and an **Invoice paid** accounting row.
 

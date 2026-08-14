@@ -5,7 +5,7 @@ const routes = [
     children: [
       {
         path: "",
-        component: () => import("src/pages/SilentLinkLandingPage.vue"),
+        component: () => import("src/pages/V0WalletPage.vue"),
       },
       { path: "wallet", component: () => import("src/pages/V0WalletPage.vue") },
     ],

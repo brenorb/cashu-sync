@@ -24,6 +24,7 @@
     </SettingsSection>
 
     <SettingsSection
+      v-if="!configured"
       title="New device"
       caption="Do these steps on the wallet that should join."
     >

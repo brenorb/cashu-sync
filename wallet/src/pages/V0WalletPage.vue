@@ -1,9 +1,7 @@
 <template>
   <main class="v0-wallet">
     <header class="v0-intro">
-      <p class="v0-eyebrow">Silent Link Wallet</p>
-      <h1>Your money, in sync.</h1>
-      <p>One mint. USD accounting across every wallet you control.</p>
+      <p class="v0-eyebrow">SILENT LINK WALLET</p>
     </header>
 
     <V0BalanceCard />
@@ -17,8 +15,8 @@
         no-caps
         unelevated
         :disable="!activeMintUrl || !walletReady"
-        aria-label="Add funds with a Lightning invoice"
-        label="Add funds"
+        aria-label="Add balance"
+        label="Add balance"
         @click="showMintDialog = true"
       />
       <q-btn
@@ -28,7 +26,7 @@
         no-caps
         outline
         :disable="!activeMintUrl || !walletReady"
-        aria-label="Top up eSIM with wallet credits"
+        aria-label="Top up eSIM"
         label="Top up eSIM"
         @click="showMeltDialog = true"
       />
@@ -59,21 +57,18 @@
     >
       <p class="v0-eyebrow">Wallet ready</p>
       <h2 id="funded-title">Your credits are yours.</h2>
-      <p>
-        Open a browser on your phone and pair it with this funded wallet in two
-        quick scans.
-      </p>
+      <p>Scan once on your phone to open a wallet with the same balance.</p>
       <vue-qrcode
         :value="fundedWalletUrl"
         :options="{ width: 180 }"
         aria-label="Open funded wallet QR code"
       />
       <a :href="fundedWalletUrl" class="funded-link"
-        >Open pairing-ready wallet <span aria-hidden="true">→</span></a
+        >Open paired wallet <span aria-hidden="true">→</span></a
       >
       <small
-        >The QR contains no seed or funds. It opens the wallet website and
-        starts pairing.</small
+        >The QR is encrypted and expires after ten minutes. Show it only to the
+        phone you control.</small
       >
     </section>
 
@@ -81,10 +76,8 @@
       <q-card class="v0-dialog" data-v0-dialog="mint">
         <q-card-section>
           <p class="v0-eyebrow">Add funds</p>
-          <h2>Mint USD</h2>
-          <p>
-            Pay the Lightning invoice, then claim the exact prepared outputs.
-          </p>
+          <h2>Add balance</h2>
+          <p>Pay the invoice below. Your balance updates automatically.</p>
         </q-card-section>
         <q-card-section v-if="!mintQuote">
           <q-input
@@ -104,7 +97,7 @@
             outlined
             readonly
             autogrow
-            label="Lightning invoice"
+            label="Payment invoice"
             @click="claimMintQuote"
           />
           <q-btn
@@ -114,7 +107,7 @@
             no-caps
             unelevated
             :loading="dialogBusy"
-            label="I've paid — add credits"
+            label="I've paid — update balance"
             @click="claimMintQuote"
           />
         </q-card-section>
@@ -130,7 +123,7 @@
             no-caps
             unelevated
             :loading="dialogBusy"
-            label="Create invoice"
+            label="Show payment invoice"
             @click="createMintQuote"
           />
           <q-btn
@@ -140,7 +133,7 @@
             no-caps
             unelevated
             :loading="dialogBusy"
-            label="Claim paid invoice"
+            label="Update balance"
             @click="claimMintQuote"
           />
         </q-card-actions>
@@ -150,12 +143,9 @@
     <q-dialog v-model="showMeltDialog">
       <q-card class="v0-dialog" data-v0-dialog="melt">
         <q-card-section>
-          <p class="v0-eyebrow">Top up eSIM</p>
-          <h2>Spend credits</h2>
-          <p>
-            Your selected credits are fenced through the relay before the eSIM
-            top-up is paid.
-          </p>
+          <p class="v0-eyebrow">TOP UP ESIM</p>
+          <h2>Pay for mobile data</h2>
+          <p>Use your balance to pay for your eSIM top-up.</p>
         </q-card-section>
         <q-card-section v-if="!meltQuote">
           <q-input
@@ -164,12 +154,12 @@
             dark
             outlined
             autogrow
-            label="Bolt11 invoice"
+            label="Payment invoice"
           />
         </q-card-section>
         <q-card-section v-else class="v0-quote-summary">
           <strong>{{ formatUsd(meltQuote.amount) }}</strong>
-          <span>Maximum mint fee: {{ formatUsd(meltQuote.feeReserve) }}</span>
+          <span>Network fee: {{ formatUsd(meltQuote.feeReserve) }}</span>
         </q-card-section>
         <q-card-section v-if="dialogError" class="v0-dialog-error" role="alert">
           {{ dialogError }}
@@ -183,7 +173,7 @@
             no-caps
             unelevated
             :loading="dialogBusy"
-            label="Review payment"
+            label="Continue"
             @click="createMeltQuote"
           />
           <q-btn
@@ -214,6 +204,7 @@ import { useWalletStore } from "src/stores/wallet";
 import { useMigrationsStore } from "src/stores/migrations";
 import { useDexieStore } from "src/stores/dexie";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
+import { createQuickPairV0 } from "src/sync/quickPair";
 import {
   useV0WalletService,
   type MeltQuoteView,
@@ -280,10 +271,15 @@ export default defineComponent({
         this.syncMessage = "Funds added and synchronized.";
         this.showMintDialog = false;
         this.mintQuote = null;
+        const runtime = useSyncRuntimeService();
+        const quickPair = await createQuickPairV0(
+          await runtime.exportAuthority(),
+          { allowLoopbackHttp: runtime.allowLoopbackHttp }
+        );
         this.fundedWalletUrl = new URL(
           this.$router.resolve({
             path: "/settings/sync",
-            query: { auto: "1" },
+            query: { quick_pair: quickPair },
           }).href,
           window.location.href
         ).href;
@@ -378,9 +374,6 @@ export default defineComponent({
     if (request) {
       this.meltRequest = request;
       this.showMeltDialog = true;
-    }
-    if (this.$route.query.topup === "1") {
-      this.showMintDialog = true;
     }
   },
   beforeUnmount() {

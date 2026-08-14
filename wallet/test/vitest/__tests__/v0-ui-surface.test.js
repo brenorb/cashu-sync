@@ -49,9 +49,7 @@ describe("v0 visible UI contract", () => {
       expect(paths).not.toContain(forbidden);
     }
     expect(source("src/router/routes.js")).toContain("V0WalletPage.vue");
-    expect(source("src/router/routes.js")).toContain(
-      "SilentLinkLandingPage.vue"
-    );
+    expect(source("src/router/routes.js")).toContain("V0WalletPage.vue");
   });
 
   it("exposes only Bolt11 mint and melt actions on the wallet", () => {
@@ -64,11 +62,12 @@ describe("v0 visible UI contract", () => {
     );
   });
 
-  it("exposes the Silent Link landing checkout", () => {
-    const landing = template("src/pages/SilentLinkLandingPage.vue");
-    expect(landing).toContain('data-landing-action="buy-esim"');
-    expect(landing).toContain('data-landing-action="top-up"');
-    expect(landing).toMatch(/silent link/i);
+  it("opens the wallet directly with a quiet brand header", () => {
+    const wallet = template("src/pages/V0WalletPage.vue");
+    expect(wallet).toContain("SILENT LINK WALLET");
+    expect(wallet).not.toContain("Your money, in sync.");
+    expect(wallet).not.toContain("One mint. USD accounting");
+    expect(wallet).not.toContain("this.showMintDialog = true;");
   });
 
   it("removes mint and unit switching from reachable payment dialogs", () => {
@@ -98,7 +97,7 @@ describe("v0 visible UI contract", () => {
     const sync = template("src/pages/settings/SyncSettings.vue");
     const recovery = template("src/pages/settings/RecoverySettings.vue");
     expect(sync).toMatch(/Create pairing request/i);
-    expect(sync).toMatch(/two QR codes/i);
+    expect(sync).toMatch(/one scan/i);
     expect(sync).toContain('data-pairing-action="finish"');
     expect(sync).toContain('data-pairing-action="create-response"');
     expect(sync).toContain('data-pairing-action="scan-request"');
