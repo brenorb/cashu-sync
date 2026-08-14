@@ -39,7 +39,7 @@
           >
             <vue-qrcode
               :value="quickPairUrl"
-              :options="{ width: 360, errorCorrectionLevel: 'L', margin: 1 }"
+              :options="{ width: 280, errorCorrectionLevel: 'L', margin: 1 }"
             />
           </button>
           <small class="pairing-qr-hint">Tap the QR code to enlarge it</small>
@@ -256,6 +256,7 @@ export default defineComponent({
 .pairing-qr {
   display: block;
   align-self: center;
+  width: min(100%, 280px);
   max-width: 100%;
   overflow: hidden;
   padding: 8px;
@@ -263,6 +264,13 @@ export default defineComponent({
   border: 0;
   cursor: zoom-in;
   line-height: 0;
+}
+
+.pairing-qr :deep(canvas) {
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
 }
 
 .pairing-qr-hint {
