@@ -275,7 +275,9 @@ describe("V0WalletService quote fencing", () => {
     } as const;
     session.repository.exportSnapshot.mockResolvedValue(current);
     const selectProofsToSend = vi.fn(() => ({
-      send: [current.proofs[0]],
+      send: [
+        { ...current.proofs[0], amount: Amount.from(current.proofs[0].amount) },
+      ],
       keep: [current.proofs[1]],
     }));
     const service = new V0WalletService(runtimeService as never, {

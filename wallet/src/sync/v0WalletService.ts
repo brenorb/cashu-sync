@@ -174,11 +174,16 @@ export class V0WalletService {
       throw new Error(`mint quote is ${quote.state}, not PAID`);
     }
     await cashuDb.mintQuotes.update(quote.quote, { state: quote.state });
-    return (await this.ensureCoordinator()).mint({
+    const result = await (
+      await this.ensureCoordinator()
+    ).mint({
       amount: quote.amount.toNumber(),
       quote,
       keysetId: this.walletPort.getKeyset(null, "usd"),
     });
+    return result.status === "completed"
+      ? result
+      : (await this.ensureCoordinator()).resume();
   }
 
   requestMeltQuote(request: string): Promise<MeltQuoteView> {
@@ -275,12 +280,17 @@ export class V0WalletService {
     if (quote.state !== MeltQuoteState.UNPAID) {
       throw new Error(`melt quote is ${quote.state}, not UNPAID`);
     }
-    return (await this.ensureCoordinator()).melt({
+    const result = await (
+      await this.ensureCoordinator()
+    ).melt({
       quote,
       proofs: useMintsStore().activeProofs,
       keysetId: this.walletPort.getKeyset(null, "usd"),
       preferAsync: false,
     });
+    return result.status === "completed"
+      ? result
+      : (await this.ensureCoordinator()).resume();
   }
 
   private async payInternalTopupUnlocked(
@@ -296,7 +306,7 @@ export class V0WalletService {
     ).send;
     if (selected.length === 0) throw new Error("not enough credits");
     const selectedAmount = selected.reduce(
-      (total, proof) => total + proof.amount,
+      (total, proof) => total + Amount.from(proof.amount).toNumber(),
       0
     );
     if (selectedAmount !== (stored.amount ?? 0)) {

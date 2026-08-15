@@ -24,8 +24,8 @@
         color="primary"
         no-caps
         outline
-        aria-label="Spend credits"
-        label="Spend credits"
+        aria-label="Top up eSIM"
+        label="Top up eSIM"
         @click="showMeltDialog = true"
       />
       <router-link to="/settings/sync" class="v0-sync-link">
@@ -128,9 +128,9 @@
     <q-dialog v-model="showMeltDialog">
       <q-card class="v0-dialog" data-v0-dialog="melt">
         <q-card-section class="v0-dialog__intro">
-          <p class="v0-eyebrow">SPEND CREDITS</p>
-          <h2>Spend credits</h2>
-          <p>Choose how many credits to spend.</p>
+          <p class="v0-eyebrow">TOP UP ESIM</p>
+          <h2>Pay for mobile data</h2>
+          <p>Use your balance to pay for your eSIM top-up.</p>
         </q-card-section>
         <q-card-section v-if="!meltQuote" class="v0-dialog__body">
           <q-input

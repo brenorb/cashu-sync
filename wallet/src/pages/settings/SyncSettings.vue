@@ -30,32 +30,30 @@
     <SettingsSection v-if="configured" title="Pair another wallet">
       <q-item class="column items-stretch q-pa-lg q-gutter-md">
         <q-btn
-          data-pairing-action="create-auto-pair"
+          data-pairing-action="create-quick-pair"
           color="primary"
           no-caps
           unelevated
-          label="Pair another phone"
+          label="Create pairing QR"
           :loading="busy"
-          @click="createAutoPairing"
+          @click="createQuickPair"
         />
-        <template v-if="autoPairUrl">
+        <template v-if="quickPairUrl">
           <button
             class="pairing-qr"
             type="button"
-            data-auto-pairing-qr
-            :data-auto-pairing-url="autoPairUrl"
             aria-label="Enlarge pairing QR code"
             @click="showPairingQr = true"
           >
             <vue-qrcode
-              :value="autoPairUrl"
+              :value="quickPairUrl"
               :options="{ width: 280, errorCorrectionLevel: 'L', margin: 1 }"
             />
           </button>
           <small class="pairing-qr-hint">Tap the QR code to enlarge it</small>
           <p class="sync-copy">
-            Scan this once with the other phone. It opens the wallet and pairs
-            automatically. The QR expires after three minutes.
+            Scan this once with the other phone. It opens the wallet and imports
+            the same balance. The QR expires after ten minutes.
           </p>
         </template>
       </q-item>
@@ -64,7 +62,7 @@
     <SettingsSection v-else title="Pair this wallet">
       <q-item class="column items-stretch q-pa-lg q-gutter-md">
         <q-btn
-          data-pairing-action="scan-auto-pair"
+          data-pairing-action="scan-quick-pair"
           color="primary"
           no-caps
           unelevated
@@ -101,14 +99,73 @@
       <q-card class="pairing-qr-dialog">
         <q-card-section class="pairing-qr-large">
           <vue-qrcode
-            v-if="autoPairUrl"
-            :value="autoPairUrl"
+            v-if="quickPairUrl"
+            :value="quickPairUrl"
             :options="{ width: 960, errorCorrectionLevel: 'L', margin: 1 }"
             aria-label="Enlarged pairing QR code"
           />
         </q-card-section>
         <q-card-actions align="right">
           <q-btn flat no-caps label="Close" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+    <q-dialog v-model="showOverwriteDialog" persistent>
+      <q-card class="overwrite-dialog">
+        <q-card-section>
+          <p class="v0-eyebrow">WALLET FOUND</p>
+          <h2>Replace this wallet?</h2>
+          <p class="sync-copy">
+            This phone already has local wallet data. Pairing will replace it
+            with the wallet from the other phone.
+          </p>
+        </q-card-section>
+        <q-card-section class="overwrite-dialog__backup">
+          <q-input
+            v-model="backupPassphrase"
+            data-pairing-field="backup-passphrase"
+            dark
+            outlined
+            type="password"
+            label="Backup passphrase"
+            hint="Optional: save an encrypted copy before replacing"
+          />
+          <q-input
+            v-if="backupPassphrase"
+            v-model="backupConfirmation"
+            data-pairing-field="backup-confirmation"
+            dark
+            outlined
+            type="password"
+            label="Confirm passphrase"
+          />
+          <q-btn
+            data-pairing-action="save-local-backup"
+            outline
+            color="primary"
+            no-caps
+            :loading="backupBusy"
+            label="Save encrypted backup"
+            @click="saveLocalBackup"
+          />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            data-pairing-action="cancel-overwrite"
+            flat
+            no-caps
+            label="Cancel"
+            @click="cancelOverwrite"
+          />
+          <q-btn
+            data-pairing-action="overwrite-and-pair"
+            color="primary"
+            no-caps
+            unelevated
+            :loading="busy"
+            label="Replace and pair"
+            @click="overwriteExistingWallet"
+          />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -146,12 +203,9 @@ import { defineComponent } from "vue";
 import { mapState } from "pinia";
 import SettingsPageShell from "./SettingsPageShell.vue";
 import SettingsSection from "./SettingsSection.vue";
+import { consumeQuickPairV0, createQuickPairV0 } from "src/sync/quickPair";
+import { encryptRecoveryBundleV0 } from "src/sync/recoveryBundle";
 import type { AuthorityPayloadV0 } from "src/sync/authorityPayload";
-import {
-  AutoPairingHostSession,
-  AutoPairingJoinSession,
-  createAutoPairingUrl,
-} from "src/sync/automaticPairing";
 import { deriveWalletIdWords } from "src/sync/walletIdentity";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
 import {
@@ -174,30 +228,47 @@ export default defineComponent({
   data() {
     return {
       configured: false,
-      autoPairUrl: "",
+      quickPairPayload: "",
       showPairingQr: false,
+      showOverwriteDialog: false,
       busy: false,
+      backupBusy: false,
+      backupPassphrase: "",
+      backupConfirmation: "",
+      pendingPairAuthority: null as AuthorityPayloadV0 | null,
       failed: false,
       message: "",
       pairingSuccess: false,
       walletIdWords: [] as string[],
-      pairingSession: null as
-        | AutoPairingHostSession
-        | AutoPairingJoinSession
-        | null,
+      pairingWatchStop: null as (() => void) | null,
       pairingSuccessTimer: null as number | null,
     };
   },
   computed: {
     ...mapState(useCameraStore, ["camera"]),
+    quickPairUrl(): string {
+      if (!this.quickPairPayload) return "";
+      return new URL(
+        this.$router.resolve({
+          path: "/settings/sync",
+          query: { quick_pair: this.quickPairPayload },
+        }).href,
+        window.location.href
+      ).href;
+    },
   },
   created() {
     // Construct the store while Vue still owns the active component instance.
     useWalletStore();
     this.configured = useSyncRuntimeService().authority.load() !== null;
     if (this.configured) void this.loadWalletId();
-    const pairing = this.$route.query.pairing;
-    if (typeof pairing === "string") void this.finishAutoPairing(pairing);
+    const quickPair = this.$route.query.quick_pair;
+    if (typeof quickPair === "string") void this.finishQuickPair(quickPair);
+    if (this.$route.query.auto === "1" && typeof quickPair !== "string") {
+      this.failed = true;
+      this.message =
+        "This pairing QR is outdated. Create a new pairing QR from the existing wallet.";
+    }
   },
   methods: {
     async loadWalletId() {
@@ -213,76 +284,145 @@ export default defineComponent({
     },
     decodePairing(value: string) {
       useCameraStore().closeCamera();
-      void this.finishAutoPairing(value.trim());
+      const trimmed = value.trim();
+      try {
+        const url = new URL(trimmed, window.location.href);
+        const hashQuery = url.hash.includes("?")
+          ? url.hash.slice(url.hash.indexOf("?") + 1)
+          : "";
+        const payload =
+          new URLSearchParams(hashQuery).get("quick_pair") ||
+          url.searchParams.get("quick_pair");
+        void this.finishQuickPair(payload || trimmed);
+      } catch {
+        void this.finishQuickPair(trimmed);
+      }
     },
-    async createAutoPairing() {
+    async createQuickPair() {
       await this.run(async () => {
         const runtime = useSyncRuntimeService();
-        const relayUrl = process.env.CASHU_SYNC_PAIRING_RELAY_URL;
-        if (!relayUrl) throw new Error("pairing relay is not configured");
-        this.stopPairingSession();
-        const session = AutoPairingHostSession.create({
-          relayUrl,
-          hooks: { allowLoopbackHttp: runtime.allowLoopbackHttp },
-        });
-        this.pairingSession = session;
-        this.autoPairUrl = createAutoPairingUrl(session.qr);
-        session.start(
+        const session = runtime.runtime.currentSession();
+        this.stopPairingWatcher();
+        this.quickPairPayload = await createQuickPairV0(
           await runtime.exportAuthority(),
-          () => {
-            this.stopPairingSession();
-            this.message = "Wallet pareada e sincronizada.";
-            this.showPairingSuccess();
-          },
-          (error) => {
-            this.failed = true;
-            this.message = error.message;
-            this.stopPairingSession();
-          }
+          { allowLoopbackHttp: runtime.allowLoopbackHttp }
         );
-        this.message =
-          "Scan this QR with the other phone. Pairing finishes automatically.";
+        if (session !== null) {
+          const baseline = await session.repository.exportSnapshot();
+          this.pairingWatchStop = session.sync.watchCurrent((event) => {
+            if (event.id === baseline.previous_event_id) return;
+            this.stopPairingWatcher();
+            void useV0WalletService()
+              .syncNow()
+              .then(() => this.showPairingSuccess())
+              .catch(() => undefined);
+          });
+        }
+        this.message = "Pairing QR ready. It expires after ten minutes.";
       });
     },
-    async finishAutoPairing(payload: string) {
+    async finishQuickPair(payload: string) {
       await this.run(async () => {
         const runtime = useSyncRuntimeService();
-        const session = AutoPairingJoinSession.fromQr(payload, {
-          hooks: { allowLoopbackHttp: runtime.allowLoopbackHttp },
+        const authority = await consumeQuickPairV0(payload, {
+          allowLoopbackHttp: runtime.allowLoopbackHttp,
         });
-        this.stopPairingSession();
-        this.pairingSession = session;
-        this.message = "Pairing this wallet automatically…";
-        await session.start(
-          async (authority) => {
-            await this.applyPairing(authority);
-          },
-          (error) => {
-            this.failed = true;
-            this.message = error.message;
+        this.pendingPairAuthority = authority;
+        try {
+          await this.applyPairing(authority);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message ===
+              "pairing or recovery requires an empty local wallet"
+          ) {
+            this.showOverwriteDialog = true;
+            this.message =
+              "This phone already has a wallet. Choose whether to save it or replace it.";
+            return;
           }
-        );
+          throw error;
+        }
       });
     },
-    async applyPairing(authority: AuthorityPayloadV0) {
+    async applyPairing(authority: AuthorityPayloadV0, overwrite = false) {
       const runtime = useSyncRuntimeService();
-      await runtime.replaceEmptyAndStart(authority);
+      await runtime.replaceEmptyAndStart(authority, { overwrite });
       resetV0WalletService();
-      const result = await useV0WalletService().resume();
-      if (result.status !== "idle" && result.status !== "completed") {
-        throw new Error(`Pairing requires recovery: ${result.status}`);
+      let recoveryPending = false;
+      try {
+        const result = await useV0WalletService().resume();
+        recoveryPending = result.status === "needs-reconciliation";
+      } catch {
+        recoveryPending = true;
       }
       const session = runtime.runtime.currentSession();
       if (session === null) throw new Error("wallet sync did not start");
-      const acknowledgement = await session.sync.publishCurrent();
-      if (acknowledgement.status !== "accepted") {
-        throw new Error("pairing confirmation could not be synchronized");
+      try {
+        await session.sync.publishCurrent();
+      } catch {
+        // Pairing already imported the authenticated remote snapshot.
       }
       this.configured = true;
       await this.loadWalletId();
-      this.message = "Wallet pareada e sincronizada.";
+      this.message = recoveryPending
+        ? "Paired. Recovery will continue automatically."
+        : "Paired. This wallet is synchronized.";
       this.showPairingSuccess();
       await this.$router.replace({ path: "/settings/sync" });
+    },
+    cancelOverwrite() {
+      this.showOverwriteDialog = false;
+      this.pendingPairAuthority = null;
+      this.backupPassphrase = "";
+      this.backupConfirmation = "";
+      this.message = "Pairing cancelled. This wallet was not changed.";
+    },
+    async saveLocalBackup() {
+      this.backupBusy = true;
+      this.failed = false;
+      try {
+        if (this.backupPassphrase !== this.backupConfirmation) {
+          throw new Error("backup passphrases do not match");
+        }
+        const runtime = useSyncRuntimeService();
+        const bundle = await encryptRecoveryBundleV0(
+          await runtime.exportAuthority(),
+          this.backupPassphrase,
+          { allowLoopbackHttp: runtime.allowLoopbackHttp }
+        );
+        const url = URL.createObjectURL(
+          new Blob([bundle], { type: "application/json" })
+        );
+        try {
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `silent-link-wallet-backup-${new Date()
+            .toISOString()
+            .slice(0, 10)}.json`;
+          link.click();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        this.message =
+          "Encrypted backup downloaded. You can now replace this wallet.";
+        this.backupPassphrase = "";
+        this.backupConfirmation = "";
+      } catch (error) {
+        this.failed = true;
+        this.message = error instanceof Error ? error.message : "Backup failed";
+      } finally {
+        this.backupBusy = false;
+      }
+    },
+    async overwriteExistingWallet() {
+      const authority = this.pendingPairAuthority;
+      if (authority === null) return;
+      await this.run(async () => {
+        await this.applyPairing(authority, true);
+        this.showOverwriteDialog = false;
+        this.pendingPairAuthority = null;
+      });
     },
     showPairingSuccess() {
       if (this.walletIdWords.length === 0) void this.loadWalletId();
@@ -298,9 +438,9 @@ export default defineComponent({
         }
       }, 2800);
     },
-    stopPairingSession() {
-      this.pairingSession?.destroy();
-      this.pairingSession = null;
+    stopPairingWatcher() {
+      this.pairingWatchStop?.();
+      this.pairingWatchStop = null;
     },
     async run(operation: () => Promise<void>) {
       this.busy = true;
@@ -318,7 +458,7 @@ export default defineComponent({
     },
   },
   beforeUnmount() {
-    this.stopPairingSession();
+    this.stopPairingWatcher();
     if (this.pairingSuccessTimer !== null) {
       window.clearTimeout(this.pairingSuccessTimer);
     }

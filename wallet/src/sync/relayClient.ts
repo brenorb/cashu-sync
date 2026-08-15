@@ -2,7 +2,7 @@ import { finalizeEvent, nip42, utils, type Event } from "nostr-tools";
 import { getSyncPublicKey, verifyEventFresh } from "src/sync/syncCrypto";
 import { SYNC_EVENT_D_TAG_V0, SYNC_EVENT_KIND_V0 } from "src/sync/types";
 
-const DEFAULT_TIMEOUT_MS = 5_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_TIMEOUT_MS = 30_000;
 const MAX_CIPHERTEXT_CHARS_V0 = 100_000;
 const HEX_EVENT_ID = /^[0-9a-f]{64}$/;

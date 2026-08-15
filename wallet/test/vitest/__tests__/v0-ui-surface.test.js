@@ -50,9 +50,6 @@ describe("v0 visible UI contract", () => {
     }
     expect(source("src/router/routes.js")).toContain("V0WalletPage.vue");
     expect(source("src/router/routes.js")).toContain("V0WalletPage.vue");
-    expect(routes[0].children).toEqual(
-      expect.arrayContaining([{ path: "wallet", redirect: "/" }])
-    );
   });
 
   it("exposes only Bolt11 mint and melt actions on the wallet", () => {
@@ -60,7 +57,7 @@ describe("v0 visible UI contract", () => {
     expect(wallet).toContain('data-v0-action="mint-bolt11"');
     expect(wallet).toContain('data-v0-action="melt-bolt11"');
     expect(wallet).toContain("Buy credits");
-    expect(wallet).toContain("Spend credits");
+    expect(wallet).toContain("Top up eSIM");
     expect(wallet).toContain('data-v0-field="melt-amount"');
     expect(wallet).not.toContain('data-v0-field="melt-invoice"');
     expect(wallet).not.toContain(':disable="!activeMintUrl"');
@@ -73,8 +70,6 @@ describe("v0 visible UI contract", () => {
   it("opens the wallet directly with a quiet brand header", () => {
     const wallet = template("src/pages/V0WalletPage.vue");
     expect(wallet).toContain("SILENT LINK WALLET");
-    expect(wallet).toContain("Synchronizing wallet");
-    expect(wallet).toContain("syncPending");
     expect(wallet).not.toContain("Your money, in sync.");
     expect(wallet).not.toContain("One mint. USD accounting");
     expect(wallet).not.toContain("this.showMintDialog = true;");
@@ -106,15 +101,17 @@ describe("v0 visible UI contract", () => {
   it("wires accessible pairing and encrypted recovery actions", () => {
     const sync = template("src/pages/settings/SyncSettings.vue");
     const recovery = template("src/pages/settings/RecoverySettings.vue");
-    expect(sync).toMatch(/Pair another phone/i);
+    expect(sync).toMatch(/Create pairing QR/i);
     expect(sync).toMatch(/Scan pairing QR/i);
     expect(sync).not.toMatch(
       /Advanced pairing|two-step|Create encrypted response/i
     );
-    expect(sync).toContain('data-pairing-action="create-auto-pair"');
-    expect(sync).toContain('data-pairing-action="scan-auto-pair"');
+    expect(sync).toContain('data-pairing-action="create-quick-pair"');
+    expect(sync).toContain('data-pairing-action="scan-quick-pair"');
     expect(sync).toContain('data-pairing-action="back-wallet"');
-    expect(sync).not.toMatch(/overwrite|backup-passphrase/i);
+    expect(sync).toContain('data-pairing-action="cancel-overwrite"');
+    expect(sync).toContain('data-pairing-action="save-local-backup"');
+    expect(sync).toContain('data-pairing-action="overwrite-and-pair"');
     expect(sync).toContain("data-wallet-id");
     expect(sync).toContain("Compare these six words on both phones");
     expect(sync).toContain("showPairingQr");

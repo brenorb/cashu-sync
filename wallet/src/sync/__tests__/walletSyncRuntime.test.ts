@@ -119,7 +119,7 @@ describe("WalletSyncRuntime", () => {
       eventId: HEAD,
       revision: 1,
     });
-    expect(session.sync.pull).toHaveBeenCalledWith({ mode: "normal" });
+    expect(session.sync.pull).toHaveBeenCalledWith({ mode: "bootstrap" });
     expect(session.sync.publishCurrent).toHaveBeenCalledOnce();
     expect(storage.getItem("cashu.mnemonic")).toBe(MNEMONIC);
   });

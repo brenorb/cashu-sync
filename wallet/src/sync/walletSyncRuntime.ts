@@ -10,9 +10,7 @@ import type {
 import { LocalWalletRepository } from "src/sync/localWalletRepository";
 import { OperationJournalRepository } from "src/sync/operationJournalRepository";
 import { SyncRelayClient } from "src/sync/relayClient";
-import {
-  SnapshotSyncCoordinator,
-} from "src/sync/syncCoordinator";
+import { SnapshotSyncCoordinator } from "src/sync/syncCoordinator";
 import { hexToBytes } from "src/sync/syncCrypto";
 import type { SnapshotV0 } from "src/sync/types";
 
@@ -102,10 +100,10 @@ export class WalletSyncRuntime {
     const session = this.options.createSession(authority);
     this.session = null;
     const local = await session.repository.exportSnapshot();
-    const mode =
-      isPristine(local) && authority.head_event_id !== ""
-        ? "bootstrap"
-        : "normal";
+    // A pristine install is safe to bootstrap even when an older QR omitted
+    // the remembered head. The relay's authenticated current head is the
+    // source of truth for pairing; requiring revision 1 strands later wallets.
+    const mode = isPristine(local) ? "bootstrap" : "normal";
     const pulled = await session.sync.pull({ mode });
     if (pulled.status === "empty") {
       if (authority.head_event_id !== "") {
