@@ -210,11 +210,11 @@ module.exports = configure(function (/* ctx */) {
         // ponytail: immediate activation trades graceful wallet-operation
         // handoff for a demo that never strands users on stale UI.
         skipWaiting: true,
-        clientsClaim: true,
+        clientsClaim: false,
       },
       extendGenerateSWOptions(options) {
         options.skipWaiting = true;
-        options.clientsClaim = true;
+        options.clientsClaim = false;
       },
       // useFilenameHashes: true,
       // extendGenerateSWOptions (cfg) {}
