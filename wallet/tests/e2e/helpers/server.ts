@@ -101,7 +101,9 @@ export async function startBuiltPwaServer(options?: {
       }
 
       response.writeHead(200, {
-        "cache-control": "no-store",
+        "cache-control": relativePath.startsWith("assets/")
+          ? "public, max-age=31536000, immutable"
+          : "no-store",
         "content-type":
           MIME_TYPES[extname(candidate)] || "application/octet-stream",
       });
