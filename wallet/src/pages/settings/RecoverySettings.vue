@@ -7,7 +7,7 @@
       title="Encrypted recovery bundle"
       caption="Includes the twelve-word master seed, sync secret, mint, relay, and latest known head."
     >
-      <q-item class="column items-stretch q-pa-lg q-gutter-md">
+      <q-item class="column items-stretch q-pa-lg settings-card-content">
         <p class="recovery-copy">
           Choose a strong passphrase and store the downloaded file separately
           from this device. The bundle is encrypted before download.
@@ -41,7 +41,7 @@
     </SettingsSection>
 
     <SettingsSection title="Delete this device">
-      <q-item class="column items-stretch q-pa-lg q-gutter-md">
+      <q-item class="column items-stretch q-pa-lg settings-card-content">
         <p class="recovery-copy">
           Remove the local wallet, proofs, history, and authority from this
           device. The encrypted relay snapshot remains available for recovery.
@@ -58,7 +58,7 @@
     </SettingsSection>
 
     <SettingsSection title="Restore this wallet">
-      <q-item class="column items-stretch q-pa-lg q-gutter-md">
+      <q-item class="column items-stretch q-pa-lg settings-card-content">
         <p class="recovery-copy">
           Restore only on a new or empty wallet. This reconnects to the shared
           relay and restores the latest encrypted snapshot.

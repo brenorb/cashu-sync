@@ -46,7 +46,7 @@
 
     <template v-else>
       <SettingsSection title="Pairing status">
-        <q-item class="column items-stretch q-pa-lg q-gutter-md">
+        <q-item class="column items-stretch q-pa-lg settings-card-content">
           <div class="sync-status" role="status" aria-live="polite">
             <span class="sync-status__mark" aria-hidden="true"></span>
             {{ configured ? "Sync ready" : "Not paired" }}
@@ -73,7 +73,7 @@
         v-if="configured && !creatingPairingScreen"
         title="Pair another wallet"
       >
-        <q-item class="column items-stretch q-pa-lg q-gutter-md">
+        <q-item class="column items-stretch q-pa-lg settings-card-content">
           <q-btn
             data-pairing-action="open-pairing-screen"
             color="primary"
@@ -89,7 +89,7 @@
       </SettingsSection>
 
       <SettingsSection v-else-if="configured" title="Create pairing QR">
-        <q-item class="column items-stretch q-pa-lg q-gutter-md">
+        <q-item class="column items-stretch q-pa-lg settings-card-content">
           <p class="sync-copy">
             Generate the QR only when the other phone is ready to scan it. It
             expires after three minutes and can be used once.
@@ -134,7 +134,7 @@
       </SettingsSection>
 
       <SettingsSection v-else title="Pair this wallet">
-        <q-item class="column items-stretch q-pa-lg q-gutter-md">
+        <q-item class="column items-stretch q-pa-lg settings-card-content">
           <q-btn
             data-pairing-action="scan-pairing"
             color="primary"
