@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cashu Sync v0 — reference</title>
+  <style>
+    :root { --ink:#202124; --muted:#657078; --line:#d8dee2; --orange:#e87928; --blue:#1261a0; --paper:#fbfaf7; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:920px; margin:0 auto; padding:56px 28px 72px; }
+    h1,h2 { line-height:1.12; letter-spacing:-.03em; }
+    h1 { max-width:720px; font-size:clamp(2.2rem,6vw,4.5rem); margin:0 0 12px; }
+    h2 { margin:42px 0 14px; font-size:1.65rem; }
+    .dek { max-width:680px; color:var(--muted); font-size:1.15rem; }
+    .rule { border:0; border-top:3px solid var(--orange); margin:30px 0; }
+    .flow { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:18px 0; }
+    .step { padding:14px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .step b { display:block; color:var(--orange); font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; }
+    table { width:100%; border-collapse:collapse; background:#fff; }
+    th,td { padding:11px 12px; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:#eef2f3; }
+    code { color:#7b3f00; background:#fff1e6; padding:.08em .25em; border-radius:3px; }
+    a { color:var(--blue); }
+    .note { border-left:4px solid var(--blue); padding:10px 14px; background:#edf5fb; }
+    .small { color:var(--muted); font-size:.9rem; }
+    @media (max-width:700px) { .flow { grid-template-columns:1fr 1fr; } main { padding:36px 18px 56px; } }
+    @media print { body { background:#fff; } main { padding:0; } a { color:inherit; text-decoration:none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="small"><a href="../lessons/0001-cashu-sync-v0-map.html">Lesson 1</a> · quick reference</p>
+    <h1>Cashu Sync v0</h1>
+    <p class="dek">One user, multiple fully authorized PWAs, one encrypted revision chain. Nutshell decides money; the relay decides which encrypted snapshot is current.</p>
+    <hr class="rule">
+
+    <h2>Three authorities</h2>
+    <table>
+      <tr><th>Component</th><th>It is authoritative for</th><th>It must never become</th></tr>
+      <tr><td>Wallet + IndexedDB</td><td>Plaintext secrets, exact prepared requests, local crash journal, snapshot validation.</td><td>The sole backup or monetary truth.</td></tr>
+      <tr><td>Nutshell mint</td><td>Quotes and proof state: whether value was issued, pending, spent, or paid.</td><td>The synchronized device state.</td></tr>
+      <tr><td>Silent Link relay</td><td>Current encrypted event head and CAS acceptance.</td><td>A balance calculator, decryptor, or mint participant.</td></tr>
+    </table>
+
+    <h2>Normal mint/melt order</h2>
+    <div class="flow">
+      <div class="step"><b>1 · Local</b>Prepare exact request and persist one pending operation.</div>
+      <div class="step"><b>2 · Relay</b>Publish encrypted child with <code>prev = head</code>; CAS must accept.</div>
+      <div class="step"><b>3 · Mint</b>Submit the exact request to Nutshell; never regenerate outputs.</div>
+      <div class="step"><b>4 · Finalize</b>Persist response/change, then publish a snapshot clearing the journal.</div>
+    </div>
+    <p class="note">A timeout after submission is not a failed operation. Keep the journal and reconcile using quote state, NUT-19 replay when available, and exact NUT-09 restoration for mint outputs.</p>
+
+    <h2>Protocol map</h2>
+    <table>
+      <tr><th>Standard</th><th>Role here</th></tr>
+      <tr><td>NIP-01</td><td>Nostr event IDs, signatures, tags, REQ/EVENT/OK messages.</td></tr>
+      <tr><td>NIP-42</td><td>Challenge-based relay authentication with the dedicated sync key.</td></tr>
+      <tr><td>NIP-44 v2</td><td>Authenticated encryption for snapshot content and formal two-party pairing.</td></tr>
+      <tr><td>NIP-78 / kind 30078</td><td>Opaque app-data envelope with <code>d=com.silentlink.cashu-sync.wallet.v0</code>; the <code>prev</code> CAS rule is custom.</td></tr>
+      <tr><td>NUT-04 / NUT-05</td><td>Only enabled state-changing rails: Bolt11/USD mint and melt.</td></tr>
+      <tr><td>NUT-07 / NUT-09</td><td>Check proof state and restore exact mint outputs during reconciliation.</td></tr>
+      <tr><td>NUT-13</td><td>Wallet-side deterministic secrets and counters, independent per mint/keyset.</td></tr>
+      <tr><td>NUT-17 / NUT-19</td><td>Notifications and exact-request caching are optimizations; REST plus journal is correctness.</td></tr>
+    </table>
+
+    <h2>Privacy ledger</h2>
+    <table>
+      <tr><th>Protected</th><th>Still visible or possible</th></tr>
+      <tr><td>Relay cannot read proofs, seed, balance, quotes, history, or operation details.</td><td>Relay sees stable sync pubkey, timestamps, ciphertext size, IP/access timing, and a linkable event chain.</td></tr>
+      <tr><td>Invalid signatures, wrong keys, tampering, rollback, and broken predecessor links fail before local apply.</td><td>Relay can withhold/delete/rollback storage and therefore hurt availability and recovery.</td></tr>
+      <tr><td>Pairing request has no wallet secret; formal response is NIP-44 encrypted to an ephemeral key.</td><td>Live UI quick-pair is a time-limited bearer URL: ciphertext and its temporary passphrase travel together.</td></tr>
+      <tr><td>Paired devices do not exchange ecash; they converge on one encrypted snapshot.</td><td>Every paired device has the mnemonic and can spend everything; v0 has no revocation.</td></tr>
+    </table>
+
+    <h2>Best next improvements</h2>
+    <ol>
+      <li>Move quick-pair authority out of URL query material; wire the ephemeral two-QR flow or use an out-of-band authenticated channel.</li>
+      <li>Replace plaintext mnemonic storage in browser localStorage and coordinate service-worker updates around in-progress operations.</li>
+      <li>Add a threat-model review and independent audit for browser storage, pairing, relay metadata, and deployment.</li>
+      <li>Only then consider per-device keys/revocation, multiple relays, or an event-sourced multiwriter model.</li>
+    </ol>
+    <p class="small">Primary local sources: <a href="../docs/spec.md">v0 specification</a>, <a href="../docs/decisions/0002-v0-revisioned-snapshot.md">ADR-0002</a>, and <a href="../docs/research/nutshell-reference.md">Nutshell reference</a>.</p>
+  </main>
+</body>
+</html>
