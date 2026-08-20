@@ -188,6 +188,19 @@ class FakeJournal implements OperationJournalPort, OperationStateReader {
       } as PendingOperationV0;
     }
   );
+  reprepareMint = vi.fn(
+    async (id: string, preview: SerializedMintPreviewV0, at: number) => {
+      this.calls.push("reprepareMint");
+      this.state.pending_operation = {
+        ...(this.state.pending_operation as ReturnType<typeof pendingMint>),
+        operation_id: id,
+        phase: "prepared",
+        updated_at: at,
+        prepared_request: preview,
+        response: null,
+      };
+    }
+  );
   recordMintResponse = vi.fn(
     async (_id: string, response: PendingMintResponseV0, at: number) => {
       this.calls.push("recordMintResponse");
@@ -248,6 +261,7 @@ class FakeGateway implements CashuOperationGateway<string, string> {
     this.calls.push("submitMint");
     return mintResponse;
   });
+  recreateMintPreview = vi.fn(async () => mintPreview);
   submitMelt = vi.fn(async () => {
     this.calls.push("submitMelt");
     return meltResponse;
@@ -313,6 +327,23 @@ describe("SyncOperationCoordinator new operations", () => {
       expect.objectContaining({ pending_operation: null }),
       { applyAccepted: false }
     );
+  });
+
+  it("re-prepares only after the mint rejects signed outputs", async () => {
+    const value = fixture();
+    value.gateway.submitMint
+      .mockRejectedValueOnce(
+        Object.assign(new Error("outputs already signed"), { code: 11003 })
+      )
+      .mockResolvedValueOnce(mintResponse);
+
+    await expect(value.coordinator.mint("intent")).resolves.toMatchObject({
+      status: "completed",
+      type: "mint",
+    });
+    expect(value.gateway.recreateMintPreview).toHaveBeenCalledWith(mintPreview);
+    expect(value.journal.reprepareMint).toHaveBeenCalledOnce();
+    expect(value.gateway.submitMint).toHaveBeenCalledTimes(2);
   });
 
   it("aborts a proven prepared conflict and never submits", async () => {

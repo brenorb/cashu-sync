@@ -106,8 +106,9 @@ describe("v0 visible UI contract", () => {
     expect(sync).not.toMatch(
       /Advanced pairing|two-step|Create encrypted response/i
     );
-    expect(sync).toContain('data-pairing-action="create-quick-pair"');
-    expect(sync).toContain('data-pairing-action="scan-quick-pair"');
+    expect(sync).toContain('data-pairing-action="open-pairing-screen"');
+    expect(sync).toContain('data-pairing-action="create-pairing"');
+    expect(sync).toContain('data-pairing-action="scan-pairing"');
     expect(sync).toContain('data-pairing-action="back-wallet"');
     expect(sync).toContain('data-pairing-action="cancel-overwrite"');
     expect(sync).toContain('data-pairing-action="save-local-backup"');

@@ -1558,7 +1558,11 @@ export const useWalletStore = defineStore("wallet", {
       error: any,
       notifyUser = true
     ) {
-      if (error?.message?.includes("outputs have already been signed")) {
+      const message = String(error?.message ?? "");
+      if (
+        error?.code === 11003 ||
+        /outputs (?:have )?already(?: been)? signed/i.test(message)
+      ) {
         if (notifyUser) {
           console.warn(
             `[wallet] outputs already signed for keyset ${keysetId}, advancing counter and trying again`

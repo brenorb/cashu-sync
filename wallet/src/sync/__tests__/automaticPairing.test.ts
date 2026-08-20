@@ -4,6 +4,7 @@ import {
   AutoPairingHostSession,
   AutoPairingJoinSession,
   AutomaticPairingError,
+  createAutoPairingUrl,
   decodeAutoPairingQrV0,
   encodeAutoPairingQrV0,
   type PairingRelay,
@@ -54,6 +55,12 @@ describe("automatic one-QR pairing", () => {
       hooks,
     });
     const qr = encodeAutoPairingQrV0(host.qr);
+    const pairingToken = new URL(
+      createAutoPairingUrl(
+        host.qr,
+        "https://silentlink.fly.dev/#/settings/sync"
+      )
+    ).hash.split("pairing=")[1];
     expect(qr).not.toContain(fixture.mnemonic);
     expect(qr).not.toContain(fixture.sync_secret);
     expect(qr).not.toContain("ciphertext");
@@ -69,7 +76,7 @@ describe("automatic one-QR pairing", () => {
         throw error;
       }
     );
-    const join = AutoPairingJoinSession.fromQr(qr, { relay, hooks });
+    const join = AutoPairingJoinSession.fromQr(pairingToken, { relay, hooks });
     await join.start(
       async (authority) => {
         imported = authority;
@@ -81,6 +88,29 @@ describe("automatic one-QR pairing", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(imported).toEqual(fixture);
     expect(hostDone).toBe(true);
+
+    let secondImported = false;
+    const secondJoin = AutoPairingJoinSession.fromQr(qr, {
+      relay,
+      hooks: {
+        ...hooks,
+        ephemeralSecret: () =>
+          Uint8Array.from({ length: 32 }, (_, i) => (i + 77) & 0xff),
+        pairingTimeoutMs: 1,
+      },
+    });
+    let secondError = "";
+    await secondJoin.start(
+      async () => {
+        secondImported = true;
+      },
+      (error) => {
+        secondError = error.message;
+      }
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(secondImported).toBe(false);
+    expect(secondError).toBe("pairing response timed out");
   });
 
   it("rejects expiry, tampering, and QR secrets", () => {

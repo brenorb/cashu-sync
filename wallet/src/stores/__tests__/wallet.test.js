@@ -754,6 +754,14 @@ describe("wallet store", () => {
     expect(handled).toBe(true);
     expect(wallet.keysetCounter("00aa")).toBe(11);
     expect(h.notify).toHaveBeenCalledWith("wallet.notifications.trying_again");
+
+    const currentMintError = await wallet.handleOutputsHaveAlreadyBeenSignedError(
+      "00aa",
+      { code: 11003, message: "outputs already signed" },
+      false
+    );
+    expect(currentMintError).toBe(true);
+    expect(wallet.keysetCounter("00aa")).toBe(21);
   });
 
   it("cancels Bolt11 mint websocket subscriptions after a paid callback", async () => {

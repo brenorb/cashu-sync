@@ -1,80 +1,167 @@
 <template>
   <SettingsPageShell
-    title="Sync devices"
-    caption="Keep every wallet you control aligned."
+    :title="
+      incomingPairing
+        ? 'Pairing wallet'
+        : creatingPairingScreen
+        ? 'Create pairing QR'
+        : 'Sync devices'
+    "
+    :caption="
+      incomingPairing
+        ? 'Connecting this wallet securely.'
+        : creatingPairingScreen
+        ? 'Create a one-time QR for another wallet.'
+        : 'Keep every wallet you control aligned.'
+    "
   >
-    <SettingsSection title="Pairing status">
-      <q-item class="column items-stretch q-pa-lg q-gutter-md">
-        <div class="sync-status" role="status" aria-live="polite">
-          <span class="sync-status__mark" aria-hidden="true"></span>
-          {{ configured ? "Sync ready" : "Not paired" }}
-        </div>
-        <p class="sync-copy">
-          {{
-            configured
-              ? "Create one QR code for another wallet you control."
-              : "Scan the QR code from a wallet you already use."
-          }}
-        </p>
-        <div v-if="walletIdWords.length" class="wallet-id" data-wallet-id>
-          <span class="wallet-id__label">Wallet ID</span>
-          <strong>{{ walletIdWords.join(" ") }}</strong>
-          <small
-            >Compare these six words on both phones. They are not recovery
-            words.</small
-          >
-        </div>
-      </q-item>
-    </SettingsSection>
+    <section
+      v-if="incomingPairing"
+      class="pairing-incoming q-pa-xl"
+      role="status"
+      aria-live="polite"
+    >
+      <q-spinner-dots v-if="busy" color="primary" size="3rem" />
+      <div v-else class="pairing-incoming__mark" aria-hidden="true">!</div>
+      <p class="v0-eyebrow">
+        {{ busy ? "PAIRING WALLET" : "PAIRING STOPPED" }}
+      </p>
+      <h2>{{ busy ? "Connecting this wallet" : "Pairing needs attention" }}</h2>
+      <p class="sync-copy">
+        {{
+          busy
+            ? "Importing the shared wallet and synchronizing its balance."
+            : "The wallet was not changed. Return to the wallet and try again with a new QR."
+        }}
+      </p>
+      <q-btn
+        v-if="!busy"
+        data-pairing-action="back-wallet"
+        flat
+        no-caps
+        label="Back to wallet"
+        @click="$router.replace('/wallet')"
+      />
+    </section>
 
-    <SettingsSection v-if="configured" title="Pair another wallet">
-      <q-item class="column items-stretch q-pa-lg q-gutter-md">
-        <q-btn
-          data-pairing-action="create-quick-pair"
-          color="primary"
-          no-caps
-          unelevated
-          label="Create pairing QR"
-          :loading="busy"
-          @click="createQuickPair"
-        />
-        <template v-if="quickPairUrl">
-          <button
-            class="pairing-qr"
-            type="button"
-            aria-label="Enlarge pairing QR code"
-            @click="showPairingQr = true"
-          >
-            <vue-qrcode
-              :value="quickPairUrl"
-              :options="{ width: 280, errorCorrectionLevel: 'L', margin: 1 }"
-            />
-          </button>
-          <small class="pairing-qr-hint">Tap the QR code to enlarge it</small>
+    <template v-else>
+      <SettingsSection title="Pairing status">
+        <q-item class="column items-stretch q-pa-lg q-gutter-md">
+          <div class="sync-status" role="status" aria-live="polite">
+            <span class="sync-status__mark" aria-hidden="true"></span>
+            {{ configured ? "Sync ready" : "Not paired" }}
+          </div>
           <p class="sync-copy">
-            Scan this once with the other phone. It opens the wallet and imports
-            the same balance. The QR expires after ten minutes.
+            {{
+              configured
+                ? "Create one QR code for another wallet you control."
+                : "Scan the QR code from a wallet you already use."
+            }}
           </p>
-        </template>
-      </q-item>
-    </SettingsSection>
+          <div v-if="walletIdWords.length" class="wallet-id" data-wallet-id>
+            <span class="wallet-id__label">Wallet ID</span>
+            <strong>{{ walletIdWords.join(" ") }}</strong>
+            <small
+              >Compare these six words on both phones. They are not recovery
+              words.</small
+            >
+          </div>
+        </q-item>
+      </SettingsSection>
 
-    <SettingsSection v-else title="Pair this wallet">
-      <q-item class="column items-stretch q-pa-lg q-gutter-md">
-        <q-btn
-          data-pairing-action="scan-quick-pair"
-          color="primary"
-          no-caps
-          unelevated
-          label="Scan pairing QR"
-          @click="openScanner"
-        />
-        <p class="sync-copy">
-          Point the camera at the QR shown by your existing wallet. Pairing
-          finishes automatically.
-        </p>
-      </q-item>
-    </SettingsSection>
+      <SettingsSection
+        v-if="configured && !creatingPairingScreen"
+        title="Pair another wallet"
+      >
+        <q-item class="column items-stretch q-pa-lg q-gutter-md">
+          <q-btn
+            data-pairing-action="open-pairing-screen"
+            color="primary"
+            no-caps
+            unelevated
+            label="Open pairing screen"
+            @click="$router.push('/settings/sync/pairing')"
+          />
+          <p class="sync-copy">
+            Open a separate screen before generating a one-time pairing QR.
+          </p>
+        </q-item>
+      </SettingsSection>
+
+      <SettingsSection v-else-if="configured" title="Create pairing QR">
+        <q-item class="column items-stretch q-pa-lg q-gutter-md">
+          <p class="sync-copy">
+            Generate the QR only when the other phone is ready to scan it. It
+            expires after three minutes and can be used once.
+          </p>
+          <q-btn
+            data-pairing-action="create-pairing"
+            color="primary"
+            no-caps
+            unelevated
+            label="Generate one-time QR"
+            :loading="busy"
+            @click="createPairing"
+          />
+          <template v-if="pairingUrl">
+            <button
+              class="pairing-qr"
+              type="button"
+              aria-label="Enlarge pairing QR code"
+              :data-pairing-url="pairingUrl"
+              @click="showPairingQr = true"
+            >
+              <vue-qrcode
+                :value="pairingUrl"
+                :options="{ width: 280, errorCorrectionLevel: 'L', margin: 1 }"
+              />
+            </button>
+            <small class="pairing-qr-hint">Tap the QR code to enlarge it</small>
+            <p class="sync-copy">
+              Scan this once with the other phone. The QR contains only a
+              short-lived pairing session; the wallet authority is sent directly
+              through the encrypted relay.
+            </p>
+          </template>
+          <q-btn
+            data-pairing-action="back-sync"
+            flat
+            no-caps
+            label="Back to sync devices"
+            @click="$router.replace('/settings/sync')"
+          />
+        </q-item>
+      </SettingsSection>
+
+      <SettingsSection v-else title="Pair this wallet">
+        <q-item class="column items-stretch q-pa-lg q-gutter-md">
+          <q-btn
+            data-pairing-action="scan-pairing"
+            color="primary"
+            no-caps
+            unelevated
+            label="Scan pairing QR"
+            @click="openScanner"
+          />
+          <p class="sync-copy">
+            Point the camera at the QR shown by your existing wallet. Pairing
+            finishes automatically.
+          </p>
+        </q-item>
+      </SettingsSection>
+
+      <q-btn
+        data-pairing-action="back-wallet"
+        flat
+        no-caps
+        :label="
+          creatingPairingScreen ? 'Back to sync devices' : 'Back to wallet'
+        "
+        @click="
+          $router.replace(creatingPairingScreen ? '/settings/sync' : '/wallet')
+        "
+      />
+    </template>
 
     <p
       v-if="message"
@@ -85,13 +172,6 @@
     >
       {{ message }}
     </p>
-    <q-btn
-      data-pairing-action="back-wallet"
-      flat
-      no-caps
-      label="Back to wallet"
-      @click="$router.replace('/wallet')"
-    />
     <q-dialog v-model="camera.show" backdrop-filter="blur(2px) brightness(60%)">
       <QrcodeReader @decode="decodePairing" />
     </q-dialog>
@@ -99,8 +179,8 @@
       <q-card class="pairing-qr-dialog">
         <q-card-section class="pairing-qr-large">
           <vue-qrcode
-            v-if="quickPairUrl"
-            :value="quickPairUrl"
+            v-if="pairingUrl"
+            :value="pairingUrl"
             :options="{ width: 960, errorCorrectionLevel: 'L', margin: 1 }"
             aria-label="Enlarged pairing QR code"
           />
@@ -203,7 +283,11 @@ import { defineComponent } from "vue";
 import { mapState } from "pinia";
 import SettingsPageShell from "./SettingsPageShell.vue";
 import SettingsSection from "./SettingsSection.vue";
-import { consumeQuickPairV0, createQuickPairV0 } from "src/sync/quickPair";
+import {
+  AutoPairingHostSession,
+  AutoPairingJoinSession,
+  createAutoPairingUrl,
+} from "src/sync/automaticPairing";
 import { encryptRecoveryBundleV0 } from "src/sync/recoveryBundle";
 import type { AuthorityPayloadV0 } from "src/sync/authorityPayload";
 import { deriveWalletIdWords } from "src/sync/walletIdentity";
@@ -228,7 +312,8 @@ export default defineComponent({
   data() {
     return {
       configured: false,
-      quickPairPayload: "",
+      incomingPairing: false,
+      pairingPayload: "",
       showPairingQr: false,
       showOverwriteDialog: false,
       busy: false,
@@ -241,20 +326,22 @@ export default defineComponent({
       pairingSuccess: false,
       walletIdWords: [] as string[],
       pairingWatchStop: null as (() => void) | null,
+      pairingHost: null as AutoPairingHostSession | null,
+      pairingJoin: null as AutoPairingJoinSession | null,
       pairingSuccessTimer: null as number | null,
     };
   },
   computed: {
     ...mapState(useCameraStore, ["camera"]),
-    quickPairUrl(): string {
-      if (!this.quickPairPayload) return "";
-      return new URL(
-        this.$router.resolve({
-          path: "/settings/sync",
-          query: { quick_pair: this.quickPairPayload },
-        }).href,
+    pairingUrl(): string {
+      if (!this.pairingPayload) return "";
+      return createAutoPairingUrl(
+        JSON.parse(this.pairingPayload),
         window.location.href
-      ).href;
+      );
+    },
+    creatingPairingScreen(): boolean {
+      return this.$route.path === "/settings/sync/pairing";
     },
   },
   created() {
@@ -262,9 +349,12 @@ export default defineComponent({
     useWalletStore();
     this.configured = useSyncRuntimeService().authority.load() !== null;
     if (this.configured) void this.loadWalletId();
-    const quickPair = this.$route.query.quick_pair;
-    if (typeof quickPair === "string") void this.finishQuickPair(quickPair);
-    if (this.$route.query.auto === "1" && typeof quickPair !== "string") {
+    const pairing = this.$route.query.pairing;
+    if (typeof pairing === "string") {
+      this.incomingPairing = true;
+      void this.finishPairing(pairing);
+    }
+    if (this.$route.query.auto === "1" && typeof pairing !== "string") {
       this.failed = true;
       this.message =
         "This pairing QR is outdated. Create a new pairing QR from the existing wallet.";
@@ -291,21 +381,38 @@ export default defineComponent({
           ? url.hash.slice(url.hash.indexOf("?") + 1)
           : "";
         const payload =
-          new URLSearchParams(hashQuery).get("quick_pair") ||
-          url.searchParams.get("quick_pair");
-        void this.finishQuickPair(payload || trimmed);
+          new URLSearchParams(hashQuery).get("pairing") ||
+          url.searchParams.get("pairing");
+        void this.finishPairing(payload || trimmed);
       } catch {
-        void this.finishQuickPair(trimmed);
+        void this.finishPairing(trimmed);
       }
     },
-    async createQuickPair() {
+    async createPairing() {
       await this.run(async () => {
         const runtime = useSyncRuntimeService();
         const session = runtime.runtime.currentSession();
         this.stopPairingWatcher();
-        this.quickPairPayload = await createQuickPairV0(
+        this.pairingHost?.destroy();
+        this.pairingHost = AutoPairingHostSession.create({
+          relayUrl: process.env.CASHU_SYNC_PAIRING_RELAY_URL,
+          hooks: { allowLoopbackHttp: runtime.allowLoopbackHttp },
+        });
+        this.pairingPayload = JSON.stringify(this.pairingHost.qr);
+        this.pairingHost.start(
           await runtime.exportAuthority(),
-          { allowLoopbackHttp: runtime.allowLoopbackHttp }
+          () => {
+            this.pairingHost?.destroy();
+            this.pairingHost = null;
+            this.showPairingQr = false;
+            this.showPairingSuccess();
+          },
+          (error) => {
+            this.pairingHost?.destroy();
+            this.pairingHost = null;
+            this.failed = true;
+            this.message = error.message;
+          }
         );
         if (session !== null) {
           const baseline = await session.repository.exportSnapshot();
@@ -318,31 +425,41 @@ export default defineComponent({
               .catch(() => undefined);
           });
         }
-        this.message = "Pairing QR ready. It expires after ten minutes.";
+        this.message = "Pairing QR ready. It expires after three minutes.";
       });
     },
-    async finishQuickPair(payload: string) {
+    async finishPairing(payload: string) {
       await this.run(async () => {
         const runtime = useSyncRuntimeService();
-        const authority = await consumeQuickPairV0(payload, {
-          allowLoopbackHttp: runtime.allowLoopbackHttp,
+        this.pairingJoin?.destroy();
+        this.pairingJoin = AutoPairingJoinSession.fromQr(payload, {
+          hooks: { allowLoopbackHttp: runtime.allowLoopbackHttp },
         });
-        this.pendingPairAuthority = authority;
-        try {
-          await this.applyPairing(authority);
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            error.message ===
-              "pairing or recovery requires an empty local wallet"
-          ) {
-            this.showOverwriteDialog = true;
-            this.message =
-              "This phone already has a wallet. Choose whether to save it or replace it.";
-            return;
-          }
-          throw error;
-        }
+        await new Promise<void>((resolve, reject) => {
+          void this.pairingJoin!.start(
+            async (authority) => {
+              try {
+                this.pendingPairAuthority = authority;
+                await this.applyPairing(authority);
+                resolve();
+              } catch (error) {
+                if (
+                  error instanceof Error &&
+                  error.message ===
+                    "pairing or recovery requires an empty local wallet"
+                ) {
+                  this.showOverwriteDialog = true;
+                  this.message =
+                    "This phone already has a wallet. Choose whether to save it or replace it.";
+                  resolve();
+                  return;
+                }
+                reject(error);
+              }
+            },
+            (error) => reject(error)
+          );
+        });
       });
     },
     async applyPairing(authority: AuthorityPayloadV0, overwrite = false) {
@@ -364,6 +481,7 @@ export default defineComponent({
         // Pairing already imported the authenticated remote snapshot.
       }
       this.configured = true;
+      this.incomingPairing = false;
       await this.loadWalletId();
       this.message = recoveryPending
         ? "Paired. Recovery will continue automatically."
@@ -374,6 +492,7 @@ export default defineComponent({
     cancelOverwrite() {
       this.showOverwriteDialog = false;
       this.pendingPairAuthority = null;
+      this.incomingPairing = false;
       this.backupPassphrase = "";
       this.backupConfirmation = "";
       this.message = "Pairing cancelled. This wallet was not changed.";
@@ -459,6 +578,8 @@ export default defineComponent({
   },
   beforeUnmount() {
     this.stopPairingWatcher();
+    this.pairingHost?.destroy();
+    this.pairingJoin?.destroy();
     if (this.pairingSuccessTimer !== null) {
       window.clearTimeout(this.pairingSuccessTimer);
     }
@@ -467,6 +588,27 @@ export default defineComponent({
 </script>
 
 <style scoped lang="scss">
+.pairing-incoming {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  min-height: 18rem;
+  text-align: center;
+  align-content: center;
+}
+
+.pairing-incoming__mark {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  color: var(--sl-color-orange-500, #ff5c00);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
 .sync-status {
   display: flex;
   align-items: center;

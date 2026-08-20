@@ -41,9 +41,9 @@ test.describe("v0 live browser infrastructure", () => {
         await device.page.goto(server!.walletUrl, {
           waitUntil: "domcontentloaded",
         });
-        await expect(device.page.getByRole("heading", { level: 1 })).toHaveText(
-          "Your money, in sync."
-        );
+        await expect(
+          device.page.getByRole("button", { name: "Buy credits" })
+        ).toBeVisible();
       })
     );
 

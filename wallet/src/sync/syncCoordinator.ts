@@ -4,7 +4,10 @@ import {
   decryptSyncEventV0,
   type CreateSyncEventOptions,
 } from "src/sync/syncCrypto";
-import type { RelayPublishResult } from "src/sync/relayClient";
+import type {
+  RelayPublishResult,
+  RelayWatchStatus,
+} from "src/sync/relayClient";
 import type { SnapshotV0 } from "src/sync/types";
 import { canonicalJson } from "src/sync/validation";
 
@@ -141,8 +144,11 @@ export class SnapshotSyncCoordinator {
     );
   }
 
-  watchCurrent(onEvent: (event: Event) => void): () => void {
-    return this.relay.watchCurrent?.(onEvent) ?? (() => undefined);
+  watchCurrent(
+    onEvent: (event: Event) => void,
+    onStatus?: (status: RelayWatchStatus) => void
+  ): () => void {
+    return this.relay.watchCurrent?.(onEvent, onStatus) ?? (() => undefined);
   }
 
   /** Confirms a previously published exact candidate without republishing it. */

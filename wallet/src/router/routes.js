@@ -23,6 +23,10 @@ const routes = [
         component: () => import("src/pages/settings/SyncSettings.vue"),
       },
       {
+        path: "sync/pairing",
+        component: () => import("src/pages/settings/SyncSettings.vue"),
+      },
+      {
         path: "recovery",
         component: () => import("src/pages/settings/RecoverySettings.vue"),
       },

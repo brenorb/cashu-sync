@@ -22,6 +22,7 @@ import {
 } from "./validation";
 
 export const AUTO_PAIRING_TTL_SECONDS_V0 = 180;
+const AUTO_PAIRING_RESPONSE_TIMEOUT_MS = 15_000;
 const QR_TYPE = "cashu-sync-auto-pairing" as const;
 const REQUEST_TYPE = "cashu-sync-auto-pairing-request" as const;
 const RESPONSE_TYPE = "cashu-sync-auto-pairing-response" as const;
@@ -94,6 +95,7 @@ export type AutomaticPairingHooks = AuthorityValidationOptions & {
   ephemeralSecret?: () => Uint8Array;
   webSocketFactory?: (url: string) => PairingWebSocket;
   timeoutMs?: number;
+  pairingTimeoutMs?: number;
 };
 
 function randomBytes(hooks: AutomaticPairingHooks, length: number): Uint8Array {
@@ -189,8 +191,11 @@ function parseQr(
               "pairing"
             )
           : null);
-      if (encoded)
+      if (encoded) {
         raw = JSON.parse(new TextDecoder().decode(fromB64(encoded, "pairing")));
+      } else if (B64.test(raw)) {
+        raw = JSON.parse(new TextDecoder().decode(fromB64(raw, "pairing")));
+      }
     } catch {
       // Raw JSON is accepted for camera/copy testing.
     }
@@ -726,6 +731,7 @@ export class AutoPairingJoinSession {
   private readonly hooks: AutomaticPairingHooks;
   private readonly relay: PairingRelay;
   private stopWatch: (() => void) | null = null;
+  private responseTimer: ReturnType<typeof setTimeout> | null = null;
   private completed = false;
 
   private constructor(
@@ -828,6 +834,15 @@ export class AutoPairingJoinSession {
           }
         }
       );
+      const remainingMs = Math.max(
+        1,
+        (this.qr.expires_at - now(this.hooks)) * 1_000
+      );
+      this.responseTimer = setTimeout(() => {
+        if (this.completed) return;
+        this.destroy();
+        onError(new AutomaticPairingError("pairing response timed out"));
+      }, Math.min(this.hooks.pairingTimeoutMs ?? AUTO_PAIRING_RESPONSE_TIMEOUT_MS, remainingMs));
     } catch (error) {
       this.destroy();
       onError(
@@ -841,6 +856,10 @@ export class AutoPairingJoinSession {
   destroy(): void {
     this.stopWatch?.();
     this.stopWatch = null;
+    if (this.responseTimer !== null) {
+      clearTimeout(this.responseTimer);
+      this.responseTimer = null;
+    }
     this.secret.fill(0);
   }
 }

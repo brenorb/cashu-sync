@@ -98,6 +98,23 @@ export class CashuTsOperationGateway
     return { proofs: proofs.map(toSnapshotProof) };
   }
 
+  async recreateMintPreview(
+    exactPreview: SerializedMintPreviewV0
+  ): Promise<SerializedMintPreviewV0> {
+    const exact = deserializeMintPreviewV0(exactPreview);
+    const quote = await this.wallet.checkMintQuoteBolt11(exact.quote.quote);
+    if (quote.state !== MintQuoteState.PAID) {
+      throw new Error(`mint quote is ${quote.state}; cannot reprepare outputs`);
+    }
+    const preview = await this.wallet.prepareMint(
+      "bolt11",
+      Amount.from(exact.quote.amount),
+      exact.quote,
+      { keysetId: exact.keysetId }
+    );
+    return serializeMintPreviewV0(preview);
+  }
+
   async submitMelt(
     exactPreview: SerializedMeltPreviewV0
   ): Promise<PendingMeltResponseV0> {

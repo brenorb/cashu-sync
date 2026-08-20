@@ -150,7 +150,7 @@ export default {
     },
     offline: {
       warning: {
-        text: "Offline",
+        text: "Rede sem conexão",
       },
     },
     reload: {

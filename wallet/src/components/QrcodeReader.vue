@@ -16,11 +16,13 @@ export default {
     qrScanner: QrScanner | null;
     urDecoder: URDecoder | null;
     urDecoderProgress: number;
+    cameraError: string;
   } {
     return {
       qrScanner: null,
       urDecoder: null,
       urDecoderProgress: 0,
+      cameraError: "",
     };
   },
   mounted() {
@@ -40,8 +42,13 @@ export default {
         onDecodeError: () => {},
       }
     );
-    this.qrScanner.start();
     this.urDecoder = new URDecoder();
+    void this.qrScanner.start().catch((error: unknown) => {
+      this.cameraError =
+        error instanceof Error && error.name === "NotAllowedError"
+          ? "Camera permission is required to scan a QR code."
+          : "Unable to access the camera. Check that no other app is using it.";
+    });
   },
   computed: {
     ...mapState(useCameraStore, ["camera", "hasCamera"]),
@@ -92,6 +99,9 @@ export default {
         <video ref="cameraEl" style="width: 100%"></video>
       </div>
       <div>
+        <p v-if="cameraError" role="alert" class="text-negative q-pa-md">
+          {{ cameraError }}
+        </p>
         <div class="row q-justify-center">
           <q-linear-progress
             rounded

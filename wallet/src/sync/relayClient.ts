@@ -17,6 +17,8 @@ export type SyncRelayClientErrorCode =
   | "relay"
   | "protocol";
 
+export type RelayWatchStatus = "connecting" | "connected" | "disconnected";
+
 export class SyncRelayClientError extends Error {
   readonly code: SyncRelayClientErrorCode;
 
@@ -127,7 +129,10 @@ export class SyncRelayClient {
   }
 
   /** Keeps an authenticated subscription open for remote wallet updates. */
-  watchCurrent(onEvent: (event: Event) => void): () => void {
+  watchCurrent(
+    onEvent: (event: Event) => void,
+    onStatus?: (status: RelayWatchStatus) => void
+  ): () => void {
     let stopped = false;
     let socket: RelayWebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -135,6 +140,10 @@ export class SyncRelayClient {
     let subscriptionId: string | null = null;
     let authEventId: string | null = null;
     let authenticated = false;
+
+    const reportStatus = (status: RelayWatchStatus): void => {
+      onStatus?.(status);
+    };
 
     const clearConnectionTimer = (): void => {
       if (connectionTimer !== null) {
@@ -171,6 +180,7 @@ export class SyncRelayClient {
 
     const reconnect = (): void => {
       if (stopped) return;
+      reportStatus("disconnected");
       closeConnection();
       scheduleReconnect();
     };
@@ -202,6 +212,7 @@ export class SyncRelayClient {
 
     const connect = (): void => {
       if (stopped || socket !== null) return;
+      reportStatus("connecting");
       try {
         socket = this.webSocketFactory(this.relayUrl);
       } catch {
@@ -265,6 +276,7 @@ export class SyncRelayClient {
             }
             clearConnectionTimer();
             authenticated = true;
+            reportStatus("connected");
             if (subscriptionId !== null) {
               send(["CLOSE", subscriptionId]);
             }

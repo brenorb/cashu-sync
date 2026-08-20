@@ -31,6 +31,11 @@ export interface OperationJournalPort {
     preview: SerializedMeltPreviewV0,
     timestamp: number
   ): Promise<void>;
+  reprepareMint(
+    operationId: string,
+    preview: SerializedMintPreviewV0,
+    timestamp: number
+  ): Promise<void>;
   markSubmitted(
     operationId: string,
     type: "mint" | "melt",
@@ -68,6 +73,9 @@ export interface CashuOperationGateway<MintIntent, MeltIntent> {
   submitMint(
     exactPreview: SerializedMintPreviewV0
   ): Promise<PendingMintResponseV0>;
+  recreateMintPreview(
+    exactPreview: SerializedMintPreviewV0
+  ): Promise<SerializedMintPreviewV0>;
   submitMelt(
     exactPreview: SerializedMeltPreviewV0
   ): Promise<PendingMeltResponseV0>;
@@ -278,7 +286,48 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
       let response: PendingMintResponseV0;
       try {
         response = await this.gateway.submitMint(pending.prepared_request);
-      } catch {
+      } catch (error) {
+        if (isOutputsAlreadySigned(error)) {
+          let recovered: PendingMintResponseV0 | null;
+          try {
+            recovered = await this.gateway.reconcileMint(
+              pending.prepared_request
+            );
+          } catch {
+            return needs(pending, "gateway-reconcile", "gateway-unresolved");
+          }
+          if (recovered !== null) {
+            await this.journal.recordMintResponse(
+              pending.operation_id,
+              recovered,
+              this.now()
+            );
+            return this.publishFinal({
+              ...pending,
+              phase: "response_recorded",
+              response: recovered,
+            });
+          }
+          let preview: SerializedMintPreviewV0;
+          try {
+            preview = await this.gateway.recreateMintPreview(
+              pending.prepared_request
+            );
+          } catch {
+            return needs(pending, "gateway-reconcile", "gateway-unresolved");
+          }
+          await this.journal.reprepareMint(
+            pending.operation_id,
+            preview,
+            this.now()
+          );
+          return this.publishPreparedAndSubmit({
+            ...pending,
+            phase: "prepared",
+            prepared_request: preview,
+            response: null,
+          });
+        }
         return needs(pending, "gateway-submit", "gateway-unknown");
       }
       await this.journal.recordMintResponse(
@@ -435,5 +484,31 @@ function isPublishRejection(error: unknown): boolean {
     error !== null &&
     "code" in error &&
     error.code === "publish-rejected"
+  );
+}
+
+export function isOutputsAlreadySigned(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const value = error as {
+    code?: unknown;
+    message?: unknown;
+    detail?: unknown;
+    response?: { data?: { code?: unknown; detail?: unknown } };
+  };
+  const response = value.response?.data;
+  let serialized = "";
+  try {
+    serialized = JSON.stringify(error);
+  } catch {
+    // Some HTTP errors contain circular request metadata.
+  }
+  return (
+    [value.code, response?.code].some((code) => String(code) === "11003") ||
+    [value.message, value.detail, response?.detail].some(
+      (message) =>
+        typeof message === "string" && message.includes("outputs already signed")
+    ) ||
+    serialized.includes("11003") ||
+    serialized.includes("outputs already signed")
   );
 }

@@ -351,9 +351,21 @@ export default defineComponent({
         }
       };
       document.addEventListener("visibilitychange", this.visibilityHandler);
-      useV0WalletService().startLiveSync(() => {
-        this.syncMessage = "Wallet synchronized.";
-      });
+      useV0WalletService().startLiveSync(
+        () => {
+          this.syncMessage = "Wallet synchronized.";
+          this.syncPending = false;
+        },
+        (status) => {
+          if (status === "disconnected" || status === "connecting") {
+            this.syncPending = true;
+            this.syncMessage = "Reconnecting wallet…";
+          } else {
+            this.syncPending = false;
+            this.syncMessage = "Wallet synchronized.";
+          }
+        }
+      );
     } catch (error) {
       this.syncPending = false;
       this.walletReady = false;

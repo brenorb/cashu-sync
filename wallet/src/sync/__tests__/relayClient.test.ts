@@ -173,6 +173,24 @@ describe("SyncRelayClient", () => {
     expect(received).toHaveLength(1);
   });
 
+  it("reports connection loss and recovery state for the live subscription", () => {
+    const { client, sockets } = fixture();
+    const statuses: string[] = [];
+    const stop = client.watchCurrent(
+      () => undefined,
+      (status) => statuses.push(status)
+    );
+    const socket = sockets[0];
+    expect(statuses).toEqual(["connecting"]);
+    socket.open();
+    authenticate(socket);
+    expect(statuses).toEqual(["connecting", "connected"]);
+
+    socket.disconnect();
+    expect(statuses).toEqual(["connecting", "connected", "disconnected"]);
+    stop();
+  });
+
   it("returns null on matching EOSE and rejects a wrong schema envelope", async () => {
     const emptyFixture = fixture();
     const emptyQuery = emptyFixture.client.queryCurrent();

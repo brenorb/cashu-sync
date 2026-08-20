@@ -187,6 +187,50 @@ export class OperationJournalRepository {
     });
   }
 
+  async reprepareMint(
+    operationId: string,
+    input: SerializedMintPreviewV0,
+    timestamp: number
+  ): Promise<void> {
+    assertOperationId(operationId);
+    const preview = decodeSerializedMintPreviewV0(input);
+    assertMintPreviewAmounts(preview);
+    await this.db.transaction(
+      "rw",
+      [this.db.mintQuotes, this.db.walletSyncState],
+      async () => {
+        const state = await this.getState();
+        const pending = requirePending(state, operationId, "mint");
+        if (
+          pending.phase !== "submitted" &&
+          pending.phase !== "needs_reconciliation"
+        ) {
+          throw new OperationJournalError(
+            "invalid-transition",
+            "reprepareMint requires a submitted operation"
+          );
+        }
+        assertMonotonicTimestamp(pending, timestamp);
+        await this.requireMintQuote({
+          ...pending,
+          phase: "prepared",
+          prepared_request: preview,
+          response: null,
+        });
+        await this.db.walletSyncState.put({
+          ...state,
+          pending_operation: this.validatePending({
+            ...pending,
+            phase: "prepared",
+            updated_at: timestamp,
+            prepared_request: preview,
+            response: null,
+          }),
+        });
+      }
+    );
+  }
+
   async recordMintResponse(
     operationId: string,
     input: PendingMintResponseV0,
