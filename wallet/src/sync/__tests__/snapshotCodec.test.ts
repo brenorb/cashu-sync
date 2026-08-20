@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   decodeSnapshotV0,
+  decodeAndEncodeSnapshotV0,
   encodeSnapshotV0,
   SnapshotValidationError,
 } from "src/sync/snapshotCodec";
@@ -66,6 +67,15 @@ describe("SnapshotV0 codec", () => {
     const decoded = decode(fixtureText);
     expect(decoded).toEqual(fixture);
     expect(decode(encodeSnapshotV0(decoded))).toEqual(decoded);
+  });
+
+  it("returns the validated snapshot and its canonical encoding together", () => {
+    const result = decodeAndEncodeSnapshotV0(fixtureText, {
+      expectedMint: CONFIGURED_MINT,
+    });
+
+    expect(result.snapshot).toEqual(fixture);
+    expect(result.encoded).toBe(encodeSnapshotV0(fixture));
   });
 
   it("produces stable JSON while preserving ordered Cashu request arrays", () => {

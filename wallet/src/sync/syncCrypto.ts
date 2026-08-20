@@ -13,8 +13,8 @@ import {
   type SnapshotV0,
 } from "./types";
 import {
+  decodeAndEncodeSnapshotV0,
   decodeSnapshotV0,
-  encodeSnapshotV0,
   type DecodeSnapshotOptions,
 } from "./snapshotCodec";
 
@@ -89,8 +89,8 @@ export function createSyncEventV0(
   secret: Uint8Array,
   options: CreateSyncEventOptions = {}
 ): VerifiedEvent {
-  const validated = decodeSnapshotV0(snapshot, options);
-  const plaintext = encodeSnapshotV0(validated, options);
+  const { snapshot: validated, encoded: plaintext } =
+    decodeAndEncodeSnapshotV0(snapshot, options);
   let content: string;
   try {
     content = nip44.v2.encrypt(plaintext, conversationKey(secret));

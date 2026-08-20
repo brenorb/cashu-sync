@@ -496,10 +496,10 @@ function decodeSnapshotObject(
   };
 }
 
-export function decodeSnapshotV0(
+export function decodeAndEncodeSnapshotV0(
   value: unknown,
   options: DecodeSnapshotOptions = {}
-): SnapshotV0 {
+): { snapshot: SnapshotV0; encoded: string } {
   try {
     let parsed = value;
     if (typeof value === "string") {
@@ -513,10 +513,11 @@ export function decodeSnapshotV0(
       }
     }
     const snapshot = decodeSnapshotObject(parsed, options);
-    if (utf8Length(canonicalJson(snapshot)) > SNAPSHOT_MAX_PLAINTEXT_BYTES_V0) {
+    const encoded = canonicalJson(snapshot);
+    if (utf8Length(encoded) > SNAPSHOT_MAX_PLAINTEXT_BYTES_V0) {
       fail("snapshot", "plaintext size exceeds v0 limit");
     }
-    return snapshot;
+    return { snapshot, encoded };
   } catch (error) {
     if (error instanceof SnapshotValidationError) throw error;
     if (error instanceof SyncValidationError) {
@@ -526,9 +527,16 @@ export function decodeSnapshotV0(
   }
 }
 
+export function decodeSnapshotV0(
+  value: unknown,
+  options: DecodeSnapshotOptions = {}
+): SnapshotV0 {
+  return decodeAndEncodeSnapshotV0(value, options).snapshot;
+}
+
 export function encodeSnapshotV0(
   snapshot: SnapshotV0,
   options: DecodeSnapshotOptions = {}
 ): string {
-  return canonicalJson(decodeSnapshotV0(snapshot, options));
+  return decodeAndEncodeSnapshotV0(snapshot, options).encoded;
 }
