@@ -129,8 +129,19 @@ export class CashuTsOperationGateway
     exactPreview: SerializedMintPreviewV0
   ): Promise<PendingMintResponseV0 | null> {
     const exact = deserializeMintPreviewV0(exactPreview);
-    const quote = await this.wallet.checkMintQuoteBolt11(exact.quote.quote);
+    let quote = await this.wallet.checkMintQuoteBolt11(exact.quote.quote);
     requireUsdMintQuote(quote);
+    if (quote.state === MintQuoteState.PAID) {
+      try {
+        // Replay only the durable request; never allocate new outputs here.
+        return await this.submitMint(exactPreview);
+      } catch {
+        // The original request or this retry may have issued before its reply
+        // was lost. Recheck once and restore; never loop on an uncertain POST.
+        quote = await this.wallet.checkMintQuoteBolt11(exact.quote.quote);
+        requireUsdMintQuote(quote);
+      }
+    }
     if (quote.state !== MintQuoteState.ISSUED) return null;
 
     // NUT-09 is read-only: ask only for the exact blinded messages already

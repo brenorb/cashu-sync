@@ -79,7 +79,7 @@ export interface CashuOperationGateway<MintIntent, MeltIntent> {
   submitMelt(
     exactPreview: SerializedMeltPreviewV0
   ): Promise<PendingMeltResponseV0>;
-  /** Read-only quote/proof recovery; it must never submit the operation. */
+  /** Recover exact outputs; a PAID quote may replay only the journaled mint request. */
   reconcileMint(
     exactPreview: SerializedMintPreviewV0
   ): Promise<PendingMintResponseV0 | null>;

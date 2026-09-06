@@ -17,6 +17,7 @@ import {
   type MintOperationIntent,
 } from "src/sync/cashuOperationGateway";
 import {
+  deserializeMintPreviewV0,
   serializeMeltPreviewV0,
   serializeMintPreviewV0,
 } from "src/sync/previewCodec";
@@ -168,27 +169,43 @@ describe("CashuTsOperationGateway", () => {
     expect(swap).not.toHaveBeenCalled();
   });
 
-  it("submits the exact mint preview and converts returned proofs", async () => {
-    const outputs = [output(10, 1), output(20, 2)];
-    const quote = mintQuote();
-    const preview = serializeMintPreviewV0({
-      method: "bolt11",
-      keysetId: KEYSET,
-      quote,
-      payload: { quote: quote.quote, outputs: outputs.map((o) => o.blindedMessage) },
-      outputData: outputs,
-    });
-    const completeMint = vi.fn(async () => [proof(10, "01"), proof(20, "02")]);
-    const gateway = new CashuTsOperationGateway(walletMock({ completeMint }));
+  it.each(["submitMint", "reconcileMint"] as const)(
+    "%s uses the exact mint preview and converts returned proofs",
+    async (method) => {
+      const outputs = [output(10, 1), output(20, 2)];
+      const quote = mintQuote();
+      const preview = serializeMintPreviewV0({
+        method: "bolt11",
+        keysetId: KEYSET,
+        quote,
+        payload: {
+          quote: quote.quote,
+          outputs: outputs.map((o) => o.blindedMessage),
+        },
+        outputData: outputs,
+      });
+      const completeMint = vi.fn(async () => [
+        proof(10, "01"),
+        proof(20, "02"),
+      ]);
+      const wallet = walletMock({
+        completeMint,
+        checkMintQuoteBolt11: vi.fn(async () => mintQuote()),
+      });
+      const gateway = new CashuTsOperationGateway(wallet);
 
-    const response = await gateway.submitMint(preview);
+      const response = await gateway[method](preview);
 
-    expect(completeMint).toHaveBeenCalledOnce();
-    expect(response.proofs).toEqual([
-      snapshotProof(10, "01"),
-      snapshotProof(20, "02"),
-    ]);
-  });
+      expect(completeMint).toHaveBeenCalledExactlyOnceWith(
+        deserializeMintPreviewV0(preview)
+      );
+      expect(wallet.prepareMint).not.toHaveBeenCalled();
+      expect(response?.proofs).toEqual([
+        snapshotProof(10, "01"),
+        snapshotProof(20, "02"),
+      ]);
+    }
+  );
 
   it("submits a melt with the persisted prefer_async flag", async () => {
     const quote = meltQuote();
@@ -223,47 +240,100 @@ describe("CashuTsOperationGateway", () => {
     });
   });
 
-  it("recovers an issued mint only from the exact prepared NUT-09 outputs", async () => {
-    const outputs = [output(10, 1), output(20, 2)];
-    const quote = mintQuote();
-    const preview = serializeMintPreviewV0({
-      method: "bolt11",
-      keysetId: KEYSET,
-      quote,
-      payload: { quote: quote.quote, outputs: outputs.map((o) => o.blindedMessage) },
-      outputData: outputs,
-    });
-    const recoveredProofs = [proof(10, "01"), proof(20, "02")];
-    const signatures = [
-      { amount: Amount.from(10), id: KEYSET, C_: "02aa" },
-      { amount: Amount.from(20), id: KEYSET, C_: "02bb" },
-    ];
-    vi.spyOn(OutputData.prototype, "toProof").mockImplementation(function () {
-      return this.blindedMessage.amount.toNumber() === 10
-        ? recoveredProofs[0]!
-        : recoveredProofs[1]!;
-    });
-    const restore = vi.fn(async () => ({
-      outputs: outputs.map((entry) => entry.blindedMessage),
-      signatures,
-    }));
-    const wallet = walletMock({
-      checkMintQuoteBolt11: vi.fn(async () => mintQuote(MintQuoteState.ISSUED)),
-      mint: { restore },
-    });
-    const gateway = new CashuTsOperationGateway(wallet);
+  it.each([false, true])(
+    "recovers exact NUT-09 outputs when issuance races replay: %s",
+    async (raced) => {
+      const outputs = [output(10, 1), output(20, 2)];
+      const quote = mintQuote();
+      const preview = serializeMintPreviewV0({
+        method: "bolt11",
+        keysetId: KEYSET,
+        quote,
+        payload: {
+          quote: quote.quote,
+          outputs: outputs.map((o) => o.blindedMessage),
+        },
+        outputData: outputs,
+      });
+      const recoveredProofs = [proof(10, "01"), proof(20, "02")];
+      const signatures = [
+        { amount: Amount.from(10), id: KEYSET, C_: "02aa" },
+        { amount: Amount.from(20), id: KEYSET, C_: "02bb" },
+      ];
+      vi.spyOn(OutputData.prototype, "toProof").mockImplementation(function () {
+        return this.blindedMessage.amount.toNumber() === 10
+          ? recoveredProofs[0]!
+          : recoveredProofs[1]!;
+      });
+      const restore = vi.fn(async () => ({
+        outputs: outputs.map((entry) => entry.blindedMessage),
+        signatures,
+      }));
+      const checkQuote = vi.fn(async () => mintQuote(MintQuoteState.ISSUED));
+      if (raced) checkQuote.mockResolvedValueOnce(mintQuote());
+      const wallet = walletMock({
+        checkMintQuoteBolt11: checkQuote,
+        completeMint: vi
+          .fn()
+          .mockRejectedValue(new Error("response lost or already issued")),
+        mint: { restore },
+      });
+      const gateway = new CashuTsOperationGateway(wallet);
 
-    const response = await gateway.reconcileMint(preview);
+      const response = await gateway.reconcileMint(preview);
 
-    expect(restore).toHaveBeenCalledWith({ outputs: preview.request.outputs.map((entry) => ({
-      ...entry,
-      amount: Amount.from(entry.amount),
-    })) });
-    expect(response?.proofs).toEqual([
-      snapshotProof(10, "01"),
-      snapshotProof(20, "02"),
-    ]);
-  });
+      expect(wallet.completeMint).toHaveBeenCalledTimes(raced ? 1 : 0);
+      expect(wallet.prepareMint).not.toHaveBeenCalled();
+      expect(restore).toHaveBeenCalledWith({
+        outputs: preview.request.outputs.map((entry) => ({
+          ...entry,
+          amount: Amount.from(entry.amount),
+        })),
+      });
+      expect(response?.proofs).toEqual([
+        snapshotProof(10, "01"),
+        snapshotProof(20, "02"),
+      ]);
+    }
+  );
+
+  it.each(["unpaid", "offline", "retry-unresolved"] as const)(
+    "preserves uncertainty without repeated mint requests: %s",
+    async (scenario) => {
+      const outputs = [output(30, 1)];
+      const quote = mintQuote();
+      const preview = serializeMintPreviewV0({
+        method: "bolt11",
+        keysetId: KEYSET,
+        quote,
+        payload: {
+          quote: quote.quote,
+          outputs: outputs.map((o) => o.blindedMessage),
+        },
+        outputData: outputs,
+      });
+      const checkQuote = vi.fn(async () =>
+        mintQuote(
+          scenario === "unpaid" ? MintQuoteState.UNPAID : MintQuoteState.PAID
+        )
+      );
+      if (scenario === "offline")
+        checkQuote.mockRejectedValue(new Error("offline"));
+      const wallet = walletMock({
+        checkMintQuoteBolt11: checkQuote,
+        completeMint: vi.fn().mockRejectedValue(new Error("timeout")),
+      });
+      const result = new CashuTsOperationGateway(wallet).reconcileMint(preview);
+      if (scenario === "offline")
+        await expect(result).rejects.toThrow("offline");
+      else await expect(result).resolves.toBeNull();
+      expect(wallet.completeMint).toHaveBeenCalledTimes(
+        scenario === "retry-unresolved" ? 1 : 0
+      );
+      expect(wallet.prepareMint).not.toHaveBeenCalled();
+      expect(wallet.mint.restore).not.toHaveBeenCalled();
+    }
+  );
 
   it("does not claim mint recovery when only some outputs are restored", async () => {
     const outputs = [output(10, 1), output(20, 2)];

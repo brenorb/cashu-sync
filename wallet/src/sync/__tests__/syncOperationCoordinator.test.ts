@@ -516,7 +516,7 @@ describe("SyncOperationCoordinator resume", () => {
   });
 
   it.each(["submitted", "needs_reconciliation"] as const)(
-    "uses read-only reconciliation for %s and never resubmits",
+    "delegates %s recovery to the gateway without a blind submit",
     async (phase) => {
       const value = fixture();
       value.journal.state.pending_operation = pendingMint(phase);
@@ -532,7 +532,7 @@ describe("SyncOperationCoordinator resume", () => {
     }
   );
 
-  it("returns unresolved when read-only reconciliation has no answer", async () => {
+  it("returns unresolved when gateway recovery has no answer", async () => {
     const value = fixture();
     value.journal.state.pending_operation = pendingMint("submitted");
 

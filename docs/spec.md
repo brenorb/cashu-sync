@@ -210,6 +210,8 @@ The reference Nutshell profile enables NUT-19 with a one-hour TTL. Within that w
 
 ## 12. Recovery
 
+Mint recovery automatically replays the exact journaled request when the quote is `PAID`, without allocating new outputs or counters. If replay fails, it rechecks the quote once and restores the exact outputs through NUT-09 when `ISSUED`. An unpaid, unavailable, or still inconclusive result preserves the pending journal; melt recovery remains read-only. Successful recovery follows the normal durable-response and final relay CAS steps.
+
 ### Existing wallet restart
 
 Load the local journal, fetch the relay head, and reconcile any discrepancy or pending operation before enabling mint/melt.
