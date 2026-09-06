@@ -49,6 +49,8 @@ Both PWA installations belong to one user and operate one wallet. The journal co
 
 Journal transitions validate the supplied clock value and persist the greater of that value and the last durable operation timestamp. This keeps operation time nondecreasing when a paired device has a slower clock or the local clock moves backwards; monetary ordering still comes from the journal phases and relay CAS.
 
-Pulling a newer relay revision may clear a submitted local journal only when its matching quote and accounting entry confirm completion and counters do not regress. Prepared requests and locally recorded responses are preserved for the operation coordinator to resolve; a newer revision alone cannot overwrite them.
+Pulling a newer relay revision may clear a submitted local journal only when its matching quote and accounting entry confirm completion and counters do not regress. Prepared requests and locally recorded terminal responses are preserved for the operation coordinator to resolve; a newer revision alone cannot overwrite them.
 
 Submitted-operation recovery checks the relay first. A validated completed snapshot avoids a mint request; unavailable, incomplete, or invalid relay history falls back to the exact local journal and mint recovery. Local persistence errors are not treated as relay failures. A confirmed response remains durable if final relay publication is unavailable, and subsequent attempts only finalize that response.
+
+A recorded `PENDING` melt also checks the relay before the mint. An `UNPAID` relay result is accepted only with the exact input proofs released; quote state alone is insufficient. Matching history preserves the original accounting amount, which may include fees or use a signed debit. Integration tests exercise encrypted events through the real Dexie journal and both coordinators.

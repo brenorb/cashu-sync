@@ -238,7 +238,7 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
         return this.recoverFromRelay(pending);
       case "response_recorded":
         if (pending.type === "melt" && pending.response?.state === "PENDING") {
-          return this.reconcileGateway(pending);
+          return this.recoverFromRelay(pending);
         }
         return this.publishFinal(pending);
     }

@@ -1,5 +1,9 @@
 import "fake-indexeddb/auto";
 import Dexie from "dexie";
+import { LocalWalletRepository } from "src/sync/localWalletRepository";
+import { SnapshotSyncCoordinator } from "src/sync/syncCoordinator";
+import { SyncOperationCoordinator } from "src/sync/syncOperationCoordinator";
+import { createSyncEventV0 } from "src/sync/syncCrypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CashuDexie } from "src/stores/dexie";
 import {
@@ -725,4 +729,108 @@ it("exports a typed journal error", () => {
     name: "OperationJournalError",
     code: "slot-occupied",
   });
+});
+
+describe("relay recovery with the durable journal", () => {
+  it.each([
+    "mint",
+    "paid-melt",
+    "unpaid-melt",
+    "pending-melt",
+    "incomplete-unpaid-melt",
+  ] as const)(
+    "validates encrypted %s recovery against the durable journal",
+    async (scenario) => {
+      const mint = scenario === "mint";
+      const unpaid = scenario.includes("unpaid");
+      const operationId = mint ? MINT_OPERATION : MELT_OPERATION;
+      if (mint) {
+        await seedMintRows();
+        await repository.prepareMint(operationId, mintPreview, NOW);
+      } else {
+        await seedMeltRows();
+        await repository.prepareMelt(operationId, meltPreview, NOW);
+      }
+      await repository.markSubmitted(
+        operationId,
+        mint ? "mint" : "melt",
+        NOW + 1
+      );
+      if (scenario === "pending-melt") {
+        await repository.recordMeltResponse(
+          operationId,
+          { state: "PENDING", payment_preimage: null, change: [] },
+          NOW + 2
+        );
+      }
+      const local = new LocalWalletRepository(db, MINT);
+      const interrupted = await local.exportSnapshot();
+      if (mint) {
+        await repository.recordMintResponse(operationId, mintResponse, NOW + 3);
+      } else {
+        await repository.recordMeltResponse(
+          operationId,
+          {
+            state: unpaid ? "UNPAID" : "PAID",
+            payment_preimage: unpaid ? null : "preimage",
+            change: [],
+          },
+          NOW + 3
+        );
+      }
+      const completed = await repository.candidateWithClearedOperation(
+        operationId
+      );
+      if (scenario === "incomplete-unpaid-melt") completed.proofs = [];
+      const secret = new Uint8Array(32).fill(1);
+      const event = createSyncEventV0(completed, secret, {
+        expectedMint: MINT,
+      });
+      await local.applySnapshot(interrupted, HEAD);
+      const relay = {
+        queryRecent: vi.fn(async () => [event]),
+        queryCurrent: vi.fn(async () => event),
+        publish: vi.fn(),
+      };
+      const gateway = {
+        createMintPreview: vi.fn(),
+        createMeltPreview: vi.fn(),
+        submitMint: vi.fn(),
+        submitMelt: vi.fn(),
+        recreateMintPreview: vi.fn(),
+        reconcileMint: vi.fn(async () => null),
+        reconcileMelt: vi.fn(async () => null),
+      };
+      const coordinator = new SyncOperationCoordinator({
+        sync: new SnapshotSyncCoordinator({
+          relay,
+          repository: local,
+          syncSecret: secret,
+          configuredMint: MINT,
+        }),
+        journal: repository,
+        state: local,
+        gateway,
+      });
+      if (scenario === "incomplete-unpaid-melt") {
+        await expect(coordinator.resume()).resolves.toMatchObject({
+          status: "needs-reconciliation",
+        });
+        expect(await local.exportSnapshot()).toEqual(interrupted);
+        expect(gateway.reconcileMelt).toHaveBeenCalledOnce();
+        return;
+      }
+      await expect(coordinator.resume()).resolves.toMatchObject({
+        status: "completed",
+        operationId,
+        eventId: event.id,
+      });
+      const recovered = await local.exportSnapshot();
+      expect(recovered).toEqual({ ...completed, previous_event_id: event.id });
+      await expect(coordinator.resume()).resolves.toEqual({ status: "idle" });
+      expect(gateway.reconcileMint).not.toHaveBeenCalled();
+      expect(gateway.reconcileMelt).not.toHaveBeenCalled();
+      expect(relay.publish).not.toHaveBeenCalled();
+    }
+  );
 });

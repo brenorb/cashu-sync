@@ -539,23 +539,48 @@ function assertPendingResolved(local: SnapshotV0, incoming: SnapshotV0): void {
   const quote = incoming.quotes.find(
     (quote) => quote.type === pending.type && quote.quote === expected.quote
   );
+  const unpaid =
+    pending.type === "melt" &&
+    quote?.state === "UNPAID" &&
+    pending.prepared_request.request.inputs.every((input) =>
+      incoming.proofs.some(
+        (proof) =>
+          proof.secret === input.secret &&
+          proof.id === input.id &&
+          proof.C === input.C &&
+          proof.amount === Number(input.amount) &&
+          !proof.reserved &&
+          proof.quote === undefined
+      )
+    );
   const terminal =
     pending.type === "mint"
       ? quote?.state === "ISSUED"
-      : quote?.state === "PAID";
+      : quote?.state === "PAID" || unpaid;
+  const original = local.history.find(
+    (entry) =>
+      entry.direction === pending.type &&
+      entry.quote === expected.quote &&
+      entry.request === expected.request
+  );
   const recorded = incoming.history.some(
     (entry) =>
       entry.direction === pending.type &&
       entry.quote === expected.quote &&
       entry.request === expected.request &&
-      entry.amount === Number(expected.amount) &&
+      entry.amount === original?.amount &&
       entry.mint === local.mint &&
       entry.unit === local.unit &&
-      entry.status === "paid"
+      entry.status === (unpaid ? "pending" : "paid")
   );
   if (
     (pending.phase !== "submitted" &&
-      pending.phase !== "needs_reconciliation") ||
+      pending.phase !== "needs_reconciliation" &&
+      !(
+        pending.type === "melt" &&
+        pending.phase === "response_recorded" &&
+        pending.response?.state === "PENDING"
+      )) ||
     incoming.pending_operation !== null ||
     !terminal ||
     !recorded ||
