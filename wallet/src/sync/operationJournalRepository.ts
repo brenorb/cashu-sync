@@ -174,7 +174,7 @@ export class OperationJournalRepository {
           "markSubmitted requires a prepared operation"
         );
       }
-      assertMonotonicTimestamp(pending, timestamp);
+      timestamp = monotonicTimestamp(pending, timestamp);
       const next = this.validatePending({
         ...pending,
         phase: "submitted",
@@ -210,7 +210,7 @@ export class OperationJournalRepository {
             "reprepareMint requires a submitted operation"
           );
         }
-        assertMonotonicTimestamp(pending, timestamp);
+        timestamp = monotonicTimestamp(pending, timestamp);
         await this.requireMintQuote({
           ...pending,
           phase: "prepared",
@@ -251,7 +251,7 @@ export class OperationJournalRepository {
         const state = await this.getState();
         const pending = requirePending(state, operationId, "mint");
         requireResponseInputPhase(pending);
-        assertMonotonicTimestamp(pending, timestamp);
+        timestamp = monotonicTimestamp(pending, timestamp);
         assertMintResponseMatchesPreview(pending, response);
         const quote = await this.requireMintQuote(pending);
         const history = await this.requireHistory(
@@ -308,7 +308,7 @@ export class OperationJournalRepository {
         const state = await this.getState();
         const pending = requirePending(state, operationId, "melt");
         requireMeltResponseInputPhase(pending);
-        assertMonotonicTimestamp(pending, timestamp);
+        timestamp = monotonicTimestamp(pending, timestamp);
         assertMeltResponseMatchesPreview(pending, response);
         const selected = await this.requireReservedSelectedProofs(pending);
         const quote = await this.requireMeltQuote(pending);
@@ -862,16 +862,18 @@ function requirePending<T extends "mint" | "melt">(
   return pending as Extract<PendingOperationV0, { type: T }>;
 }
 
-function assertMonotonicTimestamp(
+function monotonicTimestamp(
   pending: PendingOperationV0,
   timestamp: number
-): void {
-  if (!Number.isSafeInteger(timestamp) || timestamp < pending.updated_at) {
+): number {
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0) {
     throw new OperationJournalError(
       "timestamp",
-      "operation timestamp must be a monotonic safe integer"
+      "operation timestamp must be a non-negative safe integer"
     );
   }
+  // Paired devices and adjusted clocks can lag behind the durable journal.
+  return Math.max(timestamp, pending.updated_at);
 }
 
 function requireResponseInputPhase(pending: PendingOperationV0): void {

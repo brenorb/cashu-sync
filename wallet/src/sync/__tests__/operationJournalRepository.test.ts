@@ -251,6 +251,55 @@ describe("OperationJournalRepository preparation", () => {
 });
 
 describe("OperationJournalRepository transitions", () => {
+  it("records a melt result after the clock moves backwards", async () => {
+    await seedMeltRows();
+    await repository.prepareMelt(MELT_OPERATION, meltPreview, NOW);
+    await repository.markSubmitted(MELT_OPERATION, "melt", NOW + 1);
+    await repository.recordMeltResponse(
+      MELT_OPERATION,
+      {
+        state: "PAID",
+        payment_preimage: "preimage",
+        change: [],
+      },
+      NOW - 60
+    );
+    expect(
+      (await db.walletSyncState.get("wallet"))?.pending_operation
+    ).toMatchObject({
+      phase: "response_recorded",
+      updated_at: NOW + 1,
+    });
+    expect(await db.proofs.bulkGet(["first", "second"])).toEqual([
+      undefined,
+      undefined,
+    ]);
+    expect(await db.paymentHistory.get("melt:melt-q")).toMatchObject({
+      status: "paid",
+      paidDate: new Date((NOW + 1) * 1000).toISOString(),
+    });
+  });
+
+  it("resumes mint on a slower device without moving journal time backwards", async () => {
+    await seedMintRows();
+    await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
+    const resumed = new OperationJournalRepository(db, MINT);
+    await resumed.markSubmitted(MINT_OPERATION, "mint", NOW - 60);
+    await resumed.reprepareMint(MINT_OPERATION, mintPreview, NOW - 90);
+    await resumed.markSubmitted(MINT_OPERATION, "mint", NOW - 120);
+    await resumed.recordMintResponse(MINT_OPERATION, mintResponse, NOW - 180);
+    expect(
+      (await db.walletSyncState.get("wallet"))?.pending_operation
+    ).toMatchObject({
+      phase: "response_recorded",
+      created_at: NOW,
+      updated_at: NOW,
+    });
+    expect(await db.mintQuotes.get("mint-q")).toMatchObject({
+      state: "ISSUED",
+    });
+  });
+
   it("allows only exact prepared-to-submitted monotonic transitions", async () => {
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
@@ -258,7 +307,7 @@ describe("OperationJournalRepository transitions", () => {
       repository.markSubmitted(MINT_OPERATION, "melt", NOW + 1)
     ).rejects.toMatchObject({ code: "operation-mismatch" });
     await expect(
-      repository.markSubmitted(MINT_OPERATION, "mint", NOW - 1)
+      repository.markSubmitted(MINT_OPERATION, "mint", Number.NaN)
     ).rejects.toMatchObject({ code: "timestamp" });
 
     await repository.markSubmitted(MINT_OPERATION, "mint", NOW + 1);
@@ -326,10 +375,7 @@ describe("OperationJournalRepository responses", () => {
     ).rejects.toThrow("injected quote failure");
     expect(
       await db.proofs.bulkGet([String.fromCharCode(1), String.fromCharCode(2)])
-    ).toEqual([
-      undefined,
-      undefined,
-    ]);
+    ).toEqual([undefined, undefined]);
     expect(
       (await db.walletSyncState.get("wallet"))?.pending_operation
     ).toMatchObject({
@@ -412,11 +458,7 @@ describe("OperationJournalRepository responses", () => {
 
     expect(
       await db.proofs.bulkGet(["first", "second", String.fromCharCode(3)])
-    ).toEqual([
-      undefined,
-      undefined,
-      response.change[0],
-    ]);
+    ).toEqual([undefined, undefined, response.change[0]]);
     expect(await db.meltQuotes.get("melt-q")).toMatchObject({
       state: "PAID",
       payment_preimage: "preimage",

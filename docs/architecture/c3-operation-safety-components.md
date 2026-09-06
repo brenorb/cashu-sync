@@ -46,3 +46,5 @@ A relay conflict before the Nutshell request is a clean retry. A crash or confli
 An unresolved operation does not expire automatically and blocks a new operation across paired wallets. The next wallet uses quote state, plus the already journaled wallet-side NUT-13 material and mint-side NUT-09 restoration for exact prepared mint outputs, to finish or safely clear it. The reference profile's one-hour NUT-19 cache permits exact-request replay but is not a durable source of truth after expiry.
 
 Both PWA installations belong to one user and operate one wallet. The journal coordinates those installations; it is not a peer-to-peer send or receive protocol.
+
+Journal transitions validate the supplied clock value and persist the greater of that value and the last durable operation timestamp. This keeps operation time nondecreasing when a paired device has a slower clock or the local clock moves backwards; monetary ordering still comes from the journal phases and relay CAS.
