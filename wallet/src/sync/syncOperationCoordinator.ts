@@ -1,4 +1,9 @@
-import type { PublishOutcome, PullOutcome } from "src/sync/syncCoordinator";
+import {
+  SnapshotSyncCoordinatorError,
+  type PublishOutcome,
+  type PullOutcome,
+} from "src/sync/syncCoordinator";
+import { SyncRelayClientError } from "src/sync/relayClient";
 import type {
   PendingMeltResponseV0,
   PendingMeltV0,
@@ -230,7 +235,7 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
         return this.publishPreparedAndSubmit(pending);
       case "submitted":
       case "needs_reconciliation":
-        return this.reconcileGateway(pending);
+        return this.recoverFromRelay(pending);
       case "response_recorded":
         if (pending.type === "melt" && pending.response?.state === "PENDING") {
           return this.reconcileGateway(pending);
@@ -362,6 +367,30 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
     });
   }
 
+  private async recoverFromRelay(
+    pending: PendingMintV0 | PendingMeltV0
+  ): Promise<SyncOperationOutcome> {
+    try {
+      // Pull validates ancestry and completion before replacing a local journal.
+      const pulled = await this.sync.pull();
+      if (
+        pulled.status === "applied" &&
+        (await this.state.exportSnapshot()).pending_operation === null
+      ) {
+        return {
+          status: "completed",
+          type: pending.type,
+          operationId: pending.operation_id,
+          eventId: pulled.eventId,
+        };
+      }
+    } catch (error) {
+      if (!isRelayRecoveryFailure(error)) throw error;
+      // Retain the exact local journal while resolving missing relay evidence.
+    }
+    return this.reconcileGateway(pending);
+  }
+
   private async reconcileGateway(
     pending: PendingMintV0 | PendingMeltV0
   ): Promise<SyncOperationOutcome> {
@@ -420,7 +449,13 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
     const candidate = await this.journal.candidateWithClearedOperation(
       pending.operation_id
     );
-    const previouslyAccepted = await this.sync.confirmCandidate(candidate);
+    let previouslyAccepted: PublishOutcome | null;
+    try {
+      previouslyAccepted = await this.sync.confirmCandidate(candidate);
+    } catch (error) {
+      if (!isRelayRecoveryFailure(error)) throw error;
+      return needs(pending, "final-publish", "ambiguous");
+    }
     if (previouslyAccepted?.status === "accepted") {
       await this.journal.finalizeAcceptedSnapshot(
         candidate,
@@ -439,6 +474,8 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
         applyAccepted: false,
       });
     } catch (error) {
+      if (isRelayRecoveryFailure(error))
+        return needs(pending, "final-publish", "ambiguous");
       if (!isPublishRejection(error)) throw error;
       return needs(pending, "final-publish", "rejected");
     }
@@ -506,9 +543,26 @@ export function isOutputsAlreadySigned(error: unknown): boolean {
     [value.code, response?.code].some((code) => String(code) === "11003") ||
     [value.message, value.detail, response?.detail].some(
       (message) =>
-        typeof message === "string" && message.includes("outputs already signed")
+        typeof message === "string" &&
+        message.includes("outputs already signed")
     ) ||
     serialized.includes("11003") ||
     serialized.includes("outputs already signed")
+  );
+}
+
+function isRelayRecoveryFailure(error: unknown): boolean {
+  if (error instanceof SyncRelayClientError)
+    return error.code !== "configuration";
+  return (
+    error instanceof SnapshotSyncCoordinatorError &&
+    [
+      "pending-local",
+      "invalid-remote",
+      "missing-head",
+      "rollback",
+      "revision-gap",
+      "branch",
+    ].includes(error.code)
   );
 }

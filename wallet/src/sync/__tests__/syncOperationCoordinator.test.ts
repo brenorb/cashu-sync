@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { SyncRelayClientError } from "src/sync/relayClient";
+import { SnapshotSyncCoordinatorError } from "src/sync/syncCoordinator";
 import {
   SyncOperationCoordinator,
   type CashuOperationGateway,
@@ -528,7 +530,10 @@ describe("SyncOperationCoordinator resume", () => {
       });
       expect(value.gateway.submitMint).not.toHaveBeenCalled();
       expect(value.gateway.reconcileMint).toHaveBeenCalledWith(mintPreview);
-      expect(value.sync.pull).not.toHaveBeenCalled();
+      expect(value.sync.pull).toHaveBeenCalledOnce();
+      expect(value.sync.pull.mock.invocationCallOrder[0]).toBeLessThan(
+        value.gateway.reconcileMint.mock.invocationCallOrder[0]
+      );
     }
   );
 
@@ -603,5 +608,89 @@ describe("SyncOperationCoordinator resume", () => {
       value.journal.finalizeAcceptedSnapshot.mock.invocationCallOrder[0]
     );
     expect(value.gateway.createMintPreview).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("relay-first operation recovery", () => {
+  it("uses a completed relay result without contacting the mint", async () => {
+    const value = fixture();
+    value.journal.state.pending_operation = pendingMint("submitted");
+    value.sync.pull.mockImplementationOnce(async () => {
+      value.journal.state.pending_operation = null;
+      return {
+        status: "applied",
+        mode: "child",
+        eventId: FINAL_HEAD,
+        revision: 5,
+      };
+    });
+    await expect(value.coordinator.resume()).resolves.toMatchObject({
+      status: "completed",
+      eventId: FINAL_HEAD,
+    });
+    expect(value.gateway.reconcileMint).not.toHaveBeenCalled();
+    expect(value.gateway.submitMint).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new SyncRelayClientError("disconnected", "offline"),
+    new SnapshotSyncCoordinatorError("invalid-remote", "corrupt ciphertext"),
+    new SnapshotSyncCoordinatorError("revision-gap", "missing history"),
+    new SnapshotSyncCoordinatorError(
+      "pending-local",
+      "incomplete relay result"
+    ),
+  ])(
+    "recovers from the mint when relay cannot resolve it: $code",
+    async (error) => {
+      const value = fixture();
+      value.journal.state.pending_operation = pendingMint("submitted");
+      value.sync.pull.mockRejectedValueOnce(error);
+      value.gateway.reconcileMint.mockResolvedValueOnce(mintResponse);
+      await expect(value.coordinator.resume()).resolves.toMatchObject({
+        status: "completed",
+      });
+      expect(value.gateway.reconcileMint).toHaveBeenCalledOnce();
+      expect(value.journal.recordMintResponse).toHaveBeenCalledOnce();
+      expect(value.sync.pull.mock.invocationCallOrder[0]).toBeLessThan(
+        value.gateway.reconcileMint.mock.invocationCallOrder[0]
+      );
+    }
+  );
+
+  it("does not interpret a local persistence failure as permission to contact the mint", async () => {
+    const value = fixture();
+    value.journal.state.pending_operation = pendingMint("submitted");
+    value.sync.pull.mockRejectedValueOnce(
+      new SnapshotSyncCoordinatorError("local-apply", "disk failed")
+    );
+    await expect(value.coordinator.resume()).rejects.toMatchObject({
+      code: "local-apply",
+    });
+    expect(value.gateway.reconcileMint).not.toHaveBeenCalled();
+  });
+
+  it("preserves confirmed money when the relay stays offline after mint recovery", async () => {
+    const value = fixture();
+    value.journal.state.pending_operation = pendingMint("submitted");
+    value.sync.pull.mockRejectedValueOnce(
+      new SyncRelayClientError("timeout", "offline")
+    );
+    value.gateway.reconcileMint.mockResolvedValueOnce(mintResponse);
+    value.sync.confirmCandidate.mockRejectedValue(
+      new SyncRelayClientError("timeout", "offline")
+    );
+    await expect(value.coordinator.resume()).resolves.toMatchObject({
+      status: "needs-reconciliation",
+      stage: "final-publish",
+    });
+    expect(value.journal.state.pending_operation).toMatchObject({
+      phase: "response_recorded",
+      response: mintResponse,
+    });
+    await value.coordinator.resume();
+    expect(value.gateway.reconcileMint).toHaveBeenCalledOnce();
+    expect(value.gateway.submitMint).not.toHaveBeenCalled();
+    expect(value.journal.finalizeAcceptedSnapshot).not.toHaveBeenCalled();
   });
 });
