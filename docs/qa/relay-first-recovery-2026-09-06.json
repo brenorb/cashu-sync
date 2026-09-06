@@ -1,0 +1,61 @@
+{
+  "relay_first": {
+    "interrupted": {
+      "phase": "submitted",
+      "revision": 4,
+      "balance": 0,
+      "paid": 0
+    },
+    "attempts": 42,
+    "completedB": {
+      "phase": null,
+      "revision": 6,
+      "balance": 100,
+      "paid": 1
+    },
+    "bPosts": 1,
+    "recoveredA": {
+      "phase": null,
+      "revision": 6,
+      "balance": 100,
+      "paid": 1
+    },
+    "aMintCalls": 0
+  },
+  "mint_fallback": {
+    "baseline": {
+      "phase": null,
+      "revision": 6,
+      "balance": 100,
+      "paid": 1
+    },
+    "interrupted": {
+      "phase": "submitted",
+      "revision": 8,
+      "balance": 100,
+      "paid": 1
+    },
+    "blockedPosts": 43,
+    "recorded": {
+      "phase": "response_recorded",
+      "revision": 8,
+      "balance": 200,
+      "paid": 2
+    },
+    "recoveryPosts": 1,
+    "relayFailures": 5,
+    "retained": {
+      "phase": "response_recorded",
+      "revision": 8,
+      "balance": 200,
+      "paid": 2
+    },
+    "finalized": {
+      "phase": null,
+      "revision": 9,
+      "balance": 200,
+      "paid": 2
+    },
+    "finalMintCalls": 0
+  }
+}
