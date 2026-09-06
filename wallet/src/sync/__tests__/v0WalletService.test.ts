@@ -90,6 +90,36 @@ afterEach(async () => {
 });
 
 describe("V0WalletService quote fencing", () => {
+  it("does not initialize the mint when the relay resolves the pending operation", async () => {
+    session.repository.exportSnapshot.mockResolvedValue({
+      pending_operation: {
+        phase: "submitted",
+        type: "mint",
+        operation_id: "operation",
+      },
+    });
+    pull.mockImplementationOnce(async () => {
+      session.repository.exportSnapshot.mockResolvedValue({
+        pending_operation: null,
+      });
+      return {
+        status: "applied",
+        mode: "child",
+        eventId: "e".repeat(64),
+        revision: 2,
+      };
+    });
+    const activeWallet = vi.fn().mockRejectedValue(new Error("mint offline"));
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet,
+      getKeyset: () => "00c0ffee",
+    });
+    await expect(service.resume()).resolves.toMatchObject({
+      status: "completed",
+    });
+    expect(activeWallet).not.toHaveBeenCalled();
+  });
+
   it("resumes a pending operation instead of creating a second mint", async () => {
     session.repository.exportSnapshot.mockResolvedValue({
       pending_operation: { phase: "submitted", type: "mint" },
@@ -246,9 +276,7 @@ describe("V0WalletService quote fencing", () => {
         revision: 3,
       });
     const service = new V0WalletService(runtimeService as never, {
-      activeWallet: vi.fn(async () =>
-        walletMock({ createMintQuoteBolt11 })
-      ),
+      activeWallet: vi.fn(async () => walletMock({ createMintQuoteBolt11 })),
       getKeyset: () => "00c0ffee",
     });
 
@@ -373,7 +401,9 @@ describe("V0WalletService quote fencing", () => {
     }));
     const send = vi
       .fn()
-      .mockRejectedValueOnce(Object.assign(new Error("outputs already signed"), { code: 11003 }))
+      .mockRejectedValueOnce(
+        Object.assign(new Error("outputs already signed"), { code: 11003 })
+      )
       .mockResolvedValueOnce({
         keep: [],
         send: [],

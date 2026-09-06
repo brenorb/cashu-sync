@@ -75,7 +75,7 @@ export class SyncRuntimeService {
     if (authority === null) {
       return { authority: null, sync: { status: "unconfigured" } };
     }
-    await this.bootstrapMint(authority);
+    await this.bootstrapMint(authority, true);
     return { authority, sync: await this.runtime.start() };
   }
 
@@ -194,11 +194,27 @@ export class SyncRuntimeService {
     }
   }
 
-  private async bootstrapMint(authority: AuthorityPayloadV0): Promise<void> {
+  private async bootstrapMint(
+    authority: AuthorityPayloadV0,
+    allowCached = false
+  ): Promise<void> {
     const profile = createV0AuthorityProfile(authority.mint_url, {
       allowInsecureLoopback: this.allowLoopbackHttp,
     });
-    await useMintsStore().bootstrapAuthorityMint(profile);
+    const store = useMintsStore();
+    const cached = store.mints.find((mint) => mint.url === profile.mintUrl);
+    if (
+      allowCached &&
+      store.mints.length === 1 &&
+      store.activeMintUrl === profile.mintUrl &&
+      store.authorityMintUrl === profile.mintUrl &&
+      store.activeUnit === "usd" &&
+      cached?.info &&
+      cached.keys.some((key) => key.unit === "usd") &&
+      cached.keysets.some((keyset) => keyset.unit === "usd")
+    )
+      return;
+    await store.bootstrapAuthorityMint(profile);
   }
 
   private async prepareLegacyState(): Promise<void> {

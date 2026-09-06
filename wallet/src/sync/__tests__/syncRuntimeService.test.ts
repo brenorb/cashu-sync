@@ -67,6 +67,40 @@ beforeEach(async () => {
 });
 
 describe("SyncRuntimeService", () => {
+  it("boots an already configured cached USD mint without a network bootstrap", async () => {
+    const mintUrl = "http://127.0.0.1:3338";
+    authorityLoad.mockReturnValue({
+      schema: 0,
+      mnemonic: MNEMONIC,
+      sync_secret: "1".repeat(64),
+      mint_url: mintUrl,
+      relay_url: "ws://127.0.0.1:3344",
+      head_event_id: "a".repeat(64),
+    });
+    Object.assign(mintStore, {
+      activeMintUrl: mintUrl,
+      authorityMintUrl: mintUrl,
+      activeUnit: "usd",
+      mints: [
+        {
+          url: mintUrl,
+          info: { version: "Nutshell/0.20.3" },
+          keys: [{ id: "key", unit: "usd" }],
+          keysets: [{ id: "key", unit: "usd" }],
+        },
+      ],
+    });
+    const service = new SyncRuntimeService({
+      storage: new MapStorage(),
+      allowLoopbackHttp: true,
+    });
+    await expect(service.boot(MNEMONIC)).resolves.toMatchObject({
+      sync: { status: "ready" },
+    });
+    expect(bootstrapAuthorityMint).not.toHaveBeenCalled();
+    expect(runtimeStart).toHaveBeenCalledOnce();
+  });
+
   it("does not silently create authority without explicit build endpoints", async () => {
     authorityLoad.mockReturnValue(null);
     const service = new SyncRuntimeService({ storage: new MapStorage() });

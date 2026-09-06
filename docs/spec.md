@@ -284,3 +284,5 @@ The selected wallet base is Cashu.me at commit `f4a3f3221be0b7b818c71ece23d9cb47
 The reference mint is Nutshell `0.20.3` at commit `18539020b4fa473ad8ad440e210720d2aaf8401a`. Integration tests use the multi-platform image `cashubtc/nutshell:0.20.3@sha256:f039b0e61f64d67c7212f5472eb5d021c3703cd9e72170aa924906ce6bd1f2ed`, a USD FakeWallet backend, and Redis-backed NUT-19. NUT-13 is wallet behavior and is intentionally not advertised by the mint's NUT-06 response.
 
 The relay uses Khatru for Nostr protocol plumbing and implements the SQLite compare-and-swap and admission policy described above. The implementation must remain compatible with the normative behavior even if the framework changes.
+
+An existing configured USD wallet reuses its cached mint metadata during startup. Constructing the operation coordinator does not initialize a network wallet; mint initialization is deferred until an operation actually needs the mint. Fresh imports still validate and bootstrap the authority mint.

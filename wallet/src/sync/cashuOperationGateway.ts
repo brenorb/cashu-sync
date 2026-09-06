@@ -45,17 +45,26 @@ export type MeltOperationIntent = {
 export class CashuTsOperationGateway
   implements CashuOperationGateway<MintOperationIntent, MeltOperationIntent>
 {
-  constructor(private readonly wallet: Wallet) {}
+  constructor(
+    private readonly walletSource: Wallet | (() => Promise<Wallet>)
+  ) {}
+
+  private getWallet(): Promise<Wallet> {
+    return typeof this.walletSource === "function"
+      ? this.walletSource()
+      : Promise.resolve(this.walletSource);
+  }
 
   async createMintPreview(
     intent: MintOperationIntent
   ): Promise<SerializedMintPreviewV0> {
+    const wallet = await this.getWallet();
     requirePositiveSafeAmount(intent.amount, "mint amount");
     requireUsdMintQuote(intent.quote);
     if (intent.quote.state !== MintQuoteState.PAID) {
       throw new Error("mint quote must be PAID before preparing outputs");
     }
-    const preview = await this.wallet.prepareMint(
+    const preview = await wallet.prepareMint(
       "bolt11",
       intent.amount,
       intent.quote,
@@ -67,12 +76,13 @@ export class CashuTsOperationGateway
   async createMeltPreview(
     intent: MeltOperationIntent
   ): Promise<SerializedMeltPreviewV0> {
+    const wallet = await this.getWallet();
     requireUsdMeltQuote(intent.quote);
     if (intent.quote.state !== MeltQuoteState.UNPAID) {
       throw new Error("melt quote must be UNPAID before preparing inputs");
     }
     const target = intent.quote.amount.add(intent.quote.fee_reserve);
-    const selected = this.wallet.selectProofsToSend(
+    const selected = wallet.selectProofsToSend(
       intent.proofs,
       target,
       true,
@@ -81,32 +91,31 @@ export class CashuTsOperationGateway
     if (selected.length === 0) {
       throw new Error("no proofs selected for melt");
     }
-    const preview = await this.wallet.prepareMelt(
-      "bolt11",
-      intent.quote,
-      selected,
-      { keysetId: intent.keysetId }
-    );
+    const preview = await wallet.prepareMelt("bolt11", intent.quote, selected, {
+      keysetId: intent.keysetId,
+    });
     return serializeMeltPreviewV0(preview, intent.preferAsync ?? false);
   }
 
   async submitMint(
     exactPreview: SerializedMintPreviewV0
   ): Promise<PendingMintResponseV0> {
+    const wallet = await this.getWallet();
     const preview = deserializeMintPreviewV0(exactPreview);
-    const proofs = await this.wallet.completeMint(preview);
+    const proofs = await wallet.completeMint(preview);
     return { proofs: proofs.map(toSnapshotProof) };
   }
 
   async recreateMintPreview(
     exactPreview: SerializedMintPreviewV0
   ): Promise<SerializedMintPreviewV0> {
+    const wallet = await this.getWallet();
     const exact = deserializeMintPreviewV0(exactPreview);
-    const quote = await this.wallet.checkMintQuoteBolt11(exact.quote.quote);
+    const quote = await wallet.checkMintQuoteBolt11(exact.quote.quote);
     if (quote.state !== MintQuoteState.PAID) {
       throw new Error(`mint quote is ${quote.state}; cannot reprepare outputs`);
     }
-    const preview = await this.wallet.prepareMint(
+    const preview = await wallet.prepareMint(
       "bolt11",
       Amount.from(exact.quote.amount),
       exact.quote,
@@ -118,8 +127,9 @@ export class CashuTsOperationGateway
   async submitMelt(
     exactPreview: SerializedMeltPreviewV0
   ): Promise<PendingMeltResponseV0> {
+    const wallet = await this.getWallet();
     const exact = deserializeMeltPreviewV0(exactPreview);
-    const response = await this.wallet.completeMelt(exact, undefined, {
+    const response = await wallet.completeMelt(exact, undefined, {
       preferAsync: exactPreview.request.prefer_async,
     });
     return meltResponse(response.quote, response.change);
@@ -128,8 +138,9 @@ export class CashuTsOperationGateway
   async reconcileMint(
     exactPreview: SerializedMintPreviewV0
   ): Promise<PendingMintResponseV0 | null> {
+    const wallet = await this.getWallet();
     const exact = deserializeMintPreviewV0(exactPreview);
-    let quote = await this.wallet.checkMintQuoteBolt11(exact.quote.quote);
+    let quote = await wallet.checkMintQuoteBolt11(exact.quote.quote);
     requireUsdMintQuote(quote);
     if (quote.state === MintQuoteState.PAID) {
       try {
@@ -138,7 +149,7 @@ export class CashuTsOperationGateway
       } catch {
         // The original request or this retry may have issued before its reply
         // was lost. Recheck once and restore; never loop on an uncertain POST.
-        quote = await this.wallet.checkMintQuoteBolt11(exact.quote.quote);
+        quote = await wallet.checkMintQuoteBolt11(exact.quote.quote);
         requireUsdMintQuote(quote);
       }
     }
@@ -146,7 +157,7 @@ export class CashuTsOperationGateway
 
     // NUT-09 is read-only: ask only for the exact blinded messages already
     // persisted before submission, then reconstruct proofs in prepared order.
-    const restored = await this.wallet.mint.restore({
+    const restored = await wallet.mint.restore({
       outputs: exact.payload.outputs,
     });
     if (
@@ -180,7 +191,7 @@ export class CashuTsOperationGateway
       }
       proofs.push(
         toSnapshotProof(
-          outputData.toProof(signature, this.wallet.getKeyset(signature.id))
+          outputData.toProof(signature, wallet.getKeyset(signature.id))
         )
       );
     }
@@ -190,13 +201,14 @@ export class CashuTsOperationGateway
   async reconcileMelt(
     exactPreview: SerializedMeltPreviewV0
   ): Promise<PendingMeltResponseV0 | null> {
+    const wallet = await this.getWallet();
     const exact = deserializeMeltPreviewV0(exactPreview);
-    const quote = await this.wallet.checkMeltQuoteBolt11(exact.quote.quote);
+    const quote = await wallet.checkMeltQuoteBolt11(exact.quote.quote);
     requireUsdMeltQuote(quote);
     if (quote.state !== MeltQuoteState.PAID) {
       return meltResponse(quote, []);
     }
-    const change = this.wallet.createMeltChangeProofs(
+    const change = wallet.createMeltChangeProofs(
       exact.outputData,
       quote.change ?? []
     );
@@ -216,9 +228,7 @@ function meltResponse(
     payment_preimage:
       quote.state === MeltQuoteState.PAID ? quote.payment_preimage : null,
     change:
-      quote.state === MeltQuoteState.PAID
-        ? change.map(toSnapshotProof)
-        : [],
+      quote.state === MeltQuoteState.PAID ? change.map(toSnapshotProof) : [],
   };
 }
 

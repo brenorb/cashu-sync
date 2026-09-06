@@ -210,7 +210,9 @@ export class V0WalletService {
         throw new Error(`mint quote is ${quote.state}, not PAID`);
       }
       await cashuDb.mintQuotes.update(quote.quote, { state: quote.state });
-      const result = await (await this.ensureCoordinator()).mint({
+      const result = await (
+        await this.ensureCoordinator()
+      ).mint({
         amount: quote.amount.toNumber(),
         quote,
         keysetId: this.walletPort.getKeyset(null, "usd"),
@@ -352,7 +354,9 @@ export class V0WalletService {
       if (quote.state !== MeltQuoteState.UNPAID) {
         throw new Error(`melt quote is ${quote.state}, not UNPAID`);
       }
-      const result = await (await this.ensureCoordinator()).melt({
+      const result = await (
+        await this.ensureCoordinator()
+      ).melt({
         quote,
         proofs: useMintsStore().activeProofs,
         keysetId: this.walletPort.getKeyset(null, "usd"),
@@ -432,7 +436,9 @@ export class V0WalletService {
           "wallet changed on another device; try again"
         );
       }
-      throw new Error("relay acknowledgement is ambiguous; sync before spending");
+      throw new Error(
+        "relay acknowledgement is ambiguous; sync before spending"
+      );
     }
     await session.repository.applySnapshot(candidate, outcome.eventId);
     await cashuDb.meltQuotes.update(stored.quote, {
@@ -555,12 +561,11 @@ export class V0WalletService {
   > {
     const session = this.requireSession();
     if (this.coordinator === null || this.coordinatorSession !== session) {
-      const wallet = await this.ensureWallet();
       this.coordinator = new SyncOperationCoordinator({
         sync: session.sync,
         journal: session.journal,
         state: session.repository,
-        gateway: new CashuTsOperationGateway(wallet),
+        gateway: new CashuTsOperationGateway(() => this.ensureWallet()),
       });
       this.coordinatorSession = session;
     }
