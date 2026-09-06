@@ -214,7 +214,7 @@ Mint recovery automatically replays the exact journaled request when the quote i
 
 ### Existing wallet restart
 
-Load the local journal, fetch the relay head, and reconcile any discrepancy or pending operation before enabling mint/melt.
+Load the local journal before any startup pull. When a journal exists, initialize the session for operation recovery even if the relay is unavailable. Submitted operations check the relay for a validated completed result first, then use the mint to resolve missing or invalid relay evidence. Prepared operations still require relay acceptance before submission; recorded local responses are finalized without discarding their proofs. Without a local journal, normal relay bootstrap and ancestry validation remain required before enabling mint/melt.
 
 ### Paired wallet recovery
 

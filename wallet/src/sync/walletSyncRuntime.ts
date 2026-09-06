@@ -28,7 +28,7 @@ export type WalletSyncStartOutcome =
   | { status: "unconfigured" }
   | {
       status: "ready";
-      sync: "genesis-published" | "noop" | "applied";
+      sync: "genesis-published" | "noop" | "applied" | "recovery-pending";
       eventId: string;
       revision: number;
     };
@@ -100,6 +100,17 @@ export class WalletSyncRuntime {
     const session = this.options.createSession(authority);
     this.session = null;
     const local = await session.repository.exportSnapshot();
+    if (local.pending_operation !== null) {
+      // The operation coordinator owns relay-first recovery and preserves
+      // unpublished local responses even when the relay cannot be reached.
+      this.session = session;
+      return {
+        status: "ready",
+        sync: "recovery-pending",
+        eventId: local.previous_event_id,
+        revision: local.revision,
+      };
+    }
     // A pristine install is safe to bootstrap even when an older QR omitted
     // the remembered head. The relay's authenticated current head is the
     // source of truth for pairing; requiring revision 1 strands later wallets.

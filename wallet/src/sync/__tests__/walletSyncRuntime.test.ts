@@ -95,6 +95,53 @@ afterEach(async () => {
 });
 
 describe("WalletSyncRuntime", () => {
+  it.each(["prepared", "submitted", "response_recorded"] as const)(
+    "hands a durable %s journal to recovery before any destructive startup pull",
+    async (phase) => {
+      authorityRepository.importAuthority(authority(HEAD));
+      const local = snapshot({ revision: 3, previous_event_id: HEAD });
+      local.pending_operation = {
+        operation_id: "11111111-1111-4111-8111-111111111111",
+        type: "mint",
+        phase,
+        created_at: 100,
+        updated_at: 101,
+        prepared_request: {
+          method: "bolt11",
+          keyset_id: "keyset",
+          quote: {
+            quote: "q",
+            request: "lnbc1mint",
+            amount: "1",
+            unit: "usd",
+            state: "PAID",
+            expiry: 1800000000,
+          },
+          request: { quote: "q", outputs: [] },
+          output_data: [],
+        },
+        response: phase === "response_recorded" ? { proofs: [] } : null,
+      };
+      const session = fakeSession(local);
+      vi.mocked(session.sync.pull).mockRejectedValue(
+        new Error("relay offline or corrupt")
+      );
+      const runtime = new WalletSyncRuntime({
+        authority: authorityRepository,
+        createSession: () => session,
+      });
+      await expect(runtime.start()).resolves.toMatchObject({
+        status: "ready",
+        sync: "recovery-pending",
+        eventId: HEAD,
+        revision: 3,
+      });
+      expect(runtime.currentSession()).toBe(session);
+      expect(session.sync.pull).not.toHaveBeenCalled();
+      expect(session.sync.publishCurrent).not.toHaveBeenCalled();
+    }
+  );
+
   it("reports an unconfigured wallet without inventing authority", async () => {
     const factory = vi.fn();
     const runtime = new WalletSyncRuntime({
