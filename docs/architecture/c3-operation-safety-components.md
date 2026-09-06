@@ -48,3 +48,5 @@ An unresolved operation does not expire automatically and blocks a new operation
 Both PWA installations belong to one user and operate one wallet. The journal coordinates those installations; it is not a peer-to-peer send or receive protocol.
 
 Journal transitions validate the supplied clock value and persist the greater of that value and the last durable operation timestamp. This keeps operation time nondecreasing when a paired device has a slower clock or the local clock moves backwards; monetary ordering still comes from the journal phases and relay CAS.
+
+Pulling a newer relay revision may clear a submitted local journal only when its matching quote and accounting entry confirm completion and counters do not regress. Prepared requests and locally recorded responses are preserved for the operation coordinator to resolve; a newer revision alone cannot overwrite them.

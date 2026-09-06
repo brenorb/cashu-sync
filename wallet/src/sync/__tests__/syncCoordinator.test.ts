@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import completedFixture from "src/sync/__fixtures__/snapshot-v0.json";
 import { finalizeEvent, type Event } from "nostr-tools";
 import {
   createSyncEventV0,
@@ -590,4 +591,91 @@ it("exports a stable typed error class", () => {
     name: "SnapshotSyncCoordinatorError",
     code: "rollback",
   });
+});
+
+describe("SnapshotSyncCoordinator pending journal protection", () => {
+  function pendingLocal(): SnapshotV0 {
+    const local = structuredClone(completedFixture) as SnapshotV0;
+    local.revision = 7;
+    local.previous_event_id = HEAD_A;
+    local.pending_operation = {
+      operation_id: "11111111-1111-4111-8111-111111111111",
+      type: "mint",
+      phase: "submitted",
+      created_at: 100,
+      updated_at: 101,
+      prepared_request: {
+        method: "bolt11",
+        keyset_id: "00c0ffee",
+        quote: {
+          quote: "mint-quote-1",
+          request: "lnbc1mint",
+          amount: "125",
+          unit: "usd",
+          state: "PAID",
+          expiry: 1780000100,
+        },
+        request: { quote: "mint-quote-1", outputs: [] },
+        output_data: [],
+      },
+      response: null,
+    };
+    local.proofs = [];
+    local.quotes[0].state = "PAID";
+    local.history[0].status = "pending";
+    return local;
+  }
+
+  it("accepts a completed relay result extending the pending operation", async () => {
+    const value = fixture(pendingLocal());
+    const remote = {
+      ...structuredClone(completedFixture),
+      revision: 8,
+      previous_event_id: HEAD_A,
+    } as SnapshotV0;
+    value.relay.current = event(HEAD_B, HEAD_A);
+    value.crypto.decrypted.set(HEAD_B, remote);
+    await expect(value.coordinator.pull()).resolves.toMatchObject({
+      status: "applied",
+    });
+    expect(value.repository.state.pending_operation).toBeNull();
+    expect(value.repository.state.history[0].status).toBe("paid");
+  });
+
+  it.each([
+    "prepared",
+    "response_recorded",
+    "missing-result",
+    "wrong-request",
+    "counter-rollback",
+  ])(
+    "preserves local journal when relay cannot safely replace it: %s",
+    async (scenario) => {
+      const local = pendingLocal();
+      const remote = {
+        ...structuredClone(completedFixture),
+        revision: 8,
+        previous_event_id: HEAD_A,
+      } as SnapshotV0;
+      if (scenario === "prepared") local.pending_operation!.phase = "prepared";
+      if (scenario === "response_recorded") {
+        local.pending_operation!.phase = "response_recorded";
+        local.pending_operation!.response = {
+          proofs: structuredClone(remote.proofs),
+        };
+        local.proofs = structuredClone(remote.proofs);
+      }
+      if (scenario === "missing-result") remote.history = [];
+      if (scenario === "wrong-request") remote.quotes[0].request = "lnbc1other";
+      if (scenario === "counter-rollback") remote.counters["00c0ffee"] = 1;
+      const value = fixture(local);
+      value.relay.current = event(HEAD_B, HEAD_A);
+      value.crypto.decrypted.set(HEAD_B, remote);
+      await expect(value.coordinator.pull()).rejects.toMatchObject({
+        code: "pending-local",
+      });
+      expect(value.repository.applied).toHaveLength(0);
+      expect(value.repository.state).toEqual(local);
+    }
+  );
 });

@@ -29,6 +29,7 @@ export interface SnapshotCrypto {
 }
 
 export type SnapshotSyncCoordinatorErrorCode =
+  | "pending-local"
   | "invalid-local"
   | "invalid-remote"
   | "missing-head"
@@ -207,6 +208,7 @@ export class SnapshotSyncCoordinator {
       decrypted = incoming;
       if (incoming.revision > local.revision + 1) {
         this.verifyRetainedPath(recent, local, current, incoming);
+        assertPendingResolved(local, incoming);
         await this.applyLocal(incoming, current.id);
         return {
           status: "applied",
@@ -335,6 +337,7 @@ export class SnapshotSyncCoordinator {
       appliedMode = "child";
     }
 
+    assertPendingResolved(local, incoming);
     await this.applyLocal(incoming, event.id);
     return {
       status: "applied",
@@ -526,4 +529,46 @@ function isPristine(snapshot: SnapshotV0): boolean {
 
 function sameSnapshot(left: SnapshotV0, right: SnapshotV0): boolean {
   return canonicalJson(left) === canonicalJson(right);
+}
+
+/** A newer relay revision alone does not prove that local money was resolved. */
+function assertPendingResolved(local: SnapshotV0, incoming: SnapshotV0): void {
+  const pending = local.pending_operation;
+  if (pending === null) return;
+  const expected = pending.prepared_request.quote;
+  const quote = incoming.quotes.find(
+    (quote) => quote.type === pending.type && quote.quote === expected.quote
+  );
+  const terminal =
+    pending.type === "mint"
+      ? quote?.state === "ISSUED"
+      : quote?.state === "PAID";
+  const recorded = incoming.history.some(
+    (entry) =>
+      entry.direction === pending.type &&
+      entry.quote === expected.quote &&
+      entry.request === expected.request &&
+      entry.amount === Number(expected.amount) &&
+      entry.mint === local.mint &&
+      entry.unit === local.unit &&
+      entry.status === "paid"
+  );
+  if (
+    (pending.phase !== "submitted" &&
+      pending.phase !== "needs_reconciliation") ||
+    incoming.pending_operation !== null ||
+    !terminal ||
+    !recorded ||
+    quote?.request !== expected.request ||
+    quote?.amount !== Number(expected.amount) ||
+    quote?.unit !== local.unit ||
+    Object.entries(local.counters).some(
+      ([key, value]) => (incoming.counters[key] ?? -1) < value
+    )
+  ) {
+    throw new SnapshotSyncCoordinatorError(
+      "pending-local",
+      "relay snapshot does not safely resolve the local operation"
+    );
+  }
 }
