@@ -286,3 +286,5 @@ The reference mint is Nutshell `0.20.3` at commit `18539020b4fa473ad8ad440e21072
 The relay uses Khatru for Nostr protocol plumbing and implements the SQLite compare-and-swap and admission policy described above. The implementation must remain compatible with the normative behavior even if the framework changes.
 
 An existing configured USD wallet reuses its cached mint metadata during startup. Constructing the operation coordinator does not initialize a network wallet; mint initialization is deferred until an operation actually needs the mint. Fresh imports still validate and bootstrap the authority mint.
+
+On a cached-mint boot, rebind the in-memory authority mint URL from the validated authority payload. Its empty value after a page reload must not force a network bootstrap before relay recovery.

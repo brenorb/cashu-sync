@@ -207,13 +207,15 @@ export class SyncRuntimeService {
       allowCached &&
       store.mints.length === 1 &&
       store.activeMintUrl === profile.mintUrl &&
-      store.authorityMintUrl === profile.mintUrl &&
       store.activeUnit === "usd" &&
       cached?.info &&
       cached.keys.some((key) => key.unit === "usd") &&
       cached.keysets.some((keyset) => keyset.unit === "usd")
-    )
+    ) {
+      // This authority binding is intentionally in memory and resets on reload.
+      store.authorityMintUrl = profile.mintUrl;
       return;
+    }
     await store.bootstrapAuthorityMint(profile);
   }
 

@@ -79,7 +79,7 @@ describe("SyncRuntimeService", () => {
     });
     Object.assign(mintStore, {
       activeMintUrl: mintUrl,
-      authorityMintUrl: mintUrl,
+      authorityMintUrl: "",
       activeUnit: "usd",
       mints: [
         {
@@ -98,6 +98,7 @@ describe("SyncRuntimeService", () => {
       sync: { status: "ready" },
     });
     expect(bootstrapAuthorityMint).not.toHaveBeenCalled();
+    expect(mintStore.authorityMintUrl).toBe(mintUrl);
     expect(runtimeStart).toHaveBeenCalledOnce();
   });
 
