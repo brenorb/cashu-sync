@@ -51,7 +51,7 @@ describe("GitHub Pages packaging contract", () => {
     const generatedConfig = { skipWaiting: false, clientsClaim: false };
     extendGenerateSWOptions(generatedConfig);
     expect(generatedConfig.skipWaiting).toBe(true);
-    expect(generatedConfig.clientsClaim).toBe(true);
+    expect(generatedConfig.clientsClaim).toBe(false);
   });
 
   it("deploys only the built wallet artifact", () => {
@@ -62,6 +62,14 @@ describe("GitHub Pages packaging contract", () => {
     expect(workflow).toContain("working-directory: wallet");
     expect(workflow).toContain("path: wallet/dist/pwa");
     expect(workflow).toContain("npm ci");
-    expect(workflow).not.toMatch(/relay|mint/i);
+    expect(
+      [...workflow.matchAll(/^\s+path: (.+)$/gm)].map((match) => match[1])
+    ).toEqual(["wallet/dist/pwa"]);
+    expect(workflow).toContain("run: npm run test:ci");
+    expect(workflow).toContain("run: go test ./...");
+    expect(workflow).toContain("  pull_request:");
+    expect(workflow).toContain(
+      "deploy:\n    if: github.event_name != 'pull_request'"
+    );
   });
 });

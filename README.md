@@ -24,3 +24,5 @@ The three code areas are:
 - [`integration/nutshell/`](./docs/research/nutshell-reference.md): pinned local Nutshell `0.20.3` USD fixture.
 
 Future product ideas and deployment gaps belong in the [roadmap](./docs/roadmap.md), not in the v0 compatibility contract.
+
+GitHub Actions runs the wallet and relay test suites, builds the PWA, and checks the Pages subpath on pull requests and before deployment. Pull requests do not deploy; publication requires the build job to pass.
