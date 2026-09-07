@@ -56,7 +56,7 @@ remain accessible and leave the local balance intact.
 
 ## Verification
 
-Production source: `c9d730d` plus the one-second conflict retry pacing change. Wallet unit tests: 372 passed, 16 skipped.
+Production source: `1681512` (includes `c9d730d` and conflict retry pacing). Wallet unit tests: 372 passed, 16 skipped.
 Production PWA build and lint of changed code passed.
 
 Final live run: **PASS** (3.9 minutes, completed 2026-09-07).

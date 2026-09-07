@@ -39,3 +39,18 @@ The loaded JavaScript contained the new relay recovery validation. Mint
 (Nutshell 0.20.3), sync relay, and pairing relay health endpoints returned 200.
 This was a deployment smoke check; interrupted-operation E2E evidence is in
 [the recovery report](qa/relay-first-recovery-2026-09-06.md).
+
+## Recovery fix deployment — 2026-09-07
+
+Published source `1681512` using the existing wallet-only deployment profile.
+Image: `registry.fly.io/cashu-sync-wallet:deployment-01M1WY3GRRPQJFCWGZGXXDBKP4`.
+Manifest digest: `sha256:9d23a957379ebd2f5ae581e5e21823e34a232cfb81fcfc163447533bb7940ac3`.
+Both Amsterdam machines (`7846572b9530e8`, `801555b6e33528`) reached version 45,
+started, and passed Fly deployment checks.
+
+A fresh visible Chrome session returned HTTP 200, displayed `Wallet synchronized.`,
+and had no uncaught page errors. Its loaded JavaScript contained both pruned-history
+reconciliation and completed-quote matching. The live-backend pre-deployment E2E
+passed stale history, lost swap response, concurrent Top Ups, and offline token
+access: [recovery evidence](qa/pruned-history-recovery-2026-09-06.md).
+Existing clients should reload to load the updated application.
