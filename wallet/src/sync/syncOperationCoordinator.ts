@@ -88,7 +88,7 @@ export interface CashuOperationGateway<MintIntent, MeltIntent> {
   reconcileMint(
     exactPreview: SerializedMintPreviewV0
   ): Promise<PendingMintResponseV0 | null>;
-  /** Read-only quote/proof recovery; it must never submit the operation. */
+  /** Recover quote/proofs; demo swaps may replay the exact request if inputs are unspent. */
   reconcileMelt(
     exactPreview: SerializedMeltPreviewV0
   ): Promise<PendingMeltResponseV0 | null>;
@@ -97,6 +97,7 @@ export interface CashuOperationGateway<MintIntent, MeltIntent> {
 export type SyncOperationOutcome =
   | {
       status: "completed";
+      quoteId: string;
       type: "mint" | "melt";
       operationId: string;
       eventId: string;
@@ -380,6 +381,7 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
       ) {
         return {
           status: "completed",
+          quoteId: pending.prepared_request.quote.quote,
           type: pending.type,
           operationId: pending.operation_id,
           eventId: pulled.eventId,
@@ -466,6 +468,7 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
       );
       return {
         status: "completed",
+        quoteId: pending.prepared_request.quote.quote,
         type: pending.type,
         operationId: pending.operation_id,
         eventId: previouslyAccepted.eventId,
@@ -492,6 +495,7 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
     await this.journal.finalizeAcceptedSnapshot(candidate, published.eventId);
     return {
       status: "completed",
+      quoteId: pending.prepared_request.quote.quote,
       type: pending.type,
       operationId: pending.operation_id,
       eventId: published.eventId,

@@ -231,17 +231,15 @@ export class V0WalletService {
         throw new Error(`mint quote is ${quote.state}, not PAID`);
       }
       await cashuDb.mintQuotes.update(quote.quote, { state: quote.state });
-      const result = await (
+      let result = await (
         await this.ensureCoordinator()
       ).mint({
         amount: quote.amount.toNumber(),
         quote,
         keysetId: this.walletPort.getKeyset(null, "usd"),
       });
-      if (result.status === "completed") return result;
-      if (result.status !== "aborted-before-submit") {
-        return this.resumeUntilSettled();
-      }
+      result = await this.settleRequestedOperation(result, quoteId);
+      if (result.status !== "aborted-before-submit") return result;
       await this.refreshAfterRemoteChange();
     }
     throw new WalletConflictError(
@@ -380,7 +378,7 @@ export class V0WalletService {
       if (quote.state !== MeltQuoteState.UNPAID) {
         throw new Error(`melt quote is ${quote.state}, not UNPAID`);
       }
-      const result = await (
+      let result = await (
         await this.ensureCoordinator()
       ).melt({
         quote,
@@ -388,10 +386,8 @@ export class V0WalletService {
         keysetId: this.walletPort.getKeyset(null, "usd"),
         preferAsync: false,
       });
-      if (result.status === "completed") return result;
-      if (result.status !== "aborted-before-submit") {
-        return this.resumeUntilSettled();
-      }
+      result = await this.settleRequestedOperation(result, quoteId);
+      if (result.status !== "aborted-before-submit") return result;
       await this.refreshAfterRemoteChange();
     }
     throw new WalletConflictError(
@@ -421,9 +417,7 @@ export class V0WalletService {
       proofs: useMintsStore().activeProofs,
       keysetId: this.walletPort.getKeyset(null, "usd"),
     });
-    return outcome.status === "needs-reconciliation"
-      ? this.resumeUntilSettled()
-      : outcome;
+    return this.settleRequestedOperation(outcome, stored.quote);
   }
 
   resume(): Promise<SyncOperationOutcome> {
@@ -449,6 +443,27 @@ export class V0WalletService {
     if (!belongsToRequest && result.status === "completed") {
       await this.refreshAfterRemoteChange();
       return null;
+    }
+    return result;
+  }
+
+  private async settleRequestedOperation(
+    outcome: SyncOperationOutcome,
+    quoteId: string
+  ): Promise<SyncOperationOutcome> {
+    const result =
+      outcome.status === "needs-reconciliation"
+        ? await this.resumeUntilSettled()
+        : outcome;
+    // A pull can discover and finish another device's request. Retry ours
+    // against the refreshed proofs instead of claiming that ours was paid.
+    if (result.status === "completed" && result.quoteId !== quoteId) {
+      return {
+        status: "aborted-before-submit",
+        type: result.type,
+        operationId: result.operationId,
+        reason: "conflict",
+      };
     }
     return result;
   }
@@ -492,6 +507,7 @@ export class V0WalletService {
         .previous_event_id || "already-issued";
     return {
       status: "completed",
+      quoteId,
       type: direction,
       operationId: `${direction}:${quoteId}`,
       eventId,

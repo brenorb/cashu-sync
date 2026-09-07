@@ -307,6 +307,7 @@ describe("SyncOperationCoordinator new operations", () => {
     const value = fixture();
     await expect(value.coordinator.mint("intent")).resolves.toEqual({
       status: "completed",
+      quoteId: "mint-q",
       type: "mint",
       operationId: OPERATION,
       eventId: FINAL_HEAD,

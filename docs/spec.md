@@ -302,3 +302,5 @@ When automatic recovery cannot finish, the wallet exposes Retry sync, pairing, a
 A final CAS conflict also checks whether the relay already contains the identical monetary result. Matching output proofs and terminal quote/history can finalize a local response even when accounting timestamps differ; missing local outputs remain protected. This confirmation never replays a known completed mint request.
 
 Demo spends retry proven prepared-CAS conflicts automatically, just like Bolt11 spends. Idempotent mint completion retains the terminal `ISSUED` quote state rather than regressing it to `PAID`.
+
+Completed operation outcomes carry the quote identity. When a new request discovers and recovers another device's pending operation, the wallet refreshes and retries its own quote instead of reporting that unrelated recovery as payment success. This applies to mint, melt, and demo Top Up flows.

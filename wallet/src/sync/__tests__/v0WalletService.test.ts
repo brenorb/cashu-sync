@@ -98,6 +98,7 @@ describe("V0WalletService quote fencing", () => {
         phase: "submitted",
         type: "mint",
         operation_id: "operation",
+        prepared_request: { quote: { quote: "mint-q" } },
       },
     });
     pull.mockImplementationOnce(async () => {
@@ -130,6 +131,7 @@ describe("V0WalletService quote fencing", () => {
       .spyOn(SyncOperationCoordinator.prototype, "resume")
       .mockResolvedValue({
         status: "completed",
+        quoteId: "mint-q",
         type: "mint",
         operationId: "pending-operation",
         eventId: "e".repeat(64),
@@ -163,6 +165,7 @@ describe("V0WalletService quote fencing", () => {
       })
       .mockResolvedValueOnce({
         status: "completed",
+        quoteId: "mint-q",
         type: "mint",
         operationId: "pending-operation",
         eventId: "e".repeat(64),
@@ -371,6 +374,7 @@ describe("V0WalletService quote fencing", () => {
       })
       .mockResolvedValueOnce({
         status: "completed",
+        quoteId: quote,
         type: "melt",
         operationId: "two",
         eventId: "event",
@@ -389,6 +393,62 @@ describe("V0WalletService quote fencing", () => {
     }
   });
 
+  it.each([false, true])(
+    "does not complete a requested Top Up when another quote was recovered (delayed=%s)",
+    async (delayed) => {
+      const quote = "demo-own-request";
+      await cashuDb.meltQuotes.put({
+        quote,
+        request: `cashu-sync-demo:${quote}`,
+        amount: 500,
+        unit: "usd",
+        state: "UNPAID",
+      });
+      const other = {
+        status: "completed" as const,
+        type: "melt" as const,
+        operationId: "other-operation",
+        quoteId: "other-quote",
+        eventId: "event",
+      };
+      const resume = vi
+        .spyOn(SyncOperationCoordinator.prototype, "resume")
+        .mockResolvedValue(other);
+      const melt = vi
+        .spyOn(SyncOperationCoordinator.prototype, "melt")
+        .mockResolvedValueOnce(
+          delayed
+            ? {
+                status: "needs-reconciliation",
+                type: "melt",
+                operationId: "other-operation",
+                stage: "gateway-submit",
+                reason: "gateway-unknown",
+              }
+            : other
+        )
+        .mockResolvedValueOnce({
+          ...other,
+          operationId: "own-operation",
+          quoteId: quote,
+        });
+      const service = new V0WalletService(runtimeService as never, {
+        activeWallet: vi.fn(),
+        getKeyset: () => "k",
+      });
+      try {
+        await expect(service.payMeltQuote(quote)).resolves.toMatchObject({
+          status: "completed",
+          operationId: "own-operation",
+        });
+        expect(melt).toHaveBeenCalledTimes(2);
+      } finally {
+        melt.mockRestore();
+        resume.mockRestore();
+      }
+    }
+  );
+
   it("routes demo spending through the durable operation coordinator", async () => {
     const quote = "demo-q";
     await cashuDb.meltQuotes.put({
@@ -402,6 +462,7 @@ describe("V0WalletService quote fencing", () => {
       .spyOn(SyncOperationCoordinator.prototype, "melt")
       .mockResolvedValueOnce({
         status: "completed",
+        quoteId: quote,
         type: "melt",
         operationId: "op",
         eventId: "event",
@@ -611,6 +672,7 @@ describe("V0WalletService quote fencing", () => {
       })
       .mockResolvedValueOnce({
         status: "completed",
+        quoteId: "mint-q",
         type: "mint",
         operationId: "retry-operation",
         eventId: "d".repeat(64),
@@ -655,6 +717,7 @@ describe("V0WalletService quote fencing", () => {
       .spyOn(SyncOperationCoordinator.prototype, "mint")
       .mockResolvedValue({
         status: "completed",
+        quoteId: "mint-q",
         type: "mint",
         operationId: "retry-operation",
         eventId: "e".repeat(64),
