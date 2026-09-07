@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import {
   Amount,
+  getDecodedToken,
   MeltQuoteState,
   MintQuoteState,
   type Wallet,
@@ -39,6 +40,7 @@ const runtime = {
 };
 const runtimeService = {
   runtime,
+  exportAuthority: async () => ({ mint_url: "http://127.0.0.1:3338" }),
   runExclusive: (operation: () => Promise<unknown>) => operation(),
 };
 
@@ -661,4 +663,29 @@ describe("V0WalletService quote fencing", () => {
     expect(session.journal).toEqual({});
     expect(publishCurrent).not.toHaveBeenCalled();
   });
+});
+
+it("exports unaffected local tokens without connecting to relay or mint", async () => {
+  const free = {
+    id: "0011223344556677",
+    C: "02" + "11".repeat(32),
+    secret: "free",
+    amount: 500,
+    reserved: false,
+  };
+  const reserved = { ...free, secret: "pending", reserved: true, quote: "q" };
+  await cashuDb.proofs.bulkPut([free, reserved]);
+  const activeWallet = vi.fn();
+  const service = new V0WalletService(runtimeService as never, {
+    activeWallet,
+    getKeyset: () => "k",
+  });
+  const token = getDecodedToken(await service.exportAvailableTokens(), [
+    free.id,
+  ]);
+  expect(token.proofs.map((p) => p.secret)).toEqual(["free"]);
+  expect(token.proofs[0].amount.toNumber()).toBe(500);
+  expect(await cashuDb.proofs.toArray()).toEqual([free, reserved]);
+  expect(activeWallet).not.toHaveBeenCalled();
+  expect(pull).not.toHaveBeenCalled();
 });

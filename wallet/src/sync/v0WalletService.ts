@@ -1,5 +1,6 @@
 import {
   Amount,
+  getEncodedToken,
   MeltQuoteState,
   MintQuoteState,
   type MeltQuoteBolt11Response,
@@ -82,6 +83,27 @@ export class V0WalletService {
     private readonly walletPort: BrowserWalletPort,
     private readonly now: () => Date = () => new Date()
   ) {}
+
+  exportAvailableTokens(): Promise<string> {
+    return this.serialize(async () => {
+      const authority = await this.runtimeService.exportAuthority();
+      const proofs = (await cashuDb.proofs.toArray()).filter(
+        (proof) => !proof.reserved
+      );
+      if (proofs.length === 0)
+        throw new Error(
+          "No unreserved local tokens are available. Keep this wallet and retry recovery when the mint is reachable."
+        );
+      return getEncodedToken({
+        mint: authority.mint_url,
+        unit: "usd",
+        proofs: proofs.map((proof) => ({
+          ...proof,
+          amount: Amount.from(proof.amount),
+        })),
+      });
+    });
+  }
 
   syncNow(): Promise<void> {
     return this.serialize(() => this.syncNowUnlocked());

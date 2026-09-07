@@ -54,6 +54,42 @@
       <span>{{ syncMessage }}</span>
     </p>
 
+    <section v-if="recoveryNeeded" aria-label="Wallet recovery">
+      <p>
+        Your local tokens are preserved. Retry synchronization or use them in
+        another compatible wallet.
+      </p>
+      <q-btn flat no-caps label="Retry sync" @click="retrySync" />
+      <q-btn flat no-caps label="Use local tokens" @click="openTokenRecovery" />
+      <router-link to="/settings/sync">Pair with another wallet</router-link>
+    </section>
+    <q-dialog v-model="showRecoveryDialog" @hide="recoveryToken = ''">
+      <q-card class="v0-dialog">
+        <q-card-section>
+          <h2>Use local tokens</h2>
+          <p>
+            Import these tokens into a compatible Cashu wallet. The mint
+            confirms which tokens can be spent. Share them only with a wallet
+            you control.
+          </p>
+          <q-input
+            v-if="recoveryToken"
+            :model-value="recoveryToken"
+            type="textarea"
+            readonly
+            label="Cashu tokens"
+            data-v0-field="recovery-token"
+          />
+          <p v-else role="status">
+            {{ recoveryError || "Reading local tokens…" }}
+          </p>
+        </q-card-section>
+        <q-card-actions align="right"
+          ><q-btn flat no-caps label="Close" v-close-popup
+        /></q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-dialog v-model="showMintDialog">
       <q-card class="v0-dialog" data-v0-dialog="mint">
         <q-card-section class="v0-dialog__intro">
@@ -210,6 +246,10 @@ export default defineComponent({
   },
   data() {
     return {
+      recoveryNeeded: false,
+      showRecoveryDialog: false,
+      recoveryToken: "",
+      recoveryError: "",
       showMintDialog: false,
       showMeltDialog: false,
       mintAmount: "1",
@@ -226,12 +266,28 @@ export default defineComponent({
     };
   },
   methods: {
+    retrySync() {
+      window.location.reload();
+    },
+    async openTokenRecovery() {
+      this.showRecoveryDialog = true;
+      this.recoveryError = "";
+      try {
+        this.recoveryToken = await useV0WalletService().exportAvailableTokens();
+      } catch (error) {
+        this.recoveryError =
+          error instanceof Error
+            ? error.message
+            : "Could not read local tokens.";
+      }
+    },
     async runDialog(operation: () => Promise<void>) {
       this.dialogBusy = true;
       this.dialogError = "";
       try {
         await operation();
       } catch (error) {
+        this.recoveryNeeded = true;
         this.dialogError =
           error instanceof Error ? error.message : "Wallet operation failed";
       } finally {
@@ -340,6 +396,7 @@ export default defineComponent({
           : `Recovery status: ${resumed.status}`;
       this.walletReady =
         resumed.status === "idle" || resumed.status === "completed";
+      this.recoveryNeeded = !this.walletReady;
       this.visibilityHandler = () => {
         if (document.visibilityState === "visible") {
           void useV0WalletService()
@@ -369,6 +426,7 @@ export default defineComponent({
     } catch (error) {
       this.syncPending = false;
       this.walletReady = false;
+      this.recoveryNeeded = true;
       this.syncMessage =
         error instanceof Error ? error.message : "Wallet startup failed";
     }
