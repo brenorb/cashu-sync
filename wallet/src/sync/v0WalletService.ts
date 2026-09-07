@@ -525,6 +525,9 @@ export class V0WalletService {
   }
 
   private async refreshAfterRemoteChange(): Promise<void> {
+    // Give the peer time to publish its next journal phase before competing
+    // for the same relay head again. Keep the existing bounded retry budget.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     await this.requireSession().sync.pull();
     await usePaymentHistoryStore().refreshFromDexie();
     await useProofsStore().updateActiveProofs();

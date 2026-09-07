@@ -304,3 +304,5 @@ A final CAS conflict also checks whether the relay already contains the identica
 Demo spends retry proven prepared-CAS conflicts automatically, just like Bolt11 spends. Idempotent mint completion retains the terminal `ISSUED` quote state rather than regressing it to `PAID`.
 
 Completed operation outcomes carry the quote identity. When a new request discovers and recovers another device's pending operation, the wallet refreshes and retries its own quote instead of reporting that unrelated recovery as payment success. This applies to mint, melt, and demo Top Up flows.
+
+After a cross-device conflict, wait one second before pulling and retrying so the peer can publish its next journal phase. The existing three-attempt bound remains in place.
