@@ -350,85 +350,41 @@ describe("V0WalletService quote fencing", () => {
     expect(createMeltQuoteBolt11).not.toHaveBeenCalled();
   });
 
-  it("splits denominations for a local demo spend", async () => {
-    const quoteId = "demo-melt-test";
-    const current = {
-      schema: 0,
-      revision: 0,
-      previous_event_id: "",
-      mint: "http://127.0.0.1:3338",
-      unit: "usd",
-      proofs: [
-        { id: "k", amount: 800, secret: "secret-8", C: "C8", reserved: false },
-        { id: "k", amount: 400, secret: "secret-4", C: "C4", reserved: false },
-      ],
-      counters: {},
-      quotes: [
-        {
-          type: "melt",
-          quote: quoteId,
-          request: `cashu-sync-demo:${quoteId}`,
-          amount: 800,
-          fee_reserve: 0,
-          unit: "usd",
-          state: "UNPAID",
-          expiry: 1_800_000_000,
-          payment_preimage: null,
-        },
-      ],
-      history: [
-        {
-          id: `melt:${quoteId}`,
-          direction: "melt",
-          quote: quoteId,
-          amount: 800,
-          request: `cashu-sync-demo:${quoteId}`,
-          memo: "",
-          date: "2026-08-13T10:00:00.000Z",
-          status: "pending",
-          mint: "http://127.0.0.1:3338",
-          unit: "usd",
-        },
-      ],
-      pending_operation: null,
-    } as const;
-    session.repository.exportSnapshot.mockResolvedValue(current);
-    const selectProofsToSend = vi.fn(() => ({
-      send: [
-        { ...current.proofs[0], amount: Amount.from(current.proofs[0].amount) },
-      ],
-      keep: [current.proofs[1]],
-    }));
-    const send = vi
-      .fn()
-      .mockRejectedValueOnce(
-        Object.assign(new Error("outputs already signed"), { code: 11003 })
-      )
-      .mockResolvedValueOnce({
-        keep: [],
-        send: [],
-      });
-    const service = new V0WalletService(runtimeService as never, {
-      activeWallet: vi.fn(async () => walletMock({ selectProofsToSend, send })),
-      getKeyset: () => "00c0ffee",
-    });
+  it("routes demo spending through the durable operation coordinator", async () => {
+    const quote = "demo-q";
     await cashuDb.meltQuotes.put({
-      quote: quoteId,
-      request: `cashu-sync-demo:${quoteId}`,
-      amount: 800,
-      fee_reserve: 0,
+      quote,
+      request: `cashu-sync-demo:${quote}`,
+      amount: 500,
       unit: "usd",
       state: "UNPAID",
     });
-
-    await expect(service.payMeltQuote(quoteId)).resolves.toMatchObject({
-      status: "completed",
-      type: "melt",
+    const melt = vi
+      .spyOn(SyncOperationCoordinator.prototype, "melt")
+      .mockResolvedValueOnce({
+        status: "completed",
+        type: "melt",
+        operationId: "op",
+        eventId: "event",
+      });
+    const send = vi.fn();
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(async () => walletMock({ send })),
+      getKeyset: () => "00c0ffee",
     });
-    expect(selectProofsToSend).toHaveBeenCalledTimes(2);
-    expect(send).toHaveBeenCalledTimes(2);
-    expect(applySnapshot).toHaveBeenCalledOnce();
-    expect(applySnapshot.mock.calls[0][0].proofs).toEqual([current.proofs[1]]);
+    await expect(service.payMeltQuote(quote)).resolves.toMatchObject({
+      status: "completed",
+    });
+    expect(melt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quote: expect.objectContaining({
+          quote,
+          request: `cashu-sync-demo:${quote}`,
+        }),
+      })
+    );
+    expect(send).not.toHaveBeenCalled();
+    melt.mockRestore();
   });
 
   it("rejects non-Bolt11 payment ingress before touching wallet or relay", async () => {

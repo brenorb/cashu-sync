@@ -292,3 +292,7 @@ On a cached-mint boot, rebind the in-memory authority mint URL from the validate
 ### Pruned-history recovery
 
 When a verified newer full snapshot has outlived the retained predecessor chain, existing wallets reconcile the union of local and remote proofs with NUT-07, preserve monotonic counters and local-only accounting, and continue from the authenticated head. Spent proofs are removed; pending proofs alone are reserved. Journal-owned inputs and unfinalized responses remain protected. Corrections are published by the normal CAS path. Failed mint verification leaves local material unchanged.
+
+### Durable internal-demo spending
+
+Internal demo Top Up uses the existing melt journal with an explicit `method: swap` preview and `keep_output_count`. The exact inputs and all ordered outputs are persisted and fenced by relay CAS before NUT-03. A swap is always submitted, even for exact denominations, so the mint marks the old wallet inputs spent. Only change outputs are retained; the remaining outputs represent the simulated payment. NUT-09 restores the exact result after a lost response, and only provably unspent inputs permit replay. The decoder enforces the demo quote prefix and balanced amounts. Older clients must reload before reading an in-flight swap preview.

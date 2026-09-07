@@ -102,7 +102,9 @@ export type SerializedMintPreviewV0 = {
  * Both input and output order are covered by the encrypted signed snapshot.
  */
 export type SerializedMeltPreviewV0 = {
-  method: "bolt11";
+  method: "bolt11" | "swap";
+  /** Demo swap outputs to retain; remaining outputs are the simulated payment. */
+  keep_output_count?: number;
   keyset_id: string;
   quote: SerializedMeltQuoteV0;
   request: {

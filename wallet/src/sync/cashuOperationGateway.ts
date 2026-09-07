@@ -13,6 +13,7 @@ import {
   deserializeMeltPreviewV0,
   deserializeMintPreviewV0,
   serializeMeltPreviewV0,
+  decodeSerializedMeltPreviewV0,
   serializeMintPreviewV0,
 } from "src/sync/previewCodec";
 import type {
@@ -81,6 +82,32 @@ export class CashuTsOperationGateway
     if (intent.quote.state !== MeltQuoteState.UNPAID) {
       throw new Error("melt quote must be UNPAID before preparing inputs");
     }
+    if (intent.quote.request.startsWith("cashu-sync-demo:")) {
+      const preview = await wallet.prepareSwapToSend(
+        intent.quote.amount,
+        intent.proofs,
+        { includeFees: true, keysetId: intent.keysetId }
+      );
+      const serialized = serializeMeltPreviewV0({
+        method: "bolt11",
+        keysetId: preview.keysetId,
+        quote: {
+          ...intent.quote,
+          fee_reserve: preview.fees,
+          payment_preimage: null,
+        },
+        inputs: preview.inputs,
+        outputData: [
+          ...(preview.keepOutputs ?? []),
+          ...(preview.sendOutputs ?? []),
+        ],
+      });
+      return decodeSerializedMeltPreviewV0({
+        ...serialized,
+        method: "swap",
+        keep_output_count: preview.keepOutputs?.length ?? 0,
+      });
+    }
     const target = intent.quote.amount.add(intent.quote.fee_reserve);
     const selected = wallet.selectProofsToSend(
       intent.proofs,
@@ -129,6 +156,13 @@ export class CashuTsOperationGateway
   ): Promise<PendingMeltResponseV0> {
     const wallet = await this.getWallet();
     const exact = deserializeMeltPreviewV0(exactPreview);
+    if (exactPreview.method === "swap") {
+      const response = await wallet.mint.swap({
+        inputs: exact.inputs,
+        outputs: exact.outputData.map((output) => output.blindedMessage),
+      });
+      return this.swapResponse(exactPreview, response.signatures, wallet);
+    }
     const response = await wallet.completeMelt(exact, undefined, {
       preferAsync: exactPreview.request.prefer_async,
     });
@@ -198,11 +232,64 @@ export class CashuTsOperationGateway
     return { proofs };
   }
 
+  private swapResponse(
+    preview: SerializedMeltPreviewV0,
+    signatures: import("@cashu/cashu-ts").SerializedBlindedSignature[],
+    wallet: Wallet
+  ): PendingMeltResponseV0 {
+    const exact = deserializeMeltPreviewV0(preview);
+    if (signatures.length !== exact.outputData.length)
+      throw new Error("incomplete swap response");
+    const proofs = exact.outputData.map((output, i) => {
+      const signature = signatures[i];
+      if (
+        signature.id !== output.blindedMessage.id ||
+        !signature.amount.equals(output.blindedMessage.amount)
+      ) {
+        throw new Error("swap signature does not match prepared output");
+      }
+      return toSnapshotProof(
+        output.toProof(signature, wallet.getKeyset(signature.id))
+      );
+    });
+    return {
+      state: "PAID",
+      payment_preimage: null,
+      change: proofs.slice(0, preview.keep_output_count),
+    };
+  }
+
   async reconcileMelt(
     exactPreview: SerializedMeltPreviewV0
   ): Promise<PendingMeltResponseV0 | null> {
     const wallet = await this.getWallet();
     const exact = deserializeMeltPreviewV0(exactPreview);
+    if (exactPreview.method === "swap") {
+      const restored = await wallet.mint.restore({
+        outputs: exact.outputData.map((o) => o.blindedMessage),
+      });
+      if (
+        restored.outputs.length === exact.outputData.length &&
+        restored.signatures.length === exact.outputData.length
+      ) {
+        const byOutput = new Map(
+          restored.outputs.map((o, i) => [o.B_, restored.signatures[i]])
+        );
+        const signatures = exact.outputData.map((o) =>
+          byOutput.get(o.blindedMessage.B_)
+        );
+        if (signatures.every((s) => s !== undefined))
+          return this.swapResponse(exactPreview, signatures, wallet);
+      }
+      const states = await wallet.checkProofsStates(exact.inputs);
+      if (
+        states.length === exact.inputs.length &&
+        states.every((s) => s.state === "UNSPENT")
+      ) {
+        return this.submitMelt(exactPreview);
+      }
+      return null;
+    }
     const quote = await wallet.checkMeltQuoteBolt11(exact.quote.quote);
     requireUsdMeltQuote(quote);
     if (quote.state !== MeltQuoteState.PAID) {

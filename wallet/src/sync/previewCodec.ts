@@ -186,11 +186,15 @@ function decodeOutputData(
     // cashu-ts stores blinding factors as arbitrary 256-bit integers; they
     // are not wallet-denominated amounts and may exceed the amount codec's
     // 20-digit bound.
-    blindingFactor: stringValue(input.blindingFactor, `${path}.blindingFactor`, {
-      min: 1,
-      max: 78,
-      pattern: /^(0|[1-9]\d*)$/,
-    }),
+    blindingFactor: stringValue(
+      input.blindingFactor,
+      `${path}.blindingFactor`,
+      {
+        min: 1,
+        max: 78,
+        pattern: /^(0|[1-9]\d*)$/,
+      }
+    ),
     secret: stringValue(input.secret, `${path}.secret`, {
       min: 2,
       max: 8192,
@@ -434,10 +438,14 @@ export function decodeSerializedMeltPreviewV0(
   exactKeys(
     input,
     ["method", "keyset_id", "quote", "request", "output_data"],
-    [],
+    ["keep_output_count"],
     path
   );
-  if (input.method !== "bolt11") fail(`${path}.method`, "v0 requires bolt11");
+  const method = enumValue(
+    input.method,
+    ["bolt11", "swap"] as const,
+    `${path}.method`
+  );
   const keysetId = stringValue(input.keyset_id, `${path}.keyset_id`, {
     min: 1,
     max: 256,
@@ -481,8 +489,29 @@ export function decodeSerializedMeltPreviewV0(
     outputData,
     `${path}.request.outputs`
   );
+  let keepCount: number | undefined;
+  if (method === "swap") {
+    if (!quote.request.startsWith("cashu-sync-demo:"))
+      fail(path, "swap requires a demo quote");
+    keepCount = safeInteger(
+      input.keep_output_count,
+      `${path}.keep_output_count`
+    );
+    if (keepCount > outputData.length) fail(path, "invalid swap keep count");
+    const sum = (values: { amount: string }[]) =>
+      values.reduce((n, value) => n + BigInt(value.amount), 0n);
+    if (
+      sum(orderedRequest.outputs.slice(keepCount)) !== BigInt(quote.amount) ||
+      sum(orderedRequest.inputs) !==
+        sum(orderedRequest.outputs) + BigInt(quote.fee_reserve)
+    ) {
+      fail(path, "swap amounts do not balance");
+    }
+  } else if (input.keep_output_count !== undefined)
+    fail(path, "bolt11 cannot carry swap fields");
   return {
-    method: "bolt11",
+    method,
+    ...(keepCount === undefined ? {} : { keep_output_count: keepCount }),
     keyset_id: keysetId,
     quote,
     request: orderedRequest,

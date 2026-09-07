@@ -26,7 +26,6 @@ import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
 import type { PublishOutcome } from "src/sync/syncCoordinator";
 import {
   SyncOperationCoordinator,
-  isOutputsAlreadySigned,
   type SyncOperationOutcome,
 } from "src/sync/syncOperationCoordinator";
 import type { RuntimeSession } from "src/sync/walletSyncRuntime";
@@ -376,81 +375,23 @@ export class V0WalletService {
   private async payInternalTopupUnlocked(
     stored: MeltQuoteRowLike
   ): Promise<SyncOperationOutcome> {
-    const session = this.requireSession();
-    const current = await session.repository.exportSnapshot();
-    const wallet = await this.ensureWallet();
-    const selected = wallet.selectProofsToSend(
-      current.proofs.filter((proof) => !proof.reserved),
-      Amount.from(stored.amount ?? 0),
-      true,
-      false
-    ).send;
-    if (selected.length === 0) throw new Error("not enough credits");
-    const selectedSecrets = new Set(selected.map((proof) => proof.secret));
-    // ponytail: the internal demo has no provider to receive change, so use
-    // the mint's normal swap to split denominations and keep the change.
-    let split;
-    try {
-      split = await wallet.send(Amount.from(stored.amount ?? 0), selected, {
-        includeFees: true,
-      });
-    } catch (error) {
-      if (isOutputsAlreadySigned(error)) {
-        throw new WalletConflictError(
-          "wallet outputs changed on another device; retry with fresh proofs"
-        );
-      }
-      throw error;
+    if (stored.state === "PAID") {
+      return this.markAlreadyPaid("melt", stored.quote);
     }
-    const historyId = `melt:${stored.quote}`;
-    const candidate: SnapshotV0 = {
-      ...current,
-      revision: current.revision + 1,
-      previous_event_id: current.previous_event_id,
-      proofs: [
-        ...current.proofs.filter((proof) => !selectedSecrets.has(proof.secret)),
-        ...split.keep.map(toSnapshotProof),
-      ],
-      quotes: current.quotes.map((quote) =>
-        quote.type === "melt" && quote.quote === stored.quote
-          ? { ...quote, state: "PAID" as const }
-          : quote
-      ),
-      history: current.history.map((row) =>
-        row.id === historyId
-          ? {
-              ...row,
-              status: "paid" as const,
-              paid_date: this.now().toISOString(),
-            }
-          : row
-      ),
-      pending_operation: null,
-    };
-    const outcome = await session.sync.publishCandidate(candidate, {
-      applyAccepted: false,
+    return (await this.ensureCoordinator()).melt({
+      quote: {
+        quote: stored.quote,
+        request: stored.request!,
+        amount: Amount.from(stored.amount ?? 0),
+        fee_reserve: Amount.from(0),
+        unit: "usd",
+        state: MeltQuoteState.UNPAID,
+        expiry: Math.floor(this.now().getTime() / 1000) + 600,
+        payment_preimage: null,
+      },
+      proofs: useMintsStore().activeProofs,
+      keysetId: this.walletPort.getKeyset(null, "usd"),
     });
-    if (outcome.status !== "accepted") {
-      if (outcome.status === "conflict") {
-        throw new WalletConflictError(
-          "wallet changed on another device; try again"
-        );
-      }
-      throw new Error(
-        "relay acknowledgement is ambiguous; sync before spending"
-      );
-    }
-    await session.repository.applySnapshot(candidate, outcome.eventId);
-    await cashuDb.meltQuotes.update(stored.quote, {
-      state: MeltQuoteState.PAID,
-    });
-    await usePaymentHistoryStore().refreshFromDexie();
-    return {
-      status: "completed",
-      type: "melt",
-      operationId: `demo:${stored.quote}`,
-      eventId: outcome.eventId,
-    };
   }
 
   resume(): Promise<SyncOperationOutcome> {
@@ -695,23 +636,6 @@ export class V0WalletService {
     if (!quote) throw new Error("melt quote is not stored in this wallet");
     return quote;
   }
-}
-
-function toSnapshotProof(proof: {
-  id: string;
-  amount: { toNumber(): number };
-  secret: string;
-  C: string;
-  dleq?: SnapshotProofV0["dleq"];
-}): SnapshotProofV0 {
-  return {
-    id: proof.id,
-    amount: proof.amount.toNumber(),
-    secret: proof.secret,
-    C: proof.C,
-    reserved: false,
-    ...(proof.dleq ? { dleq: proof.dleq } : {}),
-  };
 }
 
 function requirePositiveAmount(amount: number): void {

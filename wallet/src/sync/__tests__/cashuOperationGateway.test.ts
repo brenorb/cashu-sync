@@ -18,6 +18,7 @@ import {
 } from "src/sync/cashuOperationGateway";
 import {
   deserializeMintPreviewV0,
+  decodeSerializedMeltPreviewV0,
   serializeMeltPreviewV0,
   serializeMintPreviewV0,
 } from "src/sync/previewCodec";
@@ -103,7 +104,10 @@ describe("CashuTsOperationGateway", () => {
       method: "bolt11",
       keysetId: KEYSET,
       quote,
-      payload: { quote: quote.quote, outputs: outputs.map((o) => o.blindedMessage) },
+      payload: {
+        quote: quote.quote,
+        outputs: outputs.map((o) => o.blindedMessage),
+      },
       outputData: outputs,
     };
     const prepareMint = vi.fn(async () => preview);
@@ -158,12 +162,9 @@ describe("CashuTsOperationGateway", () => {
       true,
       false
     );
-    expect(prepareMelt).toHaveBeenCalledWith(
-      "bolt11",
-      quote,
-      selected,
-      { keysetId: KEYSET }
-    );
+    expect(prepareMelt).toHaveBeenCalledWith("bolt11", quote, selected, {
+      keysetId: KEYSET,
+    });
     expect(exact.request.prefer_async).toBe(true);
     expect(send).not.toHaveBeenCalled();
     expect(swap).not.toHaveBeenCalled();
@@ -220,7 +221,11 @@ describe("CashuTsOperationGateway", () => {
       true
     );
     const completeMelt = vi.fn(async () => ({
-      quote: { ...quote, state: MeltQuoteState.PAID, payment_preimage: "preimage" },
+      quote: {
+        ...quote,
+        state: MeltQuoteState.PAID,
+        payment_preimage: "preimage",
+      },
       change: [proof(5, "03")],
       outputData: [],
     }));
@@ -342,7 +347,10 @@ describe("CashuTsOperationGateway", () => {
       method: "bolt11",
       keysetId: KEYSET,
       quote,
-      payload: { quote: quote.quote, outputs: outputs.map((o) => o.blindedMessage) },
+      payload: {
+        quote: quote.quote,
+        outputs: outputs.map((o) => o.blindedMessage),
+      },
       outputData: outputs,
     });
     const wallet = walletMock({
@@ -416,4 +424,100 @@ describe("CashuTsOperationGateway", () => {
       change: [snapshotProof(5, "03")],
     });
   });
+});
+
+describe("journaled demo swap", () => {
+  it("prepares exact swap inputs and change before any mint request", async () => {
+    const inputs = [proof(30, "input")];
+    const quote = {
+      ...meltQuote(),
+      request: "cashu-sync-demo:demo",
+      fee_reserve: Amount.from(0),
+    };
+    const swap = vi.fn();
+    const wallet = walletMock({
+      prepareSwapToSend: vi.fn(async () => ({
+        keysetId: KEYSET,
+        inputs,
+        fees: Amount.from(0),
+        keepOutputs: [output(5, 1)],
+        sendOutputs: [output(25, 2)],
+      })),
+      mint: { swap },
+    });
+    const gateway = new CashuTsOperationGateway(wallet);
+    const exact = await gateway.createMeltPreview({
+      quote,
+      proofs: inputs,
+      keysetId: KEYSET,
+    });
+    expect(exact.method).toBe("swap");
+    expect(exact.keep_output_count).toBe(1);
+    expect(() =>
+      decodeSerializedMeltPreviewV0({ ...exact, keep_output_count: 2 })
+    ).toThrow();
+    expect(() =>
+      decodeSerializedMeltPreviewV0({ ...exact, method: "bolt11" })
+    ).toThrow();
+    expect(exact.request.outputs.map((o) => o.amount)).toEqual(["5", "25"]);
+    expect(swap).not.toHaveBeenCalled();
+  });
+});
+
+it("restores a lost demo swap response without another spend", async () => {
+  const outputs = [output(5, 1), output(25, 2)];
+  const quote = {
+    ...meltQuote(),
+    request: "cashu-sync-demo:demo",
+    fee_reserve: Amount.from(0),
+  };
+  const swap = vi.fn(async () => ({
+    signatures: outputs.map((o) => ({
+      id: KEYSET,
+      amount: o.blindedMessage.amount,
+      C_: "C",
+    })),
+  }));
+  const restore = vi.fn(async () => ({
+    outputs: outputs.map((o) => o.blindedMessage),
+    signatures: outputs.map((o) => ({
+      id: KEYSET,
+      amount: o.blindedMessage.amount,
+      C_: "C",
+    })),
+  }));
+  const wallet = walletMock({
+    prepareSwapToSend: vi.fn(async () => ({
+      keysetId: KEYSET,
+      inputs: [proof(30, "input")],
+      fees: Amount.from(0),
+      keepOutputs: outputs.slice(0, 1),
+      sendOutputs: outputs.slice(1),
+    })),
+    mint: { swap, restore },
+  });
+  const toProof = vi
+    .spyOn(OutputData.prototype, "toProof")
+    .mockImplementation(function () {
+      return proof(
+        this.blindedMessage.amount.toNumber(),
+        new TextDecoder().decode(this.secret)
+      );
+    });
+  try {
+    const gateway = new CashuTsOperationGateway(wallet);
+    const exact = await gateway.createMeltPreview({
+      quote,
+      proofs: [proof(30, "input")],
+      keysetId: KEYSET,
+    });
+    const paid = await gateway.submitMelt(exact);
+    expect(paid.change.map((p) => p.amount)).toEqual([5]);
+    expect(swap).toHaveBeenCalledOnce();
+    await expect(gateway.reconcileMelt(exact)).resolves.toEqual(paid);
+    expect(swap).toHaveBeenCalledOnce();
+    expect(restore).toHaveBeenCalledOnce();
+  } finally {
+    toProof.mockRestore();
+  }
 });
