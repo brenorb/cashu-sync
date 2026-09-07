@@ -452,6 +452,30 @@ describe("SyncOperationCoordinator new operations", () => {
     expect(value.sync.publishCandidate).not.toHaveBeenCalled();
   });
 
+  it("accepts a matching monetary result published by another device after final CAS conflict", async () => {
+    const value = fixture();
+    value.journal.state.pending_operation = pendingMint("response_recorded");
+    value.sync.finalResult = {
+      status: "conflict",
+      currentEventId: FINAL_HEAD,
+      currentRevision: 6,
+    };
+    value.sync.pull.mockImplementationOnce(async () => {
+      value.journal.state.pending_operation = null;
+      return {
+        status: "applied",
+        mode: "child",
+        eventId: FINAL_HEAD,
+        revision: 6,
+      };
+    });
+    await expect(value.coordinator.resume()).resolves.toMatchObject({
+      status: "completed",
+      eventId: FINAL_HEAD,
+    });
+    expect(value.gateway.reconcileMint).not.toHaveBeenCalled();
+  });
+
   it("keeps response_recorded proofs on final conflict", async () => {
     const value = fixture();
     value.sync.finalResult = {

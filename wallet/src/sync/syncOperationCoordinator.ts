@@ -368,7 +368,8 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
   }
 
   private async recoverFromRelay(
-    pending: PendingMintV0 | PendingMeltV0
+    pending: PendingMintV0 | PendingMeltV0,
+    mintFallback = true
   ): Promise<SyncOperationOutcome> {
     try {
       // Pull validates ancestry and completion before replacing a local journal.
@@ -388,7 +389,9 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
       if (!isRelayRecoveryFailure(error)) throw error;
       // Retain the exact local journal while resolving missing relay evidence.
     }
-    return this.reconcileGateway(pending);
+    return mintFallback
+      ? this.reconcileGateway(pending)
+      : needs(pending, "final-publish", "conflict");
   }
 
   private async reconcileGateway(
@@ -480,7 +483,8 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
       return needs(pending, "final-publish", "rejected");
     }
     if (published.status === "conflict") {
-      return needs(pending, "final-publish", "conflict");
+      // Another device may have published the same money with a different timestamp.
+      return this.recoverFromRelay(pending, false);
     }
     if (published.status === "needs-reconciliation") {
       return needs(pending, "final-publish", "ambiguous");

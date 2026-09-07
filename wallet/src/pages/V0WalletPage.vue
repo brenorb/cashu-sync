@@ -286,6 +286,7 @@ export default defineComponent({
       this.dialogError = "";
       try {
         await operation();
+        this.recoveryNeeded = false;
       } catch (error) {
         this.recoveryNeeded = true;
         this.dialogError =

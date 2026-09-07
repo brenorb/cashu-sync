@@ -655,8 +655,30 @@ function assertPendingResolved(local: SnapshotV0, incoming: SnapshotV0): void {
       entry.unit === local.unit &&
       entry.status === (unpaid ? "pending" : "paid")
   );
+  const contains = (proof: SnapshotProofV0) =>
+    incoming.proofs.some(
+      (remote) =>
+        remote.secret === proof.secret &&
+        remote.id === proof.id &&
+        remote.C === proof.C &&
+        remote.amount === proof.amount
+    );
+  const sameRecordedResult =
+    pending.phase === "response_recorded" &&
+    pending.response !== null &&
+    (pending.type === "mint"
+      ? pending.response.proofs.every(contains)
+      : pending.response.state === "UNPAID"
+      ? unpaid
+      : pending.response.state === "PAID" &&
+        pending.response.change.every(contains) &&
+        pending.prepared_request.request.inputs.every(
+          (input) =>
+            !incoming.proofs.some((proof) => proof.secret === input.secret)
+        ));
   if (
     (pending.phase !== "submitted" &&
+      !sameRecordedResult &&
       pending.phase !== "needs_reconciliation" &&
       !(
         pending.type === "melt" &&

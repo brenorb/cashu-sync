@@ -400,7 +400,9 @@ export class V0WalletService {
     if (stored.state === "PAID") {
       return this.markAlreadyPaid("melt", stored.quote);
     }
-    return (await this.ensureCoordinator()).melt({
+    const outcome = await (
+      await this.ensureCoordinator()
+    ).melt({
       quote: {
         quote: stored.quote,
         request: stored.request!,
@@ -414,6 +416,9 @@ export class V0WalletService {
       proofs: useMintsStore().activeProofs,
       keysetId: this.walletPort.getKeyset(null, "usd"),
     });
+    return outcome.status === "needs-reconciliation"
+      ? this.resumeUntilSettled()
+      : outcome;
   }
 
   resume(): Promise<SyncOperationOutcome> {

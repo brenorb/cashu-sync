@@ -642,6 +642,27 @@ describe("SnapshotSyncCoordinator pending journal protection", () => {
     expect(value.repository.state.history[0].status).toBe("paid");
   });
 
+  it("accepts the same terminal monetary result already published by another device", async () => {
+    const local = pendingLocal();
+    const remote = {
+      ...structuredClone(completedFixture),
+      revision: 8,
+      previous_event_id: HEAD_A,
+    } as SnapshotV0;
+    local.pending_operation!.phase = "response_recorded";
+    local.pending_operation!.response = {
+      proofs: structuredClone(remote.proofs),
+    };
+    local.proofs = structuredClone(remote.proofs);
+    const value = fixture(local);
+    value.relay.current = event(HEAD_B, HEAD_A);
+    value.crypto.decrypted.set(HEAD_B, remote);
+    await expect(value.coordinator.pull()).resolves.toMatchObject({
+      status: "applied",
+    });
+    expect(value.repository.state.pending_operation).toBeNull();
+  });
+
   it.each([
     "prepared",
     "response_recorded",
@@ -664,6 +685,7 @@ describe("SnapshotSyncCoordinator pending journal protection", () => {
           proofs: structuredClone(remote.proofs),
         };
         local.proofs = structuredClone(remote.proofs);
+        remote.proofs = [];
       }
       if (scenario === "missing-result") remote.history = [];
       if (scenario === "wrong-request") remote.quotes[0].request = "lnbc1other";
