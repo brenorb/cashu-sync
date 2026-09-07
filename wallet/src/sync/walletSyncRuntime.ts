@@ -1,3 +1,5 @@
+import { Wallet } from "@cashu/cashu-ts";
+import { reconcileProofsWithMint } from "src/sync/proofReconciliation";
 import { cashuDb, type CashuDexie } from "src/stores/dexie";
 import {
   LocalAuthorityRepository,
@@ -180,6 +182,12 @@ export function createBrowserWalletSyncRuntime(
         syncSecret: secret,
         configuredMint: payload.mint_url,
         allowLoopbackHttp: validation.allowLoopbackHttp,
+        reconcileProofs: (proofs) =>
+          reconcileProofsWithMint(proofs, (values) =>
+            new Wallet(payload.mint_url, { unit: "usd" }).checkProofsStates(
+              values
+            )
+          ),
       });
       const journal = new OperationJournalRepository(
         db,

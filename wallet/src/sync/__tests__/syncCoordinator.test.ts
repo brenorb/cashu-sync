@@ -679,3 +679,62 @@ describe("SnapshotSyncCoordinator pending journal protection", () => {
     }
   );
 });
+
+describe("SnapshotSyncCoordinator pruned-history recovery", () => {
+  it("reconciles the union of local and remote tokens against the mint after retention expires", async () => {
+    const local = snapshot(2, HEAD_A);
+    local.proofs = [
+      { id: "k", secret: "local", C: "c", amount: 500, reserved: false },
+    ];
+    local.counters = { k: 20 };
+    const remote = snapshot(30, HEAD_C);
+    remote.proofs = [
+      { id: "k", secret: "remote", C: "d", amount: 9000, reserved: false },
+    ];
+    remote.counters = { k: 10 };
+    const value = fixture(local);
+    value.relay.current = event(HEAD_B, HEAD_C);
+    value.crypto.decrypted.set(HEAD_B, remote);
+    const reconcileProofs = vi.fn(async (proofs) => proofs);
+    const coordinator = new SnapshotSyncCoordinator({
+      relay: value.relay,
+      repository: value.repository,
+      crypto: value.crypto,
+      syncSecret: SECRET,
+      configuredMint: MINT,
+      reconcileProofs,
+    });
+    await expect(coordinator.pull()).resolves.toMatchObject({
+      status: "applied",
+    });
+    expect(reconcileProofs).toHaveBeenCalledWith([
+      ...remote.proofs,
+      ...local.proofs,
+    ]);
+    expect(value.repository.state.proofs).toEqual([
+      ...remote.proofs,
+      ...local.proofs,
+    ]);
+    expect(value.repository.state.counters.k).toBe(20);
+  });
+
+  it("keeps local tokens intact if mint reconciliation fails", async () => {
+    const local = snapshot(2, HEAD_A);
+    const value = fixture(local);
+    value.relay.current = event(HEAD_B, HEAD_C);
+    value.crypto.decrypted.set(HEAD_B, snapshot(30, HEAD_C));
+    const coordinator = new SnapshotSyncCoordinator({
+      relay: value.relay,
+      repository: value.repository,
+      crypto: value.crypto,
+      syncSecret: SECRET,
+      configuredMint: MINT,
+      reconcileProofs: async () => {
+        throw new Error("mint offline");
+      },
+    });
+    await expect(coordinator.pull()).rejects.toThrow("mint offline");
+    expect(value.repository.state).toEqual(local);
+    expect(value.repository.applied).toHaveLength(0);
+  });
+});

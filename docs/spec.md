@@ -288,3 +288,7 @@ The relay uses Khatru for Nostr protocol plumbing and implements the SQLite comp
 An existing configured USD wallet reuses its cached mint metadata during startup. Constructing the operation coordinator does not initialize a network wallet; mint initialization is deferred until an operation actually needs the mint. Fresh imports still validate and bootstrap the authority mint.
 
 On a cached-mint boot, rebind the in-memory authority mint URL from the validated authority payload. Its empty value after a page reload must not force a network bootstrap before relay recovery.
+
+### Pruned-history recovery
+
+When a verified newer full snapshot has outlived the retained predecessor chain, existing wallets reconcile the union of local and remote proofs with NUT-07, preserve monotonic counters and local-only accounting, and continue from the authenticated head. Spent proofs are removed; pending proofs alone are reserved. Journal-owned inputs and unfinalized responses remain protected. Corrections are published by the normal CAS path. Failed mint verification leaves local material unchanged.

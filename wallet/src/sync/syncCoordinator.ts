@@ -8,7 +8,7 @@ import type {
   RelayPublishResult,
   RelayWatchStatus,
 } from "src/sync/relayClient";
-import type { SnapshotV0 } from "src/sync/types";
+import type { SnapshotV0, SnapshotProofV0 } from "src/sync/types";
 import { canonicalJson } from "src/sync/validation";
 
 export interface SnapshotRelay {
@@ -103,6 +103,7 @@ export type SnapshotSyncCoordinatorOptions = {
   configuredMint: string;
   allowLoopbackHttp?: boolean;
   crypto?: SnapshotCrypto;
+  reconcileProofs?: (proofs: SnapshotProofV0[]) => Promise<SnapshotProofV0[]>;
 };
 
 /** Coordinates opaque relay CAS with one atomic local snapshot repository. */
@@ -111,10 +112,12 @@ export class SnapshotSyncCoordinator {
   private readonly relay: SnapshotRelay;
   private readonly repository: SnapshotRepository;
   private readonly crypto: SnapshotCrypto;
+  private readonly reconcileProofs: SnapshotSyncCoordinatorOptions["reconcileProofs"];
   private queue: Promise<void> = Promise.resolve();
 
   constructor(options: SnapshotSyncCoordinatorOptions) {
     this.relay = options.relay;
+    this.reconcileProofs = options.reconcileProofs;
     this.repository = options.repository;
     const cryptoOptions: CreateSyncEventOptions = {
       expectedMint: options.configuredMint,
@@ -207,7 +210,17 @@ export class SnapshotSyncCoordinator {
       const incoming = this.decryptRemote(current);
       decrypted = incoming;
       if (incoming.revision > local.revision + 1) {
-        this.verifyRetainedPath(recent, local, current, incoming);
+        try {
+          this.verifyRetainedPath(recent, local, current, incoming);
+        } catch (error) {
+          if (
+            !(error instanceof SnapshotSyncCoordinatorError) ||
+            error.code !== "revision-gap" ||
+            !this.reconcileProofs
+          )
+            throw error;
+          return this.recoverPrunedHistory(local, incoming, current.id);
+        }
         assertPendingResolved(local, incoming);
         await this.applyLocal(incoming, current.id);
         return {
@@ -219,6 +232,75 @@ export class SnapshotSyncCoordinator {
       }
     }
     return this.applyIncoming(current, local, mode, decrypted);
+  }
+
+  private async recoverPrunedHistory(
+    local: SnapshotV0,
+    incoming: SnapshotV0,
+    eventId: string
+  ): Promise<PullOutcome> {
+    assertPendingResolved(local, incoming);
+    // The authenticated full snapshot survives pruning. Preserve local-only
+    // tokens, and let the mint decide which tokens remain usable.
+    const proofs = new Map(
+      incoming.proofs.map((proof) => [proof.secret, proof])
+    );
+    for (const proof of local.proofs) {
+      const remote = proofs.get(proof.secret);
+      if (
+        remote &&
+        (remote.id !== proof.id ||
+          remote.C !== proof.C ||
+          remote.amount !== proof.amount)
+      ) {
+        throw new SnapshotSyncCoordinatorError(
+          "invalid-remote",
+          "conflicting token identity; local tokens preserved"
+        );
+      }
+      if (!remote) proofs.set(proof.secret, proof);
+    }
+    const recovered: SnapshotV0 = {
+      ...incoming,
+      proofs: await this.reconcileProofs!([...proofs.values()]),
+      counters: { ...incoming.counters },
+      quotes: [
+        ...new Map(
+          [...local.quotes, ...incoming.quotes].map((q) => [
+            `${q.type}:${q.quote}`,
+            q,
+          ])
+        ).values(),
+      ],
+      history: [
+        ...new Map(
+          [...local.history, ...incoming.history].map((h) => [h.id, h])
+        ).values(),
+      ],
+    };
+    for (const [key, value] of Object.entries(local.counters)) {
+      recovered.counters[key] = Math.max(value, recovered.counters[key] ?? 0);
+    }
+    await this.applyLocal(recovered, eventId);
+    // Publish any preserved local tokens or mint corrections through normal CAS.
+    // A conflict leaves the reconciled local material durable for the next pull.
+    if (!sameSnapshot(recovered, incoming)) {
+      const published = await this.publishUnlocked();
+      if (published.status === "accepted") {
+        return {
+          status: "applied",
+          mode: "child",
+          eventId: published.eventId,
+          revision: published.revision,
+        };
+      }
+    }
+    return {
+      status: "applied",
+      mode: "child",
+      eventId,
+      revision: incoming.revision,
+    };
   }
 
   private verifyRetainedPath(
