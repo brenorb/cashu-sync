@@ -358,7 +358,12 @@ export class V0WalletService {
       const stored = await this.requireStoredMeltQuote(quoteId);
       if (stored.request?.startsWith("cashu-sync-demo:")) {
         try {
-          return await this.payInternalTopupUnlocked(stored);
+          const result = await this.payInternalTopupUnlocked(stored);
+          if (result.status === "aborted-before-submit") {
+            await this.refreshAfterRemoteChange();
+            continue;
+          }
+          return result;
         } catch (error) {
           if (!(error instanceof WalletConflictError)) throw error;
           await this.refreshAfterRemoteChange();
@@ -472,7 +477,9 @@ export class V0WalletService {
       "rw",
       [table, cashuDb.paymentHistory],
       async () => {
-        await table.update(quoteId, { state: "PAID" });
+        await table.update(quoteId, {
+          state: direction === "mint" ? "ISSUED" : "PAID",
+        });
         await cashuDb.paymentHistory.update(`${direction}:${quoteId}`, {
           status: "paid",
           paidDate: this.now().toISOString(),

@@ -214,7 +214,7 @@ Mint recovery automatically replays the exact journaled request when the quote i
 
 ### Existing wallet restart
 
-Load the local journal before any startup pull. When a journal exists, initialize the session for operation recovery even if the relay is unavailable. Submitted operations check the relay for a validated completed result first, then use the mint to resolve missing or invalid relay evidence. Prepared operations still require relay acceptance before submission; recorded local responses are finalized without discarding their proofs. Without a local journal, normal relay bootstrap and ancestry validation remain required before enabling mint/melt.
+Load the local journal before any startup pull. When a journal exists, initialize the session for operation recovery even if the relay is unavailable. Submitted operations check the relay for a validated completed result first, then use the mint to resolve missing or invalid relay evidence. Prepared operations still require relay acceptance before submission; recorded local responses are finalized without discarding their proofs. Without a local journal, startup validates the relay head and uses mint proof reconciliation if the predecessor chain has been pruned.
 
 ### Paired wallet recovery
 
@@ -300,3 +300,5 @@ Internal demo Top Up uses the existing melt journal with an explicit `method: sw
 When automatic recovery cannot finish, the wallet exposes Retry sync, pairing, and Use local tokens. Token export reads unreserved proofs directly from local storage without requiring a live runtime, mint, or relay, and does not erase local recovery material. Export is not a payment confirmation; the receiving wallet checks spendability with the mint.
 
 A final CAS conflict also checks whether the relay already contains the identical monetary result. Matching output proofs and terminal quote/history can finalize a local response even when accounting timestamps differ; missing local outputs remain protected. This confirmation never replays a known completed mint request.
+
+Demo spends retry proven prepared-CAS conflicts automatically, just like Bolt11 spends. Idempotent mint completion retains the terminal `ISSUED` quote state rather than regressing it to `PAID`.

@@ -403,8 +403,8 @@ export class SnapshotSyncCoordinator {
         );
       }
       if (incoming.revision !== local.revision + 1) {
-        // Normal mode never skips retained history: only an explicitly pristine
-        // paired/recovered install may use bootstrap mode for a pruned chain.
+        // Non-pristine pruned histories are reconciled against the mint above;
+        // pristine recovery installs use explicit bootstrap mode.
         throw new SnapshotSyncCoordinatorError(
           "revision-gap",
           "relay event skips retained history; normal pull cannot bootstrap an existing wallet"

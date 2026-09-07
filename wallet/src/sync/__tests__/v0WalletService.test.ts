@@ -352,6 +352,43 @@ describe("V0WalletService quote fencing", () => {
     expect(createMeltQuoteBolt11).not.toHaveBeenCalled();
   });
 
+  it("retries a demo spend after losing prepared CAS to another device", async () => {
+    const quote = "demo-race";
+    await cashuDb.meltQuotes.put({
+      quote,
+      request: `cashu-sync-demo:${quote}`,
+      amount: 500,
+      unit: "usd",
+      state: "UNPAID",
+    });
+    const melt = vi
+      .spyOn(SyncOperationCoordinator.prototype, "melt")
+      .mockResolvedValueOnce({
+        status: "aborted-before-submit",
+        type: "melt",
+        operationId: "one",
+        reason: "conflict",
+      })
+      .mockResolvedValueOnce({
+        status: "completed",
+        type: "melt",
+        operationId: "two",
+        eventId: "event",
+      });
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(),
+      getKeyset: () => "k",
+    });
+    try {
+      await expect(service.payMeltQuote(quote)).resolves.toMatchObject({
+        status: "completed",
+      });
+      expect(melt).toHaveBeenCalledTimes(2);
+    } finally {
+      melt.mockRestore();
+    }
+  });
+
   it("routes demo spending through the durable operation coordinator", async () => {
     const quote = "demo-q";
     await cashuDb.meltQuotes.put({
@@ -546,7 +583,7 @@ describe("V0WalletService quote fencing", () => {
       type: "mint",
     });
     expect(await cashuDb.mintQuotes.get("mint-q")).toMatchObject({
-      state: "PAID",
+      state: "ISSUED",
     });
     expect(await cashuDb.paymentHistory.get("mint:mint-q")).toMatchObject({
       status: "paid",
