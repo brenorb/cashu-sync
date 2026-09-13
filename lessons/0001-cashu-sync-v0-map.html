@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1 — The Cashu Sync v0 map</title>
+  <style>
+    :root { --ink:#1f2528; --muted:#68747b; --line:#d7dfe3; --orange:#e87825; --blue:#155f91; --paper:#fcfbf8; --soft:#f0f4f5; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:17px/1.6 Georgia,"Times New Roman",serif; }
+    main { max-width:840px; margin:0 auto; padding:58px 28px 80px; }
+    h1,h2,h3 { font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; line-height:1.12; letter-spacing:-.035em; }
+    h1 { max-width:760px; margin:0 0 16px; font-size:clamp(2.5rem,7vw,5.2rem); }
+    h2 { margin:48px 0 12px; font-size:1.8rem; }
+    h3 { margin:26px 0 6px; font-size:1.1rem; }
+    .eyebrow { color:var(--orange); font:700 .78rem/1.2 system-ui,sans-serif; letter-spacing:.12em; text-transform:uppercase; }
+    .dek { max-width:690px; margin:0; color:var(--muted); font-size:1.22rem; }
+    .rule { border:0; border-top:4px solid var(--orange); margin:32px 0; }
+    .thesis { padding:18px 20px; background:var(--soft); border-left:5px solid var(--blue); font-size:1.2rem; }
+    .diagram { margin:22px 0; padding:18px; border:1px solid var(--line); background:#fff; font:600 .95rem/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; overflow:auto; }
+    table { width:100%; border-collapse:collapse; font-size:.95rem; background:#fff; }
+    th,td { padding:10px 11px; border:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { background:var(--soft); font-family:system-ui,sans-serif; }
+    code { color:#7c3c00; background:#fff0e4; padding:.08em .25em; border-radius:3px; }
+    a { color:var(--blue); }
+    .source { padding:14px 16px; background:#fff6ec; border:1px solid #f2c99e; }
+    details { margin:12px 0; padding:11px 14px; border:1px solid var(--line); background:#fff; }
+    summary { cursor:pointer; font-family:system-ui,sans-serif; font-weight:650; }
+    .small { color:var(--muted); font-size:.9rem; }
+    @media (max-width:700px) { main { padding:38px 18px 58px; } body { font-size:16px; } }
+    @media print { body { background:#fff; } main { padding:0; } a { color:inherit; text-decoration:none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Cashu Sync · Lesson 1</p>
+    <h1>The repo is a concurrency protocol around a Cashu wallet.</h1>
+    <p class="dek">The key to this codebase is knowing which system owns which truth. Once that is clear, the NIPs, NUTs, journal, and privacy claims line up.</p>
+    <hr class="rule">
+
+    <div class="thesis"><strong>One sentence:</strong> paired PWAs share full spending authority; they synchronize a complete encrypted snapshot through a custom Nostr relay, while Nutshell remains the authority for whether money moved.</div>
+
+    <h2>1. The three truths</h2>
+    <table>
+      <tr><th>System</th><th>What it owns</th><th>Where to read it</th></tr>
+      <tr><td>Wallet</td><td>Plaintext seed/proofs, exact requests, counters, local journal, validation, and applying snapshots.</td><td><a href="../wallet/src/sync/localWalletRepository.ts">localWalletRepository.ts</a></td></tr>
+      <tr><td>Nutshell</td><td>Quotes and mint-side proof state. The wallet may be stale; the mint decides whether a proof is spent or a quote paid.</td><td><a href="../wallet/src/sync/cashuOperationGateway.ts">cashuOperationGateway.ts</a></td></tr>
+      <tr><td>Relay</td><td>Only the current signed encrypted event head, using SQLite compare-and-swap.</td><td><a href="../relay/internal/store/store.go">store.go</a></td></tr>
+    </table>
+    <p>That split is deliberate. The relay is a sequencer and encrypted mailbox, not a distributed transaction coordinator. There is no atomic “relay write + mint write”; safety comes from durable intent, ordering, exact replay, and reconciliation.</p>
+
+    <h2>2. What actually syncs</h2>
+    <p>The snapshot is not a dump of IndexedDB. The typed v0 schema carries only what another authorized wallet needs to reconstruct the wallet projection:</p>
+    <div class="diagram">revision · previous_event_id · mint · unit
+proofs · NUT-13 counters · quotes · accounting history
+pending_operation (null | exactly one mint/melt journal)</div>
+    <p>Each snapshot becomes a signed Nostr event:</p>
+    <div class="diagram">kind: 30078
+tags: d=com.silentlink.cashu-sync.wallet.v0, prev=&lt;head&gt;, schema=0
+content: NIP-44 v2 ciphertext(snapshot)
+pubkey + id + sig: dedicated sync key</div>
+    <p><a href="https://github.com/nostr-protocol/nips/blob/master/78.md">NIP-78</a> supplies the app-data envelope shape for kind <code>30078</code>; <a href="https://github.com/nostr-protocol/nips/blob/master/01.md">NIP-01</a> supplies event identity/signatures. The repo's <code>prev</code> check is the important custom layer.</p>
+
+    <h2>3. Why ordinary Nostr replacement was not enough</h2>
+    <p>With ordinary addressable-event replacement, two stale wallets can both publish and silently overwrite one another. Cashu proofs are bearer-like state: silently dropping a newly issued proof from the shared projection is unacceptable.</p>
+    <p>The relay therefore performs this transaction for one <code>(pubkey, d)</code> stream:</p>
+    <div class="diagram">duplicate event? → idempotent success
+read current head
+require incoming prev == current head
+insert immutable event → advance head → commit
+otherwise: conflict, store nothing, broadcast nothing</div>
+    <p>On the client side, <a href="../wallet/src/sync/syncCoordinator.ts">syncCoordinator.ts</a> serializes local calls, verifies signatures and decryption, rejects rollback/branch/gap, and applies a valid snapshot in one Dexie transaction. The open relay subscription is a prompt; startup, foreground, pre-operation, and reconnect pulls are the correctness path.</p>
+
+    <h2>4. The operation safety boundary</h2>
+    <p>Mint and melt are not allowed to start from “I think my local state is current.” They start from a current relay head and a durable pending operation.</p>
+    <div class="diagram">pull + reconcile old pending
+  → prepare exact Cashu request
+  → persist pending journal locally
+  → publish pending snapshot; wait for CAS OK
+  → mark submitted durably
+  → submit exact request to Nutshell
+  → persist response/change
+  → publish final snapshot; clear journal</div>
+    <p>Read <a href="../wallet/src/sync/syncOperationCoordinator.ts">syncOperationCoordinator.ts</a> beside <a href="../wallet/src/sync/operationJournalRepository.ts">operationJournalRepository.ts</a>. The key failure rule is easy to test: a stale or rejected prepared publish causes zero state-changing mint/melt calls. After submission, errors become “unknown,” not “failed”; the journal survives until reconciliation resolves them.</p>
+    <p>For a melt, selected inputs are reserved first, change is made durable, and only then are paid inputs removed. For a mint, the exact blinded outputs are persisted before submission; <a href="https://github.com/cashubtc/nuts/blob/main/09.md">NUT-09</a> can restore signatures for those exact outputs if the response was lost.</p>
+
+    <h2>5. NIP/NUT map: only the repo-specific pieces</h2>
+    <table>
+      <tr><th>Spec</th><th>Use in this project</th><th>Important limit</th></tr>
+      <tr><td><a href="https://github.com/nostr-protocol/nips/blob/master/42.md">NIP-42</a></td><td>Authenticate the sync key to the private relay with a kind <code>22242</code> challenge event.</td><td>Authentication is not authorization by itself; production also uses an allowlist.</td></tr>
+      <tr><td><a href="https://github.com/nostr-protocol/nips/blob/master/44.md">NIP-44 v2</a></td><td>Encrypt snapshots and the formal ephemeral-key pairing response.</td><td>It does not hide timestamps, IPs, access patterns, or stable pubkey linkage.</td></tr>
+      <tr><td><a href="https://github.com/cashubtc/nuts/blob/main/04.md">NUT-04</a> / <a href="https://github.com/cashubtc/nuts/blob/main/05.md">NUT-05</a></td><td>Only enabled state-changing money rails: Bolt11/USD mint and melt.</td><td>No peer-to-peer token path, multi-mint, Bolt12, on-chain, LNURL, or batch mint.</td></tr>
+      <tr><td><a href="https://github.com/cashubtc/nuts/blob/main/07.md">NUT-07</a></td><td>Mint-side proof-state checks for reconciliation and recovery context.</td><td>A broad mnemonic-only scan is not the v0 recovery flow.</td></tr>
+      <tr><td><a href="https://github.com/cashubtc/nuts/blob/main/09.md">NUT-09</a></td><td>Restore the exact prepared mint outputs after an ambiguous submission.</td><td>It only helps when the exact output material was journaled first.</td></tr>
+      <tr><td><a href="https://github.com/cashubtc/nuts/blob/main/13.md">NUT-13</a></td><td>Wallet-side deterministic secrets/blinding and persistent per-mint/keyset counters.</td><td>The mint need not advertise NUT-13; it is a wallet derivation contract.</td></tr>
+      <tr><td><a href="https://github.com/cashubtc/nuts/blob/main/17.md">NUT-17</a> / <a href="https://github.com/cashubtc/nuts/blob/main/19.md">NUT-19</a></td><td>Notifications and exact-request caching can speed recovery.</td><td>Missed notifications and expired cache entries never prove an operation failed.</td></tr>
+    </table>
+
+    <h2>6. Privacy: what is guaranteed, what is not</h2>
+    <h3>Strong guarantees, assuming the client and deployment are not compromised</h3>
+    <ul>
+      <li>The relay stores ciphertext and cannot calculate the balance, read proofs, or decrypt the seed.</li>
+      <li>Event signatures, inner/outer predecessor agreement, revision checks, and atomic local apply reject tampering and rollback before state is accepted.</li>
+      <li>The mint sees the proof-bearing requests it must see; the relay does not see those plaintext requests.</li>
+      <li>Every paired wallet is intentionally equal-authority; there is no hidden server-side copy with more power.</li>
+    </ul>
+    <h3>Hard limits</h3>
+    <ul>
+      <li>A paired device has the mnemonic and sync secret, so it can spend everything. There is no v0 revocation.</li>
+      <li>The shared sync pubkey makes one wallet's event stream linkable. NIP-44 hides content, not metadata.</li>
+      <li>The relay can deny service, delete history, or withhold the head. It cannot make a valid old snapshot look new, but it can block recovery until restored.</li>
+      <li>The current one-scan UI encodes the encrypted authority bundle and its temporary passphrase in the same URL payload. No plaintext mnemonic appears, but possession of the full URL is possession of the handoff.</li>
+      <li>The inherited browser base still has plaintext mnemonic/localStorage exposure called out by <a href="../docs/research/wallet-base.md">wallet-base.md</a>.</li>
+    </ul>
+
+    <h2>7. What I would improve first</h2>
+    <ol>
+      <li><strong>Pairing URL:</strong> remove authority from URLs; wire the existing ephemeral two-QR protocol or use an authenticated out-of-band exchange, then scrub route state immediately.</li>
+      <li><strong>Browser secrets:</strong> replace plaintext mnemonic storage and review logs, service workers, clipboard, crash reports, and backups as one secret-handling surface.</li>
+      <li><strong>Deployment:</strong> add an operator enrollment flow, controlled PWA updates around operations, backup/restore drills, monitoring, and an independent audit.</li>
+      <li><strong>Scalability/privacy:</strong> only after v0 hardening, explore per-device keys/revocation, multiple relays, batching/delays, or the deferred event-sourced multiwriter model.</li>
+    </ol>
+
+    <h2>Retrieval check</h2>
+    <p>Answer these without looking back, then open the answer:</p>
+    <ol>
+      <li>Which system decides whether a proof is spent?</li>
+      <li>Why does the relay require <code>prev</code> to equal its current head?</li>
+      <li>What must be durable before the first state-changing mint/melt request?</li>
+      <li>Why is a timeout after submission not safe to treat as failure?</li>
+      <li>What does the current quick-pair URL protect, and what does it still expose?</li>
+    </ol>
+    <details><summary>Answer key</summary><p>Nutshell decides proof state. <code>prev</code> turns a last-write-wins stream into a conditional write, preventing stale children from silently replacing the head. The exact prepared request and pending journal snapshot must be durable and CAS-accepted. A request may have reached the mint even if the response was lost, so the wallet must reconcile rather than retry blindly. The URL hides plaintext authority from casual inspection, but the encrypted payload and its passphrase travel together, making the full URL a bearer secret.</p></details>
+
+    <p class="source"><strong>Primary reading:</strong> start with the local <a href="../docs/spec.md">v0 specification</a>, then compare its envelope and privacy claims with <a href="https://github.com/nostr-protocol/nips/blob/master/44.md">NIP-44</a> and its money recovery assumptions with <a href="https://github.com/cashubtc/nuts/blob/main/09.md">NUT-09</a>. Ask me a follow-up question or give me a failure scenario; the next lesson should be driven by what you cannot yet predict.</p>
+    <p class="small"><a href="../reference/cashu-sync-v0-cheatsheet.html">Print the one-page reference</a> · <a href="../README.md">Return to repo README</a></p>
+  </main>
+</body>
+</html>
