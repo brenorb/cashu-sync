@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cashu Sync performance improvement — Goal status</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f4f6f8; --panel:#fff; --text:#17202a;
+      --muted:#68717d; --line:#dfe4ea; --accent:#315efb; --done:#18794e;
+      --active:#a15c00; --blocked:#b42318; --shadow:0 10px 30px rgba(16,24,40,.08); }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:15px/1.55 ui-sans-serif,
+      -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width:min(1160px, calc(100% - 32px)); margin:32px auto 64px; }
+    header, .card { background:var(--panel); border:1px solid var(--line); border-radius:16px;
+      box-shadow:var(--shadow); }
+    header { padding:28px; }
+    .eyebrow { color:var(--muted); font-size:12px; font-weight:700; letter-spacing:.08em;
+      text-transform:uppercase; }
+    h1 { margin:6px 0 12px; font-size:clamp(26px, 4vw, 42px); line-height:1.12; }
+    h2 { margin:0 0 14px; font-size:18px; }
+    p { margin:0; }
+    .meta { display:flex; flex-wrap:wrap; gap:10px 18px; margin-top:20px; color:var(--muted); }
+    .state { display:inline-flex; align-items:center; gap:8px; padding:5px 10px; border-radius:999px;
+      font-weight:700; background:#eef2ff; color:var(--accent); }
+    .state::before { content:""; width:8px; height:8px; border-radius:50%; background:currentColor; }
+    .state.complete { background:#ecfdf3; color:var(--done); }
+    .state.blocked { background:#fef3f2; color:var(--blocked); }
+    .goal { margin-top:22px; padding:18px 20px; border-left:4px solid var(--accent);
+      border-radius:8px; background:color-mix(in srgb, var(--accent) 7%, var(--panel));
+      white-space:pre-wrap; }
+    .grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; margin-top:18px; }
+    .card { padding:22px; min-width:0; }
+    .wide { grid-column:1 / -1; }
+    ul { margin:0; padding-left:21px; }
+    li + li { margin-top:8px; }
+    .summary { white-space:pre-wrap; font-size:16px; }
+    .empty { color:var(--muted); font-style:italic; }
+    .activity { list-style:none; margin:0; padding:0; }
+    .activity-item { padding:16px 0; border-top:1px solid var(--line); }
+    .activity-item:first-child { border-top:0; padding-top:0; }
+    .activity-head { display:flex; justify-content:space-between; gap:16px; align-items:baseline; }
+    .activity-detail { margin-top:6px; white-space:pre-wrap; }
+    .activity-why, .activity-impact { margin-top:8px; color:var(--muted); }
+    .activity-evidence { margin-top:10px; padding:10px 12px; border-radius:8px; background:color-mix(in srgb, var(--accent) 6%, var(--panel)); }
+    .activity-evidence ul { margin-top:5px; }
+    .activity-links { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .activity-links a { color:var(--accent); font-weight:650; text-decoration:none; padding:4px 8px; border:1px solid var(--line); border-radius:999px; }
+    .legacy-activity { margin-top:16px; color:var(--muted); }
+    .legacy-activity summary { cursor:pointer; font-weight:650; }
+    .legacy-activity time { margin-right:8px; }
+    time { color:var(--muted); font:12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    @media (max-width:720px) { .grid { grid-template-columns:1fr; } .wide { grid-column:auto; }
+      .activity-head { display:block; } .activity-head time { display:block; margin-top:3px; } header, .card { border-radius:12px; } }
+    @media (prefers-color-scheme:dark) { :root { --bg:#0d1117; --panel:#161b22; --text:#e6edf3;
+      --muted:#9da7b3; --line:#30363d; --shadow:none; } .state { background:#1f2a44; }
+      .state.complete { background:#17352a; } .state.blocked { background:#3d2022; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Execution goal</div>
+      <h1>Cashu Sync performance improvement</h1>
+      <span class="state active">active</span>
+      <div class="goal">Improve the Cashu Sync wallet performance using test-driven development: establish reproducible benchmarks, locate a measured bottleneck, implement the smallest safe improvement, preserve the existing product boundary, and report before/after evidence. The repository has pre-existing user changes; do not overwrite or commit unrelated work.</div>
+      <div class="meta"><span>Created 2026-08-20T01:27:46+00:00</span>
+        <span>Updated 2026-08-20T01:34:00+00:00</span></div>
+    </header>
+    <section class="grid" aria-label="Goal status">
+      <article class="card wide"><h2>Current summary</h2><p class="summary">Measured snapshot-sync improvement completed. The single-pass codec reduced encode mean time from 0.4891 ms to 0.2477 ms and full encrypted/signed event creation from 10.4244 ms to 9.7008 ms on the committed realistic workload. Tests, lint, build, and report are complete.</p></article>
+      <article class="card"><h2>Success criteria</h2><ul><li>A reproducible benchmark exists and records the baseline.</li><li>At least one bottleneck is identified from profiling or benchmark evidence.</li><li>The improvement is protected by a focused regression test written before or alongside the fix.</li><li>Before/after measurements and test results are recorded in a concise report.</li></ul></article>
+      <article class="card"><h2>Constraints</h2><ul><li>Use frequent atomic conventional commits containing only this performance work; preserve unrelated working-tree changes.</li><li>Do not broaden the v0 product scope or add dependencies without evidence.</li></ul></article>
+      <article class="card"><h2>Done</h2><ul><li>Inspected app architecture, scripts, and working-tree boundaries</li><li>Committed pre-existing wallet, deployment, and documentation changes atomically</li><li>Added and ran the reproducible snapshot sync benchmark</li><li>Used a red regression test to drive the single-pass codec change</li><li>Verified full tests, lint, production build, and before/after report</li></ul></article>
+      <article class="card"><h2>In progress</h2><p class="empty">Nothing recorded.</p></article>
+      <article class="card"><h2>Next</h2><p class="empty">Nothing recorded.</p></article>
+      <article class="card"><h2>Blocked</h2><p class="empty">No blockers.</p></article>
+      <article class="card wide"><h2>Recent activity</h2><ol class="activity"><li class="activity-item"><div class="activity-head"><strong>Performance goal complete</strong><time>2026-08-20T01:34:00+00:00</time></div><p class="activity-detail">The sync event path now validates and canonicalizes each snapshot once before encryption and signing, with no change to public decode/encode behavior or the plaintext size guard.</p><p class="activity-why"><strong>Why it matters:</strong> The benchmark measured a concrete hot path and the focused test plus full suite protected the change.</p><p class="activity-impact"><strong>Impact:</strong> Keep the minimal codec optimization; defer bundle splitting and browser profiling because the requested runtime bottleneck is addressed and those require separate evidence.</p><div class="activity-evidence"><strong>Evidence</strong><ul><li>Before encode: 2044.67 ops/s, 0.4891 ms mean; after: 4037.67 ops/s, 0.2477 ms mean.</li><li>Before event: 95.9292 ops/s, 10.4244 ms mean; after: 103.08 ops/s, 9.7008 ms mean.</li></ul></div><div class="activity-links"><a href="file:///Users/breno/Documents/code/PROJECTS/SEC-08/cashu-sync/docs/performance/snapshot-sync-2026-08-20.md" target="_blank" rel="noopener">Performance report</a><a href="file:///Users/breno/Documents/code/PROJECTS/SEC-08/cashu-sync/work/goals/performance-20260820/status.html" target="_blank" rel="noopener">Goal dashboard</a></div></li></ol></article>
+    </section>
+  </main>
+</body>
+</html>
