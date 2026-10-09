@@ -1,11 +1,11 @@
 {
-  "name": "Cashu.me",
-  "short_name": "Cashu.me",
-  "description": "A Cashu Ecash wallet for the web.",
+  "name": "Silent Link Wallet",
+  "short_name": "Silent Link",
+  "description": "Buy credits, pay for mobile data, and sync your Silent Link wallets.",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#090909",
+  "theme_color": "#090909",
   "start_url": "./",
   "scope": "./",
   "protocol_handlers": [
@@ -52,34 +52,5 @@
       "purpose": "any"
     }
   ],
-  "screenshots": [
-    {
-      "src": "screenshots/narrow-1.png",
-      "form_factor": "narrow",
-      "sizes": "542x942",
-      "type": "image/png",
-      "label": "fullscreen view"
-    },
-    {
-      "src": "screenshots/narrow-2.png",
-      "form_factor": "narrow",
-      "sizes": "542x942",
-      "type": "image/png",
-      "label": "fullscreen view"
-    },
-    {
-      "src": "screenshots/wide-1.png",
-      "form_factor": "wide",
-      "sizes": "1910x932",
-      "type": "image/png",
-      "label": "fullscreen view"
-    },
-    {
-      "src": "screenshots/wide-2.png",
-      "form_factor": "wide",
-      "sizes": "1910x932",
-      "type": "image/png",
-      "label": "fullscreen view"
-    }
-  ]
+  "screenshots": []
 }
