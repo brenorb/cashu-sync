@@ -164,12 +164,21 @@
     <q-dialog v-model="showMeltDialog">
       <q-card class="v0-dialog" data-v0-dialog="melt">
         <q-card-section class="v0-dialog__intro">
-          <p class="v0-eyebrow">TOP UP ESIM</p>
-          <h2>Pay for mobile data</h2>
-          <p>Use your balance to pay for your eSIM top-up.</p>
+          <p class="v0-eyebrow">
+            {{ meltInvoiceMode ? "PAY INVOICE" : "TOP UP ESIM" }}
+          </p>
+          <h2>
+            {{
+              meltInvoiceMode
+                ? "Pay a Lightning invoice"
+                : "Pay for mobile data"
+            }}
+          </h2>
+          <p>Use your wallet balance to pay.</p>
         </q-card-section>
         <q-card-section v-if="!meltQuote" class="v0-dialog__body">
           <q-input
+            v-if="!meltInvoiceMode"
             v-model="meltAmount"
             data-v0-field="melt-amount"
             class="v0-amount-input"
@@ -180,13 +189,36 @@
             label="Amount"
             hint="USD credits"
           />
+          <q-input
+            v-else
+            v-model="meltRequest"
+            data-v0-field="melt-invoice"
+            dark
+            outlined
+            autogrow
+            label="Lightning invoice"
+          />
+          <q-btn
+            flat
+            no-caps
+            :label="
+              meltInvoiceMode
+                ? 'Top up eSIM instead'
+                : 'Pay a Lightning invoice'
+            "
+            @click="meltInvoiceMode = !meltInvoiceMode"
+          />
         </q-card-section>
         <q-card-section v-else class="v0-dialog__body">
           <div class="v0-quote-summary">
             <span>Amount to spend</span>
             <strong>{{ formatUsd(meltQuote.amount) }}</strong>
           </div>
-          <p class="v0-dialog__note">
+          <div v-if="meltQuote.feeReserve" class="v0-quote-summary">
+            <span>Maximum network fee</span>
+            <strong>{{ formatUsd(meltQuote.feeReserve) }}</strong>
+          </div>
+          <p v-if="!meltInvoiceMode" class="v0-dialog__note">
             This amount will be used for your eSIM top-up.
           </p>
         </q-card-section>
@@ -212,7 +244,7 @@
             no-caps
             unelevated
             :loading="dialogBusy"
-            label="Confirm top up"
+            :label="meltInvoiceMode ? 'Pay invoice' : 'Confirm top up'"
             @click="payMeltQuote"
           />
         </q-card-actions>
@@ -256,6 +288,7 @@ export default defineComponent({
       mintQuote: null as MintQuoteView | null,
       meltAmount: "1",
       meltRequest: "",
+      meltInvoiceMode: false,
       meltQuote: null as MeltQuoteView | null,
       dialogBusy: false,
       dialogError: "",
@@ -370,6 +403,12 @@ export default defineComponent({
     },
     async createMeltQuote() {
       await this.runDialog(async () => {
+        if (this.meltInvoiceMode) {
+          this.meltQuote = await useV0WalletService().requestMeltQuote(
+            this.meltRequest
+          );
+          return;
+        }
         const amount = this.parseUsdCents(this.meltAmount);
         if (process.env.CASHU_SYNC_TOPUP_MODE === "internal-demo") {
           this.meltQuote = await useV0WalletService().requestInternalTopupQuote(
@@ -400,6 +439,7 @@ export default defineComponent({
         this.meltQuote = null;
         this.meltAmount = "1";
         this.meltRequest = "";
+        this.meltInvoiceMode = false;
       });
     },
     parseUsdCents(value: string): number {
@@ -476,6 +516,7 @@ export default defineComponent({
     );
     if (request) {
       this.meltRequest = request;
+      this.meltInvoiceMode = true;
       this.showMeltDialog = true;
     }
   },

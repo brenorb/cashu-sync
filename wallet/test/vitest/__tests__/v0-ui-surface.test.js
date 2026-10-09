@@ -59,7 +59,8 @@ describe("v0 visible UI contract", () => {
     expect(wallet).toContain("Buy credits");
     expect(wallet).toContain("Top up eSIM");
     expect(wallet).toContain('data-v0-field="melt-amount"');
-    expect(wallet).not.toContain('data-v0-field="melt-invoice"');
+    expect(wallet).toContain('data-v0-field="melt-invoice"');
+    expect(wallet).toContain('v-if="!meltInvoiceMode"');
     expect(wallet).not.toContain(':disable="!activeMintUrl"');
     expect(wallet).toContain('to="/settings/sync"');
     expect(wallet).not.toMatch(
