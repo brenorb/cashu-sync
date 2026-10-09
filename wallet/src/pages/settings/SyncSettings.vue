@@ -122,13 +122,6 @@
             :loading="busy"
             @click="createPairing"
           />
-          <q-btn
-            data-pairing-action="back-sync"
-            flat
-            no-caps
-            label="Back to sync devices"
-            @click="$router.replace('/settings/sync')"
-          />
         </q-item>
       </SettingsSection>
 
