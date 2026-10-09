@@ -228,7 +228,7 @@ import V0BalanceCard from "src/components/V0BalanceCard.vue";
 import V0AccountingHistory from "src/components/V0AccountingHistory.vue";
 import { useWalletStore } from "src/stores/wallet";
 import { useMigrationsStore } from "src/stores/migrations";
-import { useDexieStore } from "src/stores/dexie";
+import { cashuDb, useDexieStore } from "src/stores/dexie";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
 import { requestSilentLinkTopupQuote } from "src/sync/topupService";
 import {
@@ -263,11 +263,61 @@ export default defineComponent({
       syncPending: true,
       walletReady: false,
       visibilityHandler: null as (() => void) | null,
+      recoveryTimer: null as ReturnType<typeof setInterval> | null,
+      automaticRecoveryBusy: false,
     };
   },
   methods: {
+    async resumeAutomatically() {
+      if (this.dialogBusy || this.automaticRecoveryBusy) return;
+      this.automaticRecoveryBusy = true;
+      try {
+        if (useSyncRuntimeService().runtime.currentSession() === null) {
+          const boot = await useSyncRuntimeService().boot(
+            useWalletStore().mnemonic
+          );
+          if (boot.sync.status === "unconfigured") return;
+          this.startWatchingWallet();
+        }
+        const result = await useV0WalletService().resume();
+        if (result.status !== "idle" && result.status !== "completed") return;
+        this.walletReady = true;
+        this.recoveryNeeded = false;
+        this.syncPending = false;
+        this.syncMessage = "Wallet synchronized.";
+        if (this.mintQuote) {
+          const quote = await cashuDb.mintQuotes.get(this.mintQuote.quote);
+          if (quote?.state === "ISSUED") {
+            this.syncMessage = "Credits bought and synchronized.";
+            this.showMintDialog = false;
+            this.mintQuote = null;
+          }
+        }
+      } catch {
+        // Network recovery and paid-invoice claiming continue on the next tick.
+      } finally {
+        this.automaticRecoveryBusy = false;
+      }
+    },
     retrySync() {
-      window.location.reload();
+      void this.resumeAutomatically();
+    },
+    startWatchingWallet() {
+      useV0WalletService().startLiveSync(
+        () => {
+          this.syncMessage = "Wallet synchronized.";
+          this.syncPending = false;
+        },
+        (status) => {
+          if (status === "disconnected" || status === "connecting") {
+            this.syncPending = true;
+            this.syncMessage = "Reconnecting wallet…";
+          } else {
+            this.syncPending = false;
+            this.syncMessage = "Wallet synchronized.";
+          }
+        }
+      );
     },
     async openTokenRecovery() {
       this.showRecoveryDialog = true;
@@ -409,21 +459,7 @@ export default defineComponent({
         }
       };
       document.addEventListener("visibilitychange", this.visibilityHandler);
-      useV0WalletService().startLiveSync(
-        () => {
-          this.syncMessage = "Wallet synchronized.";
-          this.syncPending = false;
-        },
-        (status) => {
-          if (status === "disconnected" || status === "connecting") {
-            this.syncPending = true;
-            this.syncMessage = "Reconnecting wallet…";
-          } else {
-            this.syncPending = false;
-            this.syncMessage = "Wallet synchronized.";
-          }
-        }
-      );
+      this.startWatchingWallet();
     } catch (error) {
       this.syncPending = false;
       this.walletReady = false;
@@ -431,6 +467,9 @@ export default defineComponent({
       this.syncMessage =
         error instanceof Error ? error.message : "Wallet startup failed";
     }
+    this.recoveryTimer = setInterval(() => {
+      void this.resumeAutomatically();
+    }, 5000);
 
     const request = new URL(document.location.href).searchParams.get(
       "lightning"
@@ -441,6 +480,7 @@ export default defineComponent({
     }
   },
   beforeUnmount() {
+    if (this.recoveryTimer !== null) clearInterval(this.recoveryTimer);
     useV0WalletService().stopLiveSync();
     if (this.visibilityHandler) {
       document.removeEventListener("visibilitychange", this.visibilityHandler);

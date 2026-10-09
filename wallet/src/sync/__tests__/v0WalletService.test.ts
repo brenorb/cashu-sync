@@ -117,6 +117,50 @@ describe("V0WalletService quote fencing", () => {
     await service.requestMintQuote(25);
   });
 
+  it("automatically claims an already paid invoice after startup without creating a new quote", async () => {
+    await cashuDb.mintQuotes.put({
+      ...mintQuote,
+      amount: 25,
+      state: "UNPAID",
+      method: "bolt11",
+    });
+    const resume = vi
+      .spyOn(SyncOperationCoordinator.prototype, "resume")
+      .mockResolvedValue({ status: "idle" });
+    const mint = vi
+      .spyOn(SyncOperationCoordinator.prototype, "mint")
+      .mockResolvedValue({
+        status: "completed",
+        quoteId: "mint-q",
+        type: "mint",
+        operationId: "claim",
+        eventId: "a".repeat(64),
+      });
+    const createMintQuoteBolt11 = vi.fn();
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(async () =>
+        walletMock({
+          createMintQuoteBolt11,
+          checkMintQuoteBolt11: vi.fn(async () => mintQuote),
+        })
+      ),
+      getKeyset: () => "00c0ffee",
+    });
+    try {
+      await service.resume();
+      expect(mint).toHaveBeenCalledOnce();
+      expect(mint).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quote: expect.objectContaining({ quote: "mint-q" }),
+        })
+      );
+      expect(createMintQuoteBolt11).not.toHaveBeenCalled();
+    } finally {
+      resume.mockRestore();
+      mint.mockRestore();
+    }
+  });
+
   it("settles a peer journal before creating or publishing a new quote", async () => {
     session.repository.exportSnapshot.mockResolvedValue({
       pending_operation: { phase: "submitted", type: "mint" },
@@ -335,6 +379,25 @@ describe("V0WalletService quote fencing", () => {
     expect(pull).toHaveBeenCalledOnce();
     expect(refreshFromDexie).toHaveBeenCalledOnce();
     resume.mockRestore();
+  });
+
+  it("coalesces a burst of relay notifications instead of starving user operations", async () => {
+    const service = new V0WalletService(
+      runtimeService as never,
+      {
+        activeWallet: vi.fn(async () => walletMock({})),
+        getKeyset: () => "00c0ffee",
+      },
+      undefined,
+      async () => undefined
+    );
+    const first = service.syncNow();
+    const burst = Array.from({ length: 25 }, () => service.syncNow());
+    expect(burst.every((sync) => sync === first)).toBe(true);
+    await Promise.all([first, ...burst]);
+    expect(pull).toHaveBeenCalledOnce();
+    await service.syncNow();
+    expect(pull).toHaveBeenCalledTimes(2);
   });
 
   it("persists a USD Bolt11 mint quote before publishing the snapshot", async () => {

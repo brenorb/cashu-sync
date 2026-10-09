@@ -78,6 +78,7 @@ export class V0WalletService {
   private wallet: Wallet | null = null;
   private queue: Promise<void> = Promise.resolve();
   private liveSyncStop: (() => void) | null = null;
+  private syncInFlight: Promise<void> | null = null;
 
   constructor(
     private readonly runtimeService: SyncRuntimeService,
@@ -110,7 +111,14 @@ export class V0WalletService {
   }
 
   syncNow(): Promise<void> {
-    return this.serialize(() => this.syncNowUnlocked());
+    if (this.syncInFlight !== null) return this.syncInFlight;
+    const sync = this.serialize(() => this.syncNowUnlocked());
+    this.syncInFlight = sync;
+    const clear = () => {
+      if (this.syncInFlight === sync) this.syncInFlight = null;
+    };
+    void sync.then(clear, clear);
+    return sync;
   }
 
   removeFromDevice(): Promise<void> {
@@ -170,9 +178,13 @@ export class V0WalletService {
         // Pull its accepted snapshot instead of leaving the local journal stale.
         await this.refreshAfterRemoteChange();
       }
+      if (outcome.status === "idle" || outcome.status === "completed") {
+        await this.recoverPaidMintQuotes();
+      }
       return;
     }
     await this.refreshAfterRemoteChange();
+    await this.recoverPaidMintQuotes();
   }
 
   requestMintQuote(amount: number): Promise<MintQuoteView> {
@@ -468,7 +480,38 @@ export class V0WalletService {
   }
 
   private async resumeUnlocked(): Promise<SyncOperationOutcome> {
-    return (await this.ensureCoordinator()).resume();
+    const result = await (await this.ensureCoordinator()).resume();
+    if (result.status !== "idle" && result.status !== "completed")
+      return result;
+    return (await this.recoverPaidMintQuotes()) ?? result;
+  }
+
+  private async recoverPaidMintQuotes(): Promise<SyncOperationOutcome | null> {
+    const quotes = await cashuDb.mintQuotes
+      .filter((quote) => quote.unit === "usd" && quote.state !== "ISSUED")
+      .toArray();
+    let completed: SyncOperationOutcome | null = null;
+    for (const stored of quotes) {
+      try {
+        const wallet = await this.ensureWallet();
+        const quote = await wallet.checkMintQuoteBolt11(stored.quote);
+        requireUsd(quote.unit);
+        assertMintQuoteIdentity(stored, quote);
+        if (quote.state !== MintQuoteState.PAID) continue;
+        const result = await this.mintPaidQuoteUnlocked(stored.quote);
+        if (result.status !== "completed") return result;
+        completed = result;
+      } catch {
+        // An unpaid or temporarily unreachable invoice never makes unaffected
+        // tokens unusable. Keep its quote and any exact journal for retry.
+        if (
+          (await this.requireSession().repository.exportSnapshot())
+            .pending_operation !== null
+        )
+          break;
+      }
+    }
+    return completed;
   }
 
   private async resumeIfPending(
