@@ -1,29 +1,25 @@
 <template>
-  <div
-    class="fullscreen bg-dark text-white text-center q-pa-md flex flex-center"
+  <WalletStatusPage
+    :title="$t('AlreadyRunning.title')"
+    :caption="$t('AlreadyRunning.text')"
   >
-    <div>
-      <div class="text-h3">{{ $t("AlreadyRunning.title") }}</div>
-      <div class="text-h5 q-ma-lg text-grey">
-        {{ $t("AlreadyRunning.text") }}
-      </div>
-      <q-btn
-        rounded
-        class="q-mt-md"
-        color="white"
-        text-color="black"
-        unelevated
-        to="/"
-        :label="$t('AlreadyRunning.actions.retry.label')"
-      />
-    </div>
-  </div>
+    <q-btn
+      rounded
+      color="white"
+      text-color="black"
+      unelevated
+      to="/"
+      :label="$t('AlreadyRunning.actions.retry.label')"
+    />
+  </WalletStatusPage>
 </template>
 
 <script lang="ts">
 import { defineComponent } from "vue";
+import WalletStatusPage from "src/components/WalletStatusPage.vue";
 
 export default defineComponent({
   name: "AlreadyRunning",
+  components: { WalletStatusPage },
 });
 </script>
