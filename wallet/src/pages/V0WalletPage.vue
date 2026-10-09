@@ -523,11 +523,18 @@ export default defineComponent({
 <style scoped lang="scss">
 .v0-wallet {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
   gap: 20px;
   width: min(100%, 640px);
   margin: 0 auto;
   padding: 24px 16px 96px;
   color: #fff;
+}
+
+.v0-wallet > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .v0-intro {
@@ -561,7 +568,7 @@ export default defineComponent({
 
 .v0-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -575,6 +582,8 @@ export default defineComponent({
 }
 
 .v0-actions :deep(.q-btn) {
+  min-width: 0;
+  max-width: 100%;
   min-height: 52px;
   border-radius: 4px;
   font-weight: 700;
@@ -593,6 +602,17 @@ export default defineComponent({
   text-decoration: none;
 }
 
+.v0-actions :deep(.q-btn__content),
+.v0-dialog :deep(.q-btn__content) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.v0-sync-link > svg,
+.v0-runtime-status > .q-spinner {
+  flex-shrink: 0;
+}
+
 .v0-sync-link:focus-visible {
   outline: 2px solid var(--sl-color-blue-500, #3282ff);
   outline-offset: 2px;
@@ -600,6 +620,8 @@ export default defineComponent({
 
 .v0-sync-link span {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 2px;
 }
 
@@ -609,6 +631,8 @@ export default defineComponent({
 
 .v0-runtime-status {
   display: flex;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
   align-items: center;
   gap: 8px;
   margin: 0;
@@ -619,6 +643,7 @@ export default defineComponent({
 }
 
 .v0-dialog {
+  overflow-wrap: anywhere;
   width: min(92vw, 520px);
   overflow: hidden;
   border: 1px solid #383838;
@@ -638,7 +663,8 @@ export default defineComponent({
 
 .v0-dialog h2 {
   margin: 0 0 8px;
-  font-size: 1.5rem;
+  font-size: clamp(1.25rem, 6vw, 1.5rem);
+  line-height: 1.25;
   letter-spacing: -0.02em;
 }
 
@@ -650,6 +676,7 @@ export default defineComponent({
 
 .v0-dialog__body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -679,6 +706,7 @@ export default defineComponent({
 
 .v0-quote-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
@@ -686,6 +714,8 @@ export default defineComponent({
 }
 
 .v0-quote-summary strong {
+  min-width: 0;
+  max-width: 100%;
   color: #fff;
   font-size: 1.75rem;
   letter-spacing: -0.02em;
@@ -693,12 +723,18 @@ export default defineComponent({
 
 .v0-dialog :deep(.q-card__actions) {
   gap: 8px;
+  flex-wrap: wrap;
   border-top: 1px solid #2d2d2d;
   padding: 14px 24px 20px;
 }
 
+.v0-dialog :deep(.q-btn) {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .v0-dialog :deep(.q-card__actions .q-btn:last-child) {
-  min-width: 148px;
+  min-width: min(148px, 100%);
 }
 
 @media (min-width: 600px) {

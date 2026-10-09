@@ -1,7 +1,12 @@
 <template>
   <section class="balance-card" aria-labelledby="v0-balance-title">
     <p id="v0-balance-title" class="balance-eyebrow">Available balance</p>
-    <p class="balance-value" role="status" aria-live="polite">
+    <p
+      class="balance-value"
+      :class="{ 'balance-value--long': formattedBalance.length > 9 }"
+      role="status"
+      aria-live="polite"
+    >
       {{ formattedBalance }}
     </p>
     <div class="mint-status">
@@ -37,6 +42,8 @@ export default defineComponent({
 
 <style scoped lang="scss">
 .balance-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   position: relative;
   overflow: hidden;
   border: 1px solid #343434;
@@ -70,7 +77,11 @@ export default defineComponent({
   font-size: clamp(2.5rem, 14vw, 4rem);
   font-weight: 700;
   letter-spacing: -0.045em;
-  line-height: 1;
+  line-height: 1.15;
+}
+
+.balance-value--long {
+  font-size: clamp(1.25rem, 8vw, 2.5rem);
 }
 
 .mint-status {
@@ -82,6 +93,7 @@ export default defineComponent({
 }
 
 .mint-status__mark {
+  flex-shrink: 0;
   width: 7px;
   height: 7px;
   background: var(--sl-color-orange-500, #ff5c00);

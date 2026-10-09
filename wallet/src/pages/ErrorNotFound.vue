@@ -1,30 +1,26 @@
 <template>
-  <div
-    class="fullscreen bg-dark text-white text-center q-pa-md flex flex-center"
+  <WalletStatusPage
+    :code="$t('ErrorNotFound.title')"
+    :title="$t('ErrorNotFound.text')"
   >
-    <div>
-      <div style="font-size: 30vh">{{ $t("ErrorNotFound.title") }}</div>
-      <div class="text-h3 q-pb-lg" style="opacity: 0.8">
-        {{ $t("ErrorNotFound.text") }}
-      </div>
-      <q-btn
-        rounded
-        size="lg"
-        class="q-mt-xl"
-        color="white"
-        text-color="black"
-        unelevated
-        to="/"
-        :label="$t('ErrorNotFound.actions.home.label')"
-      />
-    </div>
-  </div>
+    <q-btn
+      rounded
+      size="lg"
+      color="white"
+      text-color="black"
+      unelevated
+      to="/"
+      :label="$t('ErrorNotFound.actions.home.label')"
+    />
+  </WalletStatusPage>
 </template>
 
 <script lang="ts">
 import { defineComponent } from "vue";
+import WalletStatusPage from "src/components/WalletStatusPage.vue";
 
 export default defineComponent({
   name: "ErrorNotFound",
+  components: { WalletStatusPage },
 });
 </script>
