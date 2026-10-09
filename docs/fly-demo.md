@@ -77,3 +77,19 @@ GitHub Actions run [37867598005](https://github.com/brenorb/cashu-sync/actions/r
 passed. Full recovery evidence and remaining coverage limits are in
 [the three-wallet report](qa/three-wallet-recovery-2026-10-08.md).
 Existing clients should reload to load the updated application.
+
+## One-click pairing deployment — 2026-10-09
+
+Published merge `aa7d1b2418d46de56d76ef22f2ca7949c793fc90` from a clean Git archive.
+Image: `registry.fly.io/cashu-sync-wallet:deployment-01M4FA3RMXRM7JB3Z5SHCA4B3G`.
+Manifest digest: `sha256:fbd23178a76e3d9d51805b2eac24da0dc28c8b22ef9c0d5a25adb4971f0b0b25`.
+Both Amsterdam machines (`7846572b9530e8`, `801555b6e33528`) are started on this
+image and passed Fly deployment checks.
+
+Two fresh mobile-sized Chrome contexts verified a QR after one click, direct-entry
+reload, regeneration, public-domain pairing, matching balances and synchronized
+status. HTTP 200; no uncaught page errors; service workers allowed.
+GitHub Actions run [37877845162](https://github.com/brenorb/cashu-sync/actions/runs/37877845162)
+passed. The browser tab loaded the new screen through a versioned navigation after
+initially retaining its old PWA view. Evidence, audit scope and runner-cleanup
+limitations are in [the UI report](qa/one-click-pairing-2026-10-09.md).
