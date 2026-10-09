@@ -7,7 +7,7 @@ import {
   type MintQuoteBolt11Response,
   type Wallet,
 } from "@cashu/cashu-ts";
-import { cashuDb } from "src/stores/dexie";
+import { cashuDb, resetCashuDexie } from "src/stores/dexie";
 import { useMintsStore } from "src/stores/mints";
 import { useProofsStore } from "src/stores/proofs";
 import type {
@@ -108,6 +108,32 @@ export class V0WalletService {
 
   syncNow(): Promise<void> {
     return this.serialize(() => this.syncNowUnlocked());
+  }
+
+  removeFromDevice(): Promise<void> {
+    return this.serialize(async () => {
+      await this.syncNowUnlocked();
+      const session = this.requireSession();
+      if (
+        (await session.repository.exportSnapshot()).pending_operation !== null
+      ) {
+        throw new Error(
+          "Your payment is still being recovered. This wallet is preserved; remove it after recovery finishes."
+        );
+      }
+      // Leave a confirmed, recoverable monetary result for the remaining
+      // wallets before erasing this device's only copy of local material.
+      const saved = await session.sync.publishCurrent();
+      if (saved.status !== "accepted") {
+        throw new Error(
+          "The wallet backup could not be confirmed. This wallet is preserved; reconnect and try again."
+        );
+      }
+      this.stopLiveSync();
+      await this.runtimeService.runtime.resetSession();
+      await resetCashuDexie(cashuDb);
+      this.runtimeService.authority.clear();
+    });
   }
 
   startLiveSync(

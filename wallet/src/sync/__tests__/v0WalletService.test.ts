@@ -37,9 +37,11 @@ const session = {
 };
 const runtime = {
   currentSession: () => session,
+  resetSession: vi.fn(async () => undefined),
 };
 const runtimeService = {
   runtime,
+  authority: { clear: vi.fn() },
   exportAuthority: async () => ({ mint_url: "http://127.0.0.1:3338" }),
   runExclusive: (operation: () => Promise<unknown>) => operation(),
 };
@@ -113,6 +115,75 @@ describe("V0WalletService quote fencing", () => {
       port
     );
     await service.requestMintQuote(25);
+  });
+
+  it.each(["conflict", "needs-reconciliation"])(
+    "preserves local funds when removal cannot confirm the relay backup: %s",
+    async (status) => {
+      await cashuDb.proofs.put({
+        id: "00c0ffee",
+        amount: 100,
+        secret: "owned",
+        C: "02aa",
+        reserved: false,
+      });
+      publishCurrent.mockResolvedValue({ status });
+      const service = new V0WalletService(runtimeService as never, {
+        activeWallet: vi.fn(),
+        getKeyset: () => "00c0ffee",
+      });
+      await expect(service.removeFromDevice()).rejects.toThrow(/preserved/);
+      expect(await cashuDb.proofs.count()).toBe(1);
+      expect(runtime.resetSession).not.toHaveBeenCalled();
+      expect(runtimeService.authority.clear).not.toHaveBeenCalled();
+    }
+  );
+
+  it("preserves a pending monetary result rather than removing its only local copy", async () => {
+    session.repository.exportSnapshot.mockResolvedValue({
+      pending_operation: { phase: "response-persisted", type: "mint" },
+    });
+    const resume = vi
+      .spyOn(SyncOperationCoordinator.prototype, "resume")
+      .mockResolvedValue({
+        status: "needs-reconciliation",
+        type: "mint",
+        operationId: "owned",
+      });
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(),
+      getKeyset: () => "00c0ffee",
+    });
+    try {
+      await expect(service.removeFromDevice()).rejects.toThrow(/preserved/);
+      expect(publishCurrent).not.toHaveBeenCalled();
+      expect(runtimeService.authority.clear).not.toHaveBeenCalled();
+    } finally {
+      resume.mockRestore();
+    }
+  });
+
+  it("removes this device only after its wallet state has been accepted by the relay", async () => {
+    await cashuDb.proofs.put({
+      id: "00c0ffee",
+      amount: 100,
+      secret: "owned",
+      C: "02aa",
+      reserved: false,
+    });
+    publishCurrent.mockImplementationOnce(async () => {
+      expect(await cashuDb.proofs.count()).toBe(1);
+      expect(runtimeService.authority.clear).not.toHaveBeenCalled();
+      return { status: "accepted" };
+    });
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(),
+      getKeyset: () => "00c0ffee",
+    });
+    await service.removeFromDevice();
+    expect(await cashuDb.proofs.count()).toBe(0);
+    expect(runtime.resetSession).toHaveBeenCalledOnce();
+    expect(runtimeService.authority.clear).toHaveBeenCalledOnce();
   });
 
   it("does not initialize the mint when the relay resolves the pending operation", async () => {

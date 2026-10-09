@@ -52,6 +52,7 @@
           color="negative"
           no-caps
           label="Delete wallet from this device"
+          :loading="busy"
           @click="deleteWallet"
         />
       </q-item>
@@ -126,7 +127,6 @@ import {
   useV0WalletService,
 } from "src/sync/v0WalletService";
 import { useWalletStore } from "src/stores/wallet";
-import { cashuDb, resetCashuDexie } from "src/stores/dexie";
 
 export default defineComponent({
   name: "RecoverySettingsPage",
@@ -207,9 +207,11 @@ export default defineComponent({
         return;
       await this.run(async () => {
         const runtime = useSyncRuntimeService();
-        await runtime.runtime.resetSession();
-        runtime.authority.clear();
-        await resetCashuDexie(cashuDb);
+        if (runtime.runtime.currentSession() === null) {
+          await runtime.boot(useWalletStore().mnemonic);
+        }
+        await useV0WalletService().removeFromDevice();
+        useWalletStore().mnemonic = "";
         resetV0WalletService();
         this.message =
           "Wallet deleted from this device. The relay backup remains.";

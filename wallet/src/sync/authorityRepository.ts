@@ -74,7 +74,7 @@ export class LocalAuthorityRepository {
   }
 
   clear(): void {
-    this.storage.removeItem(AUTHORITY_STORAGE_KEY_V0);
     this.storage.removeItem(LEGACY_MNEMONIC_KEY);
+    this.storage.removeItem(AUTHORITY_STORAGE_KEY_V0);
   }
 }
