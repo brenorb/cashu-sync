@@ -93,3 +93,17 @@ GitHub Actions run [37877845162](https://github.com/brenorb/cashu-sync/actions/r
 passed. The browser tab loaded the new screen through a versioned navigation after
 initially retaining its old PWA view. Evidence, audit scope and runner-cleanup
 limitations are in [the UI report](qa/one-click-pairing-2026-10-09.md).
+
+## Silent Link branding deployment — 2026-10-09
+
+Published merge `d01e6465a110808fdae48a755fb4a9b04c0aa301` from a clean Git archive.
+Image: `registry.fly.io/cashu-sync-wallet:deployment-01M4FB63AQXN7VRV17ZTE8XHA3`.
+Manifest digest: `sha256:956c0ebaf50874f17e5297aecf44acff18fdfdb754cdc49960202c3ba0471325`.
+Both Amsterdam machines are started on the new image and passed Fly deployment checks.
+
+Public About-page smoke verified the Silent Link heading/logo/links, browser title,
+PWA name, icon availability, removed legacy install previews, `/terms` redirect,
+HTTP 200 and no uncaught page errors. GitHub Actions run
+[37879297266](https://github.com/brenorb/cashu-sync/actions/runs/37879297266) passed.
+Audit scope, preserved upstream material and browser-update limitations are in
+[the branding report](qa/silent-link-branding-2026-10-09.md).
