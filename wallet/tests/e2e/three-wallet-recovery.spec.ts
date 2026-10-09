@@ -111,7 +111,6 @@ test("an old offline wallet with every local token spent recovers beyond retaine
   async function pair(source: Page, target: Page) {
     await source.goto(`${server.baseUrl}#/settings/sync`);
     await source.locator('[data-pairing-action="open-pairing-screen"]').click();
-    await source.locator('[data-pairing-action="create-pairing"]').click();
     const qr = source.locator("[data-pairing-url]");
     await expect(qr).toBeVisible();
     await target.goto((await qr.getAttribute("data-pairing-url"))!);
@@ -294,7 +293,6 @@ test("three wallets preserve money through races, lost responses, stale history 
   async function pair(source: Page, target: Page) {
     await source.goto(`${server.baseUrl}#/settings/sync`);
     await source.locator('[data-pairing-action="open-pairing-screen"]').click();
-    await source.locator('[data-pairing-action="create-pairing"]').click();
     const qr = source.locator("[data-pairing-url]");
     await expect(qr).toBeVisible();
     const link = (await qr.getAttribute("data-pairing-url"))!;

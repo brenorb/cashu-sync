@@ -61,7 +61,6 @@ test("stale history, lost swap response and concurrent topups recover; offline t
     await expect.poll(async () => (await state(a)).balance).toBe(10000);
     await a.goto(`${url!.split("#")[0]}#/settings/sync`);
     await a.locator('[data-pairing-action="open-pairing-screen"]').click();
-    await a.locator('[data-pairing-action="create-pairing"]').click();
     const qr = a.locator("[data-pairing-url]");
     await expect(qr).toBeVisible();
     await b.goto((await qr.getAttribute("data-pairing-url"))!);
