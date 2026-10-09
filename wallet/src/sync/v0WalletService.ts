@@ -34,7 +34,7 @@ import { parseV0Bolt11Request } from "src/v0/profile";
 import type { SnapshotV0 } from "src/sync/types";
 import type { RelayWatchStatus } from "src/sync/relayClient";
 
-const MAX_CROSS_DEVICE_RETRIES = 3;
+const MAX_CROSS_DEVICE_RETRIES = 12;
 
 class WalletConflictError extends Error {
   constructor(message: string) {
@@ -82,7 +82,10 @@ export class V0WalletService {
   constructor(
     private readonly runtimeService: SyncRuntimeService,
     private readonly walletPort: BrowserWalletPort,
-    private readonly now: () => Date = () => new Date()
+    private readonly now: () => Date = () => new Date(),
+    private readonly pause: (milliseconds: number) => Promise<void> = (
+      milliseconds
+    ) => new Promise((resolve) => setTimeout(resolve, milliseconds))
   ) {}
 
   exportAvailableTokens(): Promise<string> {
@@ -181,6 +184,7 @@ export class V0WalletService {
   ): Promise<MintQuoteView> {
     requirePositiveAmount(amount);
     for (let attempt = 0; attempt < MAX_CROSS_DEVICE_RETRIES; attempt += 1) {
+      await this.waitForPendingOperation();
       const wallet = await this.ensureWallet();
       const quote = await wallet.createMintQuoteBolt11(amount);
       requireUsd(quote.unit);
@@ -243,15 +247,25 @@ export class V0WalletService {
       await this.refreshAfterRemoteChange();
     }
     for (let attempt = 0; attempt < MAX_CROSS_DEVICE_RETRIES; attempt += 1) {
+      // A conflict pull may have introduced a peer journal after the initial
+      // resume. Settle it before updating quote accounting on the next retry.
+      await this.waitForPendingOperation();
       const wallet = await this.ensureWallet();
       const stored = await this.requireStoredMintQuote(quoteId);
       const quote = await wallet.checkMintQuoteBolt11(quoteId);
       requireUsd(quote.unit);
       assertMintQuoteIdentity(stored, quote);
       if (quote.state === MintQuoteState.ISSUED) {
-        // The mint may already have issued the outputs while the final relay
-        // write completed elsewhere. With no local journal left, this is an
-        // idempotent success, not a recovery error.
+        // ISSUED at the mint is not evidence that we have recovered the
+        // monetary result. Obtain the peer's completed snapshot first.
+        await this.refreshAfterRemoteChange();
+        await this.waitForPendingOperation();
+        const recovered = await this.requireStoredMintQuote(quoteId);
+        if (recovered.state !== MintQuoteState.ISSUED) {
+          throw new Error(
+            "Your credits are still being recovered from another device. Funds are preserved; synchronization will retry automatically."
+          );
+        }
         return this.markAlreadyPaid("mint", quote.quote);
       }
       if (quote.state !== MintQuoteState.PAID) {
@@ -288,6 +302,7 @@ export class V0WalletService {
   ): Promise<MeltQuoteView> {
     requirePositiveAmount(amount);
     for (let attempt = 0; attempt < MAX_CROSS_DEVICE_RETRIES; attempt += 1) {
+      await this.waitForPendingOperation();
       const quote = `demo-melt-${crypto.randomUUID()}`;
       const request = `cashu-sync-demo:${quote}`;
       const now = this.now();
@@ -326,6 +341,7 @@ export class V0WalletService {
     const bolt11 = parseV0Bolt11Request(request);
     for (let attempt = 0; attempt < MAX_CROSS_DEVICE_RETRIES; attempt += 1) {
       try {
+        await this.waitForPendingOperation();
         const wallet = await this.ensureWallet();
         return await this.requestMeltQuoteFromRequestUnlocked(wallet, bolt11);
       } catch (error) {
@@ -503,7 +519,7 @@ export class V0WalletService {
       attempt < MAX_CROSS_DEVICE_RETRIES;
       attempt += 1
     ) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await this.pause(250);
       result = await (await this.ensureCoordinator()).resume();
     }
     return result;
@@ -552,15 +568,39 @@ export class V0WalletService {
   }
 
   private async refreshAfterRemoteChange(): Promise<void> {
-    // Give the peer time to publish its next journal phase before competing
-    // for the same relay head again. Keep the existing bounded retry budget.
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Stagger competing devices so they do not retry the same head in lockstep.
+    // Timing randomness carries no wallet secrets or protocol material.
+    await this.pause(1000 + Math.floor(Math.random() * 500));
+    await this.waitForPendingOperation();
     await this.requireSession().sync.pull();
     await usePaymentHistoryStore().refreshFromDexie();
     await useProofsStore().updateActiveProofs();
     this.wallet = null;
     this.coordinator = null;
     this.coordinatorSession = null;
+  }
+
+  private async waitForPendingOperation(): Promise<void> {
+    const deadline = Date.now() + 45_000;
+    while (
+      (await this.requireSession().repository.exportSnapshot())
+        .pending_operation !== null
+    ) {
+      // A quote is also a snapshot mutation. Never publish it on top of an
+      // unresolved peer journal or pull away a locally recorded money result.
+      await this.resumeUntilSettled();
+      if (
+        (await this.requireSession().repository.exportSnapshot())
+          .pending_operation === null
+      )
+        return;
+      if (Date.now() >= deadline) {
+        throw new Error(
+          "A payment is still being recovered. Your funds are preserved; recovery will continue when the mint and relay are reachable."
+        );
+      }
+      await this.pause(1000);
+    }
   }
 
   private requireSession(): RuntimeSession {
@@ -591,7 +631,13 @@ export class V0WalletService {
         sync: session.sync,
         journal: session.journal,
         state: session.repository,
-        gateway: new CashuTsOperationGateway(() => this.ensureWallet()),
+        gateway: new CashuTsOperationGateway(
+          () => this.ensureWallet(),
+          async () =>
+            (await session.repository.exportSnapshot()).proofs.filter(
+              (proof) => !proof.reserved
+            )
+        ),
       });
       this.coordinatorSession = session;
     }

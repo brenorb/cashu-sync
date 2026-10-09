@@ -328,6 +328,30 @@ describe("OperationJournalRepository transitions", () => {
 });
 
 describe("OperationJournalRepository responses", () => {
+  it("restores exact issued outputs even when a peer already advanced quote accounting", async () => {
+    await seedMintRows();
+    await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
+    await repository.markSubmitted(MINT_OPERATION, "mint", NOW + 1);
+    await db.mintQuotes.update("mint-q", { state: "ISSUED" });
+    await db.paymentHistory.update("mint:mint-q", { status: "paid" });
+    await repository.recordMintResponse(MINT_OPERATION, mintResponse, NOW + 2);
+    expect(await db.proofs.toArray()).toEqual(mintResponse.proofs);
+    expect(
+      (await db.walletSyncState.get("wallet"))!.pending_operation
+    ).toMatchObject({ phase: "response_recorded", response: mintResponse });
+  });
+
+  it("does not prepare another issuance for an issued quote", async () => {
+    await seedMintRows();
+    await db.mintQuotes.update("mint-q", { state: "ISSUED" });
+    await expect(
+      repository.prepareMint(MINT_OPERATION, mintPreview, NOW)
+    ).rejects.toMatchObject({ code: "quote-mismatch" });
+    expect(
+      (await db.walletSyncState.get("wallet"))!.pending_operation
+    ).toBeNull();
+  });
+
   it("records mint proofs, quote, history, and response in one commit", async () => {
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);

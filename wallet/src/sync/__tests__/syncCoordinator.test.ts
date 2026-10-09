@@ -642,6 +642,46 @@ describe("SnapshotSyncCoordinator pending journal protection", () => {
     expect(value.repository.state.history[0].status).toBe("paid");
   });
 
+  it("resolves the retained completion before adopting a later peer journal", async () => {
+    const local = pendingLocal();
+    const completed = {
+      ...structuredClone(completedFixture),
+      revision: 8,
+      previous_event_id: HEAD_A,
+    } as SnapshotV0;
+    local.pending_operation!.phase = "response_recorded";
+    local.pending_operation!.response = {
+      proofs: structuredClone(completed.proofs),
+    };
+    const later = {
+      ...structuredClone(completed),
+      revision: 9,
+      previous_event_id: HEAD_B,
+      pending_operation: {
+        ...structuredClone(local.pending_operation!),
+        operation_id: "22222222-2222-4222-8222-222222222222",
+        phase: "prepared",
+      },
+    } as SnapshotV0;
+    const value = fixture(local);
+    value.relay.current = event(HEAD_C, HEAD_B);
+    value.relay.recent = [value.relay.current, event(HEAD_B, HEAD_A)];
+    value.crypto.decrypted.set(HEAD_C, later);
+    value.crypto.decrypted.set(HEAD_B, completed);
+    await expect(value.coordinator.pull()).resolves.toMatchObject({
+      eventId: HEAD_B,
+      revision: 8,
+    });
+    expect(value.repository.state.pending_operation).toBeNull();
+    await expect(value.coordinator.pull()).resolves.toMatchObject({
+      eventId: HEAD_C,
+      revision: 9,
+    });
+    expect(value.repository.state.pending_operation!.operation_id).toBe(
+      later.pending_operation!.operation_id
+    );
+  });
+
   it("accepts the same terminal monetary result already published by another device", async () => {
     const local = pendingLocal();
     const remote = {
@@ -703,6 +743,43 @@ describe("SnapshotSyncCoordinator pending journal protection", () => {
 });
 
 describe("SnapshotSyncCoordinator pruned-history recovery", () => {
+  it("replaces an entirely spent old balance with mint-confirmed current tokens", async () => {
+    const local = snapshot(2, HEAD_A);
+    local.proofs = [
+      { id: "k", secret: "old-spent", C: "c", amount: 2000, reserved: false },
+    ];
+    local.counters = { k: 20 };
+    const remote = snapshot(30, HEAD_C);
+    remote.proofs = [
+      { id: "k", secret: "current", C: "d", amount: 600, reserved: false },
+    ];
+    remote.counters = { k: 40 };
+    const value = fixture(local);
+    value.relay.current = event(HEAD_B, HEAD_C);
+    value.crypto.decrypted.set(HEAD_B, remote);
+    const reconcileProofs = vi.fn(async (proofs) =>
+      proofs.filter((proof) => proof.secret !== "old-spent")
+    );
+    const coordinator = new SnapshotSyncCoordinator({
+      relay: value.relay,
+      repository: value.repository,
+      crypto: value.crypto,
+      syncSecret: SECRET,
+      configuredMint: MINT,
+      reconcileProofs,
+    });
+    await expect(coordinator.pull()).resolves.toMatchObject({
+      status: "applied",
+    });
+    expect(reconcileProofs).toHaveBeenCalledWith([
+      ...remote.proofs,
+      ...local.proofs,
+    ]);
+    expect(value.repository.state.proofs).toEqual(remote.proofs);
+    expect(value.repository.state.counters.k).toBe(40);
+    expect(value.repository.state.pending_operation).toBeNull();
+  });
+
   it("reconciles the union of local and remote tokens against the mint after retention expires", async () => {
     const local = snapshot(2, HEAD_A);
     local.proofs = [
