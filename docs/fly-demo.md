@@ -54,3 +54,26 @@ reconciliation and completed-quote matching. The live-backend pre-deployment E2E
 passed stale history, lost swap response, concurrent Top Ups, and offline token
 access: [recovery evidence](qa/pruned-history-recovery-2026-09-06.md).
 Existing clients should reload to load the updated application.
+
+## Three-wallet recovery deployment — 2026-10-08
+
+Published merged source `8af073f94df8cf37d4cf36b98402e54f90e84713` from a clean
+Git archive with the existing wallet-only remote-build profile.
+Image: `registry.fly.io/cashu-sync-wallet:deployment-01M4F3G1GW4TNDSBZ8J2E2B1KD`.
+Manifest digest: `sha256:897fa521ec6f308bc27f4a600395eb41e1ee86a4db58e5285201a84bfe875e12`.
+Both Amsterdam machines (`7846572b9530e8`, `801555b6e33528`) are started on this
+image and passed Fly deployment smoke, machine and health checks. The mint and
+relays retain their existing deployments.
+
+The public wallet returned HTTP 200. Two new isolated Chrome contexts with mobile
+viewports completed pairing through a QR whose origin is the public wallet domain;
+both displayed `Wallet synchronized.` and equal `$0.00` balances, with no uncaught
+page errors. Loaded JavaScript included the new funded-wallet protection text.
+Service workers were allowed. The already-open wallet also loaded the update and
+displayed synchronized status. Physical-phone and installed-PWA upgrade behavior
+are not fully covered by this smoke check.
+
+GitHub Actions run [37867598005](https://github.com/brenorb/cashu-sync/actions/runs/37867598005)
+passed. Full recovery evidence and remaining coverage limits are in
+[the three-wallet report](qa/three-wallet-recovery-2026-10-08.md).
+Existing clients should reload to load the updated application.

@@ -119,5 +119,28 @@ unresolved response whose completion checkpoint and subsequently spent outputs
 have both disappeared from retained history. The safeguards preserve that local
 journal; that combination may still require manual export/reconciliation.
 
-Changes are local on `fix/three-wallet-recovery`. The public wallet has not been
-redeployed with these changes.
+## Publication
+
+Seven atomic implementation/test commits were merged into `main` as
+`8af073f94df8cf37d4cf36b98402e54f90e84713` and pushed to GitHub.
+The tested tree is unchanged by the merge. GitHub Actions run
+[37867598005](https://github.com/brenorb/cashu-sync/actions/runs/37867598005)
+passed its unit, relay, PWA, subpath-smoke and Pages deployment jobs.
+
+The Fly wallet was deployed from a clean archive of that merge, using the existing
+wallet-only remote-build configuration. Both Amsterdam machines passed Fly's
+deployment checks and are started on the new image. See
+[the deployment record](../fly-demo.md#three-wallet-recovery-deployment--2026-10-08)
+for the image digest.
+
+The public URL returned HTTP 200 and a fresh browser loaded the new build marker,
+displayed `Wallet synchronized.`, and reported no uncaught page errors. Two fresh,
+isolated Chrome contexts at 390 × 844 pixels completed pairing using the public
+QR URL, then displayed equal zero balances and synchronized status. The QR's
+origin was `https://cashu-sync-wallet.fly.dev`, with no localhost address.
+Service workers were allowed in this deployment smoke check. It does not replace
+physical-phone testing or a full installed-PWA upgrade test.
+
+Public wallet: [cashu-sync-wallet.fly.dev](https://cashu-sync-wallet.fly.dev/#/wallet).
+Existing clients should reload to load the update. The known unresolved-journal
+coverage limitation described above remains applicable.
