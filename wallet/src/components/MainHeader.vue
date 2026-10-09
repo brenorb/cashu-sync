@@ -119,32 +119,41 @@ export default defineComponent({
 .q-header {
   position: relative;
   z-index: auto;
-  overflow-x: hidden;
   background: var(--sl-surface-muted);
   color: var(--sl-ink);
   border-bottom: 1px solid var(--sl-outline);
 }
 
 .q-toolbar {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  padding-block: 4px;
   min-height: 60px;
 }
 
 .q-toolbar-title {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 116px;
   padding-left: 12px;
 }
 
 .silent-link-logo {
   display: block;
   width: 104px;
+  max-width: 100%;
   height: 40px;
   object-fit: contain;
 }
 
-/* Make badges container handle overflow properly */
-.q-toolbar > .q-badge {
+.q-toolbar > .q-btn {
   flex-shrink: 0;
+}
+
+.q-toolbar > .q-badge {
+  min-width: 0;
+  max-width: calc(100% - 8px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 </style>
