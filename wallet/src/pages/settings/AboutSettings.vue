@@ -1,45 +1,28 @@
 <template>
   <SettingsPageShell
-    :title="$t('Settings.menu.about.title')"
-    :caption="$t('Settings.menu.about.caption')"
+    title="About Silent Link"
+    caption="Wallet, help and contact."
   >
-    <!-- terms -->
-    <q-list class="settings-menu-group q-mb-lg">
-      <q-item clickable v-ripple to="/terms" class="settings-menu-item">
-        <q-item-section avatar>
-          <div class="settings-menu-icon">
-            <ScaleIcon :size="20" />
-          </div>
-        </q-item-section>
-        <q-item-section>
-          <q-item-label class="text-weight-medium">{{
-            $t("MainHeader.menu.terms.terms.title")
-          }}</q-item-label>
-          <q-item-label caption>{{
-            $t("MainHeader.menu.terms.terms.caption")
-          }}</q-item-label>
-        </q-item-section>
-        <q-item-section side>
-          <ChevronRightIcon :size="18" class="settings-menu-chevron" />
-        </q-item-section>
-      </q-item>
-    </q-list>
-
-    <!-- links -->
+    <section class="about-brand" aria-label="Silent Link Wallet">
+      <img :src="silentLinkLogo" alt="Silent Link" />
+      <h1>Silent Link Wallet</h1>
+      <p>Buy credits, pay for mobile data, and keep your wallets in sync.</p>
+    </section>
     <q-list class="settings-menu-group">
       <q-item
         v-for="link in links"
-        :key="link.link"
+        :key="link.href"
         clickable
         v-ripple
         tag="a"
         target="_blank"
-        :href="link.link"
+        rel="noopener noreferrer"
+        :href="link.href"
         class="settings-menu-item"
       >
         <q-item-section avatar>
           <div class="settings-menu-icon">
-            <component :is="link.icon" :size="20" />
+            <component :is="link.icon" :size="20" aria-hidden="true" />
           </div>
         </q-item-section>
         <q-item-section>
@@ -49,7 +32,11 @@
           <q-item-label caption>{{ link.caption }}</q-item-label>
         </q-item-section>
         <q-item-section side>
-          <ExternalLinkIcon :size="18" class="settings-menu-chevron" />
+          <ExternalLinkIcon
+            :size="18"
+            class="settings-menu-chevron"
+            aria-hidden="true"
+          />
         </q-item-section>
       </q-item>
     </q-list>
@@ -58,62 +45,77 @@
 
 <script lang="ts">
 import { defineComponent, markRaw } from "vue";
-import SettingsPageShell from "./SettingsPageShell.vue";
+import SettingsPageShell from "src/pages/settings/SettingsPageShell.vue";
+import silentLinkLogo from "src/assets/silent-link-logo.svg";
 import {
-  Scale as ScaleIcon,
   Globe as GlobeIcon,
+  CircleHelp as HelpIcon,
+  Mail as MailIcon,
   Code as CodeIcon,
-  MessageCircle as MessageCircleIcon,
-  Rss as RssIcon,
-  Heart as HeartIcon,
   ExternalLink as ExternalLinkIcon,
-  ChevronRight as ChevronRightIcon,
 } from "lucide-vue-next";
 
 export default defineComponent({
   name: "AboutSettings",
-  mixins: [windowMixin],
-  components: {
-    SettingsPageShell,
-    ScaleIcon,
-    ExternalLinkIcon,
-    ChevronRightIcon,
+  components: { SettingsPageShell, ExternalLinkIcon },
+  data() {
+    return { silentLinkLogo };
   },
   computed: {
     links() {
       return [
         {
-          title: this.$t("MainHeader.menu.links.cashuSpace.title"),
-          caption: this.$t("MainHeader.menu.links.cashuSpace.caption"),
+          title: "Silent Link",
+          caption: "silent.link",
           icon: markRaw(GlobeIcon),
-          link: "https://cashu.space",
+          href: "https://silent.link/",
         },
         {
-          title: this.$t("MainHeader.menu.links.github.title"),
-          caption: this.$t("MainHeader.menu.links.github.caption"),
+          title: "Help & FAQ",
+          caption: "silent.link/faq",
+          icon: markRaw(HelpIcon),
+          href: "https://silent.link/faq",
+        },
+        {
+          title: "Contact support",
+          caption: "support@silent.link",
+          icon: markRaw(MailIcon),
+          href: "mailto:support@silent.link",
+        },
+        {
+          title: "Wallet source code",
+          caption: "github.com/brenorb/cashu-sync",
           icon: markRaw(CodeIcon),
-          link: "https://github.com/cashubtc/cashu.me",
-        },
-        {
-          title: this.$t("MainHeader.menu.links.telegram.title"),
-          caption: this.$t("MainHeader.menu.links.telegram.caption"),
-          icon: markRaw(MessageCircleIcon),
-          link: "https://t.me/CashuMe",
-        },
-        {
-          title: this.$t("MainHeader.menu.links.twitter.title"),
-          caption: this.$t("MainHeader.menu.links.twitter.caption"),
-          icon: markRaw(RssIcon),
-          link: "https://twitter.com/CashuBTC",
-        },
-        {
-          title: this.$t("MainHeader.menu.links.donate.title"),
-          caption: this.$t("MainHeader.menu.links.donate.caption"),
-          icon: markRaw(HeartIcon),
-          link: "https://docs.cashu.space/contribute",
+          href: "https://github.com/brenorb/cashu-sync",
         },
       ];
     },
   },
 });
 </script>
+
+<style scoped>
+.about-brand {
+  margin: 0 0 24px;
+  padding: 20px;
+  border: 1px solid var(--sl-outline);
+  border-radius: 8px;
+}
+.about-brand img {
+  display: block;
+  width: 130px;
+  height: 50px;
+  padding: 4px;
+  background: var(--sl-surface);
+}
+.about-brand h1 {
+  margin: 16px 0 8px;
+  font-size: 1.4rem;
+  line-height: 1.3;
+}
+.about-brand p {
+  margin: 0;
+  color: #a9a9a9;
+  line-height: 1.5;
+}
+</style>

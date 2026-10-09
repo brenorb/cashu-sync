@@ -1,8 +1,8 @@
 {
   "name": "cashu",
   "version": "0.0.1",
-  "description": "Cashu.me Wallet",
-  "productName": "Cashu.me",
+  "description": "Buy credits, pay for mobile data, and sync your Silent Link wallets.",
+  "productName": "Silent Link Wallet",
   "author": "cashu.me",
   "private": true,
   "scripts": {
@@ -23,7 +23,8 @@
     "test:ci": "vitest run",
     "test:e2e": "npm run build:pwa:e2e && playwright test",
     "test:e2e:run": "playwright test",
-    "test:e2e:live": "CASHU_SYNC_E2E_REQUIRE_LIVE=1 npm run test:e2e"
+    "test:e2e:live": "CASHU_SYNC_E2E_REQUIRE_LIVE=1 npm run test:e2e",
+    "brand:icons": "node scripts/generate-brand-icons.mjs"
   },
   "dependencies": {
     "@agicash/qr-scanner": "^0.1.2",
