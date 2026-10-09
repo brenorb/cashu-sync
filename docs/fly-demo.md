@@ -107,3 +107,17 @@ HTTP 200 and no uncaught page errors. GitHub Actions run
 [37879297266](https://github.com/brenorb/cashu-sync/actions/runs/37879297266) passed.
 Audit scope, preserved upstream material and browser-update limitations are in
 [the branding report](qa/silent-link-branding-2026-10-09.md).
+
+## Mobile pairing layout deployment — 2026-10-09
+
+Published merge `0543e0edcb1767d16442cbdf4294157fa2dc4517` from a clean Git archive.
+Image: `registry.fly.io/cashu-sync-wallet:deployment-01M4FC01D06QHP0JEERQ984SJ4`.
+Manifest digest: `sha256:0953f1e37a7b12b25227c68cd0cb5df517a342367acd9c1f8744d1781f36cdab`.
+Both Amsterdam machines are started; Fly deployment checks and
+[GitHub Actions](https://github.com/brenorb/cashu-sync/actions/runs/37880367793) passed.
+
+Public mobile smoke passed 10 geometry checks including narrow widths, enlarged
+text, Wallet ID row spacing, QR, error and success screens. Disposable demo
+wallet pairing completed with no uncaught page errors. HTTP cache headers were
+confirmed on the public entry files. Scope and phone-update limitations are in
+[the layout report](qa/mobile-pairing-layout-2026-10-09.md).
