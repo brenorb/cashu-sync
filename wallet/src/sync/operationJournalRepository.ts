@@ -253,7 +253,10 @@ export class OperationJournalRepository {
         requireResponseInputPhase(pending);
         timestamp = monotonicTimestamp(pending, timestamp);
         assertMintResponseMatchesPreview(pending, response);
-        const quote = await this.requireMintQuote(pending);
+        // A peer or quote poll can observe ISSUED before this device restores
+        // the response. Identity and exact prepared outputs still gate adding
+        // proofs; ISSUED alone never authorizes a new issuance request.
+        const quote = await this.requireMintQuote(pending, true);
         const history = await this.requireHistory(
           "mint",
           pending.prepared_request.quote.quote,
@@ -702,7 +705,8 @@ export class OperationJournalRepository {
   }
 
   private async requireMintQuote(
-    pending: PendingMintV0
+    pending: PendingMintV0,
+    allowIssued = false
   ): Promise<MintQuoteRow> {
     const expected = pending.prepared_request.quote;
     const row = (await this.db.mintQuotes.get(expected.quote)) as
@@ -714,7 +718,7 @@ export class OperationJournalRepository {
       row.unit !== "usd" ||
       row.request !== expected.request ||
       row.amount !== safeDecimalNumber(expected.amount) ||
-      row.state !== "PAID"
+      (row.state !== "PAID" && !(allowIssued && row.state === "ISSUED"))
     ) {
       throw new OperationJournalError(
         "quote-mismatch",

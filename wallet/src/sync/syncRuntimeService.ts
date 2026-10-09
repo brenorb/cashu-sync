@@ -24,10 +24,6 @@ export type SyncRuntimeBootOutcome = {
   sync: WalletSyncStartOutcome;
 };
 
-export type ReplaceWalletOptions = {
-  overwrite?: boolean;
-};
-
 export class SyncRuntimeService {
   readonly allowLoopbackHttp: boolean;
   readonly authority: LocalAuthorityRepository;
@@ -95,21 +91,29 @@ export class SyncRuntimeService {
    * Pairing/recovery may replace only an empty local wallet. This also handles
    * a fresh installation that already published its own empty genesis.
    */
-  replaceEmptyAndStart(
-    value: unknown,
-    options: ReplaceWalletOptions = {}
-  ): Promise<SyncRuntimeBootOutcome> {
-    return this.runExclusive(() =>
-      this.replaceEmptyAndStartUnlocked(value, options)
-    );
+  replaceEmptyAndStart(value: unknown): Promise<SyncRuntimeBootOutcome> {
+    return this.runExclusive(() => this.replaceEmptyAndStartUnlocked(value));
   }
 
   private async replaceEmptyAndStartUnlocked(
-    value: unknown,
-    options: ReplaceWalletOptions
+    value: unknown
   ): Promise<SyncRuntimeBootOutcome> {
     const candidate = this.authority.validate(value);
     await this.prepareLegacyState();
+    const previousAuthority = this.authority.load();
+    if (
+      previousAuthority !== null &&
+      candidate.mnemonic === previousAuthority.mnemonic &&
+      candidate.sync_secret === previousAuthority.sync_secret &&
+      candidate.mint_url === previousAuthority.mint_url &&
+      candidate.relay_url === previousAuthority.relay_url
+    ) {
+      // Re-pairing is recovery of this authority. Preserve local proofs,
+      // monotonic counters, unpublished results and the verified checkpoint;
+      // the normal pull/journal path reconciles them with the peer and mint.
+      await this.bootstrapMint(previousAuthority, true);
+      return { authority: previousAuthority, sync: await this.runtime.start() };
+    }
     const [proofs, quotes, history, ecashHistory, state] = await Promise.all([
       cashuDb.proofs.count(),
       Promise.all([cashuDb.mintQuotes.count(), cashuDb.meltQuotes.count()]),
@@ -124,10 +128,9 @@ export class SyncRuntimeService {
       ecashHistory > 0 ||
       (state?.pending_operation ?? null) !== null ||
       Object.keys(state?.counters ?? {}).length > 0;
-    if (hasLocalWalletData && !options.overwrite) {
+    if (hasLocalWalletData) {
       throw new Error("pairing or recovery requires an empty local wallet");
     }
-    const previousAuthority = this.authority.load();
     const mintStore = useMintsStore();
     const previousMintState = {
       mints: cloneStoredValue(mintStore.mints),

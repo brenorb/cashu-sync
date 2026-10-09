@@ -59,7 +59,8 @@ describe("v0 visible UI contract", () => {
     expect(wallet).toContain("Buy credits");
     expect(wallet).toContain("Top up eSIM");
     expect(wallet).toContain('data-v0-field="melt-amount"');
-    expect(wallet).not.toContain('data-v0-field="melt-invoice"');
+    expect(wallet).toContain('data-v0-field="melt-invoice"');
+    expect(wallet).toContain('v-if="!meltInvoiceMode"');
     expect(wallet).not.toContain(':disable="!activeMintUrl"');
     expect(wallet).toContain('to="/settings/sync"');
     expect(wallet).not.toMatch(
@@ -111,8 +112,8 @@ describe("v0 visible UI contract", () => {
     expect(sync).toContain('data-pairing-action="scan-pairing"');
     expect(sync).toContain('data-pairing-action="back-wallet"');
     expect(sync).toContain('data-pairing-action="cancel-overwrite"');
-    expect(sync).toContain('data-pairing-action="save-local-backup"');
-    expect(sync).toContain('data-pairing-action="overwrite-and-pair"');
+    expect(sync).not.toContain('data-pairing-action="overwrite-and-pair"');
+    expect(sync).toContain("Keep this wallet safe");
     expect(sync).toContain("data-wallet-id");
     expect(sync).toContain("Compare these six words on both phones");
     expect(sync).toContain("showPairingQr");

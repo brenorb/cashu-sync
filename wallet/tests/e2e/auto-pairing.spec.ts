@@ -93,13 +93,9 @@ test.describe("automatic one-QR pairing", () => {
       .locator("[data-pairing-url]")
       .getAttribute("data-pairing-url");
     await joining.goto(replacementUrl!, { waitUntil: "domcontentloaded" });
-    await expect(joining.getByText("Replace this wallet?")).toBeVisible({
+    await expect(joining.getByText("PAIRING COMPLETE")).toBeVisible({
       timeout: 20_000,
     });
-    await joining.locator('[data-pairing-action="cancel-overwrite"]').click();
-    await expect(
-      joining.getByText("Pairing cancelled. This wallet was not changed.")
-    ).toBeVisible();
     await joining.goto(server.walletUrl, { waitUntil: "domcontentloaded" });
     await expect(joiningBalance).toContainText("1");
 

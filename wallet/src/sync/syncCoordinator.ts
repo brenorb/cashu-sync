@@ -210,8 +210,9 @@ export class SnapshotSyncCoordinator {
       const incoming = this.decryptRemote(current);
       decrypted = incoming;
       if (incoming.revision > local.revision + 1) {
+        let path: Array<{ event: Event; snapshot: SnapshotV0 }>;
         try {
-          this.verifyRetainedPath(recent, local, current, incoming);
+          path = this.verifyRetainedPath(recent, local, current, incoming);
         } catch (error) {
           if (
             !(error instanceof SnapshotSyncCoordinatorError) ||
@@ -221,7 +222,33 @@ export class SnapshotSyncCoordinator {
             throw error;
           return this.recoverPrunedHistory(local, incoming, current.id);
         }
-        assertPendingResolved(local, incoming);
+        try {
+          assertPendingResolved(local, incoming);
+        } catch (error) {
+          if (
+            !(error instanceof SnapshotSyncCoordinatorError) ||
+            error.code !== "pending-local"
+          )
+            throw error;
+          // A later payment can already be pending, or have consumed our
+          // change. First acknowledge the exact completed monetary result on
+          // the verified chain; the next pull can then advance normally.
+          for (const checkpoint of path.slice(1).reverse()) {
+            try {
+              assertPendingResolved(local, checkpoint.snapshot);
+            } catch {
+              continue;
+            }
+            await this.applyLocal(checkpoint.snapshot, checkpoint.event.id);
+            return {
+              status: "applied",
+              mode: "child",
+              eventId: checkpoint.event.id,
+              revision: checkpoint.snapshot.revision,
+            };
+          }
+          throw error;
+        }
         await this.applyLocal(incoming, current.id);
         return {
           status: "applied",
@@ -308,10 +335,11 @@ export class SnapshotSyncCoordinator {
     local: SnapshotV0,
     current: Event,
     incoming: SnapshotV0
-  ): void {
+  ): Array<{ event: Event; snapshot: SnapshotV0 }> {
     const byId = new Map(recent.map((event) => [event.id, event]));
     let event = current;
     let snapshot = incoming;
+    const path = [{ event, snapshot }];
 
     while (snapshot.previous_event_id !== local.previous_event_id) {
       if (snapshot.revision <= local.revision + 1) {
@@ -339,6 +367,7 @@ export class SnapshotSyncCoordinator {
       }
       event = predecessor;
       snapshot = predecessorSnapshot;
+      path.push({ event, snapshot });
     }
 
     if (
@@ -352,6 +381,7 @@ export class SnapshotSyncCoordinator {
         "retained relay history does not advance exactly from local state"
       );
     }
+    return path;
   }
 
   private async applyIncoming(

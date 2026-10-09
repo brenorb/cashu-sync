@@ -47,7 +47,8 @@ export class CashuTsOperationGateway
   implements CashuOperationGateway<MintOperationIntent, MeltOperationIntent>
 {
   constructor(
-    private readonly walletSource: Wallet | (() => Promise<Wallet>)
+    private readonly walletSource: Wallet | (() => Promise<Wallet>),
+    private readonly proofSource?: () => Promise<SnapshotProofV0[]>
   ) {}
 
   private getWallet(): Promise<Wallet> {
@@ -82,10 +83,13 @@ export class CashuTsOperationGateway
     if (intent.quote.state !== MeltQuoteState.UNPAID) {
       throw new Error("melt quote must be UNPAID before preparing inputs");
     }
+    // The coordinator pulls the winning snapshot before preparing. Read its
+    // proofs now; an intent captured in the UI before that pull can be stale.
+    const proofs = this.proofSource ? await this.proofSource() : intent.proofs;
     if (intent.quote.request.startsWith("cashu-sync-demo:")) {
       const preview = await wallet.prepareSwapToSend(
         intent.quote.amount,
-        intent.proofs,
+        proofs,
         { includeFees: true, keysetId: intent.keysetId }
       );
       const serialized = serializeMeltPreviewV0({
@@ -110,7 +114,7 @@ export class CashuTsOperationGateway
     }
     const target = intent.quote.amount.add(intent.quote.fee_reserve);
     const selected = wallet.selectProofsToSend(
-      intent.proofs,
+      proofs,
       target,
       true,
       false

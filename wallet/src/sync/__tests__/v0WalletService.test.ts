@@ -37,9 +37,11 @@ const session = {
 };
 const runtime = {
   currentSession: () => session,
+  resetSession: vi.fn(async () => undefined),
 };
 const runtimeService = {
   runtime,
+  authority: { clear: vi.fn() },
   exportAuthority: async () => ({ mint_url: "http://127.0.0.1:3338" }),
   runExclusive: (operation: () => Promise<unknown>) => operation(),
 };
@@ -92,6 +94,172 @@ afterEach(async () => {
 });
 
 describe("V0WalletService quote fencing", () => {
+  it("binds the in-memory Cashu seed to the imported authority before constructing outputs", async () => {
+    const mnemonic =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const port = {
+      mnemonic: "old local mnemonic",
+      activeWallet: vi.fn(async () => {
+        expect(port.mnemonic).toBe(mnemonic);
+        return walletMock({
+          createMintQuoteBolt11: vi.fn(async () => mintQuote),
+        });
+      }),
+      getKeyset: () => "00c0ffee",
+    };
+    const service = new V0WalletService(
+      {
+        ...runtimeService,
+        exportAuthority: async () => ({ mnemonic }),
+      } as never,
+      port
+    );
+    await service.requestMintQuote(25);
+  });
+
+  it("automatically claims an already paid invoice after startup without creating a new quote", async () => {
+    await cashuDb.mintQuotes.put({
+      ...mintQuote,
+      amount: 25,
+      state: "UNPAID",
+      method: "bolt11",
+    });
+    const resume = vi
+      .spyOn(SyncOperationCoordinator.prototype, "resume")
+      .mockResolvedValue({ status: "idle" });
+    const mint = vi
+      .spyOn(SyncOperationCoordinator.prototype, "mint")
+      .mockResolvedValue({
+        status: "completed",
+        quoteId: "mint-q",
+        type: "mint",
+        operationId: "claim",
+        eventId: "a".repeat(64),
+      });
+    const createMintQuoteBolt11 = vi.fn();
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(async () =>
+        walletMock({
+          createMintQuoteBolt11,
+          checkMintQuoteBolt11: vi.fn(async () => mintQuote),
+        })
+      ),
+      getKeyset: () => "00c0ffee",
+    });
+    try {
+      await service.resume();
+      expect(mint).toHaveBeenCalledOnce();
+      expect(mint).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quote: expect.objectContaining({ quote: "mint-q" }),
+        })
+      );
+      expect(createMintQuoteBolt11).not.toHaveBeenCalled();
+    } finally {
+      resume.mockRestore();
+      mint.mockRestore();
+    }
+  });
+
+  it("settles a peer journal before creating or publishing a new quote", async () => {
+    session.repository.exportSnapshot.mockResolvedValue({
+      pending_operation: { phase: "submitted", type: "mint" },
+    });
+    const resume = vi
+      .spyOn(SyncOperationCoordinator.prototype, "resume")
+      .mockImplementation(async () => {
+        session.repository.exportSnapshot.mockResolvedValue({
+          pending_operation: null,
+        });
+        return { status: "idle" };
+      });
+    const createMintQuoteBolt11 = vi.fn(async () => {
+      expect(resume).toHaveBeenCalledOnce();
+      expect(publishCurrent).not.toHaveBeenCalled();
+      return mintQuote;
+    });
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(async () => walletMock({ createMintQuoteBolt11 })),
+      getKeyset: () => "00c0ffee",
+    });
+    try {
+      await service.requestMintQuote(25);
+      expect(createMintQuoteBolt11).toHaveBeenCalledOnce();
+      expect(publishCurrent).toHaveBeenCalledOnce();
+    } finally {
+      resume.mockRestore();
+    }
+  });
+
+  it.each(["conflict", "needs-reconciliation"])(
+    "preserves local funds when removal cannot confirm the relay backup: %s",
+    async (status) => {
+      await cashuDb.proofs.put({
+        id: "00c0ffee",
+        amount: 100,
+        secret: "owned",
+        C: "02aa",
+        reserved: false,
+      });
+      publishCurrent.mockResolvedValue({ status });
+      const service = new V0WalletService(runtimeService as never, {
+        activeWallet: vi.fn(),
+        getKeyset: () => "00c0ffee",
+      });
+      await expect(service.removeFromDevice()).rejects.toThrow(/preserved/);
+      expect(await cashuDb.proofs.count()).toBe(1);
+      expect(runtime.resetSession).not.toHaveBeenCalled();
+      expect(runtimeService.authority.clear).not.toHaveBeenCalled();
+    }
+  );
+
+  it("preserves a pending monetary result rather than removing its only local copy", async () => {
+    session.repository.exportSnapshot.mockResolvedValue({
+      pending_operation: { phase: "response-persisted", type: "mint" },
+    });
+    const resume = vi
+      .spyOn(SyncOperationCoordinator.prototype, "resume")
+      .mockResolvedValue({
+        status: "needs-reconciliation",
+        type: "mint",
+        operationId: "owned",
+      });
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(),
+      getKeyset: () => "00c0ffee",
+    });
+    try {
+      await expect(service.removeFromDevice()).rejects.toThrow(/preserved/);
+      expect(publishCurrent).not.toHaveBeenCalled();
+      expect(runtimeService.authority.clear).not.toHaveBeenCalled();
+    } finally {
+      resume.mockRestore();
+    }
+  });
+
+  it("removes this device only after its wallet state has been accepted by the relay", async () => {
+    await cashuDb.proofs.put({
+      id: "00c0ffee",
+      amount: 100,
+      secret: "owned",
+      C: "02aa",
+      reserved: false,
+    });
+    publishCurrent.mockImplementationOnce(async () => {
+      expect(await cashuDb.proofs.count()).toBe(1);
+      expect(runtimeService.authority.clear).not.toHaveBeenCalled();
+      return { status: "accepted" };
+    });
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(),
+      getKeyset: () => "00c0ffee",
+    });
+    await service.removeFromDevice();
+    expect(await cashuDb.proofs.count()).toBe(0);
+    expect(runtime.resetSession).toHaveBeenCalledOnce();
+    expect(runtimeService.authority.clear).toHaveBeenCalledOnce();
+  });
+
   it("does not initialize the mint when the relay resolves the pending operation", async () => {
     session.repository.exportSnapshot.mockResolvedValue({
       pending_operation: {
@@ -188,11 +356,18 @@ describe("V0WalletService quote fencing", () => {
     });
     const resume = vi
       .spyOn(SyncOperationCoordinator.prototype, "resume")
-      .mockResolvedValue({
-        status: "aborted-before-submit",
-        type: "mint",
-        operationId: "raced-operation",
-        reason: "conflict",
+      .mockImplementation(async () => {
+        // A proven prepared CAS loss aborts and clears the journal before
+        // returning this outcome; reproduce the real coordinator contract.
+        session.repository.exportSnapshot.mockResolvedValue({
+          pending_operation: null,
+        });
+        return {
+          status: "aborted-before-submit",
+          type: "mint",
+          operationId: "raced-operation",
+          reason: "conflict",
+        };
       });
     const service = new V0WalletService(runtimeService as never, {
       activeWallet: vi.fn(async () => walletMock({})),
@@ -204,6 +379,25 @@ describe("V0WalletService quote fencing", () => {
     expect(pull).toHaveBeenCalledOnce();
     expect(refreshFromDexie).toHaveBeenCalledOnce();
     resume.mockRestore();
+  });
+
+  it("coalesces a burst of relay notifications instead of starving user operations", async () => {
+    const service = new V0WalletService(
+      runtimeService as never,
+      {
+        activeWallet: vi.fn(async () => walletMock({})),
+        getKeyset: () => "00c0ffee",
+      },
+      undefined,
+      async () => undefined
+    );
+    const first = service.syncNow();
+    const burst = Array.from({ length: 25 }, () => service.syncNow());
+    expect(burst.every((sync) => sync === first)).toBe(true);
+    await Promise.all([first, ...burst]);
+    expect(pull).toHaveBeenCalledOnce();
+    await service.syncNow();
+    expect(pull).toHaveBeenCalledTimes(2);
   });
 
   it("persists a USD Bolt11 mint quote before publishing the snapshot", async () => {
@@ -245,12 +439,17 @@ describe("V0WalletService quote fencing", () => {
       currentEventId: "b".repeat(64),
       currentRevision: 2,
     });
-    const service = new V0WalletService(runtimeService as never, {
-      activeWallet: vi.fn(async () =>
-        walletMock({ createMintQuoteBolt11: vi.fn(async () => mintQuote) })
-      ),
-      getKeyset: () => "00c0ffee",
-    });
+    const service = new V0WalletService(
+      runtimeService as never,
+      {
+        activeWallet: vi.fn(async () =>
+          walletMock({ createMintQuoteBolt11: vi.fn(async () => mintQuote) })
+        ),
+        getKeyset: () => "00c0ffee",
+      },
+      undefined,
+      async () => undefined
+    );
 
     await expect(service.requestMintQuote(25)).rejects.toThrow(
       /another device/
@@ -639,6 +838,11 @@ describe("V0WalletService quote fencing", () => {
       getKeyset: () => "00c0ffee",
     });
 
+    pull.mockImplementationOnce(async () => {
+      await cashuDb.mintQuotes.update("mint-q", {
+        state: MintQuoteState.ISSUED,
+      });
+    });
     await expect(service.mintPaidQuote("mint-q")).resolves.toMatchObject({
       status: "completed",
       type: "mint",
@@ -650,6 +854,41 @@ describe("V0WalletService quote fencing", () => {
       status: "paid",
     });
     expect(publishCurrent).not.toHaveBeenCalled();
+    expect(pull).toHaveBeenCalledOnce();
+  });
+
+  it("does not mark an issued invoice paid before its funds are recovered", async () => {
+    await cashuDb.mintQuotes.add({
+      quote: "mint-q",
+      method: "bolt11",
+      request: "lnbc1mint",
+      unit: "usd",
+      amount: 25,
+      state: MintQuoteState.PAID,
+    });
+    const service = new V0WalletService(
+      runtimeService as never,
+      {
+        activeWallet: vi.fn(async () =>
+          walletMock({
+            checkMintQuoteBolt11: vi.fn(async () => ({
+              ...mintQuote,
+              state: MintQuoteState.ISSUED,
+            })),
+          })
+        ),
+        getKeyset: () => "00c0ffee",
+      },
+      undefined,
+      async () => undefined
+    );
+    await expect(service.mintPaidQuote("mint-q")).rejects.toThrow(
+      /still being recovered/
+    );
+    expect((await cashuDb.mintQuotes.get("mint-q"))!.state).toBe(
+      MintQuoteState.PAID
+    );
+    expect(await cashuDb.proofs.count()).toBe(0);
   });
 
   it("retries a prepared mint after a proven remote CAS conflict", async () => {

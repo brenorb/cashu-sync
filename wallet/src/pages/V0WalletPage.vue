@@ -164,12 +164,21 @@
     <q-dialog v-model="showMeltDialog">
       <q-card class="v0-dialog" data-v0-dialog="melt">
         <q-card-section class="v0-dialog__intro">
-          <p class="v0-eyebrow">TOP UP ESIM</p>
-          <h2>Pay for mobile data</h2>
-          <p>Use your balance to pay for your eSIM top-up.</p>
+          <p class="v0-eyebrow">
+            {{ meltInvoiceMode ? "PAY INVOICE" : "TOP UP ESIM" }}
+          </p>
+          <h2>
+            {{
+              meltInvoiceMode
+                ? "Pay a Lightning invoice"
+                : "Pay for mobile data"
+            }}
+          </h2>
+          <p>Use your wallet balance to pay.</p>
         </q-card-section>
         <q-card-section v-if="!meltQuote" class="v0-dialog__body">
           <q-input
+            v-if="!meltInvoiceMode"
             v-model="meltAmount"
             data-v0-field="melt-amount"
             class="v0-amount-input"
@@ -180,13 +189,36 @@
             label="Amount"
             hint="USD credits"
           />
+          <q-input
+            v-else
+            v-model="meltRequest"
+            data-v0-field="melt-invoice"
+            dark
+            outlined
+            autogrow
+            label="Lightning invoice"
+          />
+          <q-btn
+            flat
+            no-caps
+            :label="
+              meltInvoiceMode
+                ? 'Top up eSIM instead'
+                : 'Pay a Lightning invoice'
+            "
+            @click="meltInvoiceMode = !meltInvoiceMode"
+          />
         </q-card-section>
         <q-card-section v-else class="v0-dialog__body">
           <div class="v0-quote-summary">
             <span>Amount to spend</span>
             <strong>{{ formatUsd(meltQuote.amount) }}</strong>
           </div>
-          <p class="v0-dialog__note">
+          <div v-if="meltQuote.feeReserve" class="v0-quote-summary">
+            <span>Maximum network fee</span>
+            <strong>{{ formatUsd(meltQuote.feeReserve) }}</strong>
+          </div>
+          <p v-if="!meltInvoiceMode" class="v0-dialog__note">
             This amount will be used for your eSIM top-up.
           </p>
         </q-card-section>
@@ -212,7 +244,7 @@
             no-caps
             unelevated
             :loading="dialogBusy"
-            label="Confirm top up"
+            :label="meltInvoiceMode ? 'Pay invoice' : 'Confirm top up'"
             @click="payMeltQuote"
           />
         </q-card-actions>
@@ -228,7 +260,7 @@ import V0BalanceCard from "src/components/V0BalanceCard.vue";
 import V0AccountingHistory from "src/components/V0AccountingHistory.vue";
 import { useWalletStore } from "src/stores/wallet";
 import { useMigrationsStore } from "src/stores/migrations";
-import { useDexieStore } from "src/stores/dexie";
+import { cashuDb, useDexieStore } from "src/stores/dexie";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
 import { requestSilentLinkTopupQuote } from "src/sync/topupService";
 import {
@@ -256,6 +288,7 @@ export default defineComponent({
       mintQuote: null as MintQuoteView | null,
       meltAmount: "1",
       meltRequest: "",
+      meltInvoiceMode: false,
       meltQuote: null as MeltQuoteView | null,
       dialogBusy: false,
       dialogError: "",
@@ -263,11 +296,61 @@ export default defineComponent({
       syncPending: true,
       walletReady: false,
       visibilityHandler: null as (() => void) | null,
+      recoveryTimer: null as ReturnType<typeof setInterval> | null,
+      automaticRecoveryBusy: false,
     };
   },
   methods: {
+    async resumeAutomatically() {
+      if (this.dialogBusy || this.automaticRecoveryBusy) return;
+      this.automaticRecoveryBusy = true;
+      try {
+        if (useSyncRuntimeService().runtime.currentSession() === null) {
+          const boot = await useSyncRuntimeService().boot(
+            useWalletStore().mnemonic
+          );
+          if (boot.sync.status === "unconfigured") return;
+          this.startWatchingWallet();
+        }
+        const result = await useV0WalletService().resume();
+        if (result.status !== "idle" && result.status !== "completed") return;
+        this.walletReady = true;
+        this.recoveryNeeded = false;
+        this.syncPending = false;
+        this.syncMessage = "Wallet synchronized.";
+        if (this.mintQuote) {
+          const quote = await cashuDb.mintQuotes.get(this.mintQuote.quote);
+          if (quote?.state === "ISSUED") {
+            this.syncMessage = "Credits bought and synchronized.";
+            this.showMintDialog = false;
+            this.mintQuote = null;
+          }
+        }
+      } catch {
+        // Network recovery and paid-invoice claiming continue on the next tick.
+      } finally {
+        this.automaticRecoveryBusy = false;
+      }
+    },
     retrySync() {
-      window.location.reload();
+      void this.resumeAutomatically();
+    },
+    startWatchingWallet() {
+      useV0WalletService().startLiveSync(
+        () => {
+          this.syncMessage = "Wallet synchronized.";
+          this.syncPending = false;
+        },
+        (status) => {
+          if (status === "disconnected" || status === "connecting") {
+            this.syncPending = true;
+            this.syncMessage = "Reconnecting wallet…";
+          } else {
+            this.syncPending = false;
+            this.syncMessage = "Wallet synchronized.";
+          }
+        }
+      );
     },
     async openTokenRecovery() {
       this.showRecoveryDialog = true;
@@ -320,6 +403,12 @@ export default defineComponent({
     },
     async createMeltQuote() {
       await this.runDialog(async () => {
+        if (this.meltInvoiceMode) {
+          this.meltQuote = await useV0WalletService().requestMeltQuote(
+            this.meltRequest
+          );
+          return;
+        }
         const amount = this.parseUsdCents(this.meltAmount);
         if (process.env.CASHU_SYNC_TOPUP_MODE === "internal-demo") {
           this.meltQuote = await useV0WalletService().requestInternalTopupQuote(
@@ -350,6 +439,7 @@ export default defineComponent({
         this.meltQuote = null;
         this.meltAmount = "1";
         this.meltRequest = "";
+        this.meltInvoiceMode = false;
       });
     },
     parseUsdCents(value: string): number {
@@ -409,21 +499,7 @@ export default defineComponent({
         }
       };
       document.addEventListener("visibilitychange", this.visibilityHandler);
-      useV0WalletService().startLiveSync(
-        () => {
-          this.syncMessage = "Wallet synchronized.";
-          this.syncPending = false;
-        },
-        (status) => {
-          if (status === "disconnected" || status === "connecting") {
-            this.syncPending = true;
-            this.syncMessage = "Reconnecting wallet…";
-          } else {
-            this.syncPending = false;
-            this.syncMessage = "Wallet synchronized.";
-          }
-        }
-      );
+      this.startWatchingWallet();
     } catch (error) {
       this.syncPending = false;
       this.walletReady = false;
@@ -431,16 +507,21 @@ export default defineComponent({
       this.syncMessage =
         error instanceof Error ? error.message : "Wallet startup failed";
     }
+    this.recoveryTimer = setInterval(() => {
+      void this.resumeAutomatically();
+    }, 5000);
 
     const request = new URL(document.location.href).searchParams.get(
       "lightning"
     );
     if (request) {
       this.meltRequest = request;
+      this.meltInvoiceMode = true;
       this.showMeltDialog = true;
     }
   },
   beforeUnmount() {
+    if (this.recoveryTimer !== null) clearInterval(this.recoveryTimer);
     useV0WalletService().stopLiveSync();
     if (this.visibilityHandler) {
       document.removeEventListener("visibilitychange", this.visibilityHandler);

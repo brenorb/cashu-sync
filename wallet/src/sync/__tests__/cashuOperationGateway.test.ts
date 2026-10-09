@@ -521,3 +521,30 @@ it("restores a lost demo swap response without another spend", async () => {
     toProof.mockRestore();
   }
 });
+
+it("selects current proofs after the coordinator pull rather than stale intent proofs", async () => {
+  const current = [snapshotProof(30, "fresh")];
+  const stale = [snapshotProof(30, "spent-by-peer")];
+  const prepareSwapToSend = vi.fn(async () => ({
+    keysetId: KEYSET,
+    inputs: current,
+    fees: Amount.from(0),
+    keepOutputs: [output(5, 1)],
+    sendOutputs: [output(25, 2)],
+  }));
+  const gateway = new CashuTsOperationGateway(
+    walletMock({ prepareSwapToSend }),
+    async () => current
+  );
+  const exact = await gateway.createMeltPreview({
+    quote: {
+      ...meltQuote(),
+      request: "cashu-sync-demo:demo",
+      fee_reserve: Amount.from(0),
+    },
+    proofs: stale,
+    keysetId: KEYSET,
+  });
+  expect(prepareSwapToSend.mock.calls[0][1]).toEqual(current);
+  expect(exact.request.inputs.map((input) => input.secret)).toEqual(["fresh"]);
+});
