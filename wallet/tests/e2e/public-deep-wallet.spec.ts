@@ -206,7 +206,6 @@ test.describe("public deep wallet workflow", () => {
     await existing
       .locator('[data-pairing-action="open-pairing-screen"]')
       .click();
-    await existing.locator('[data-pairing-action="create-pairing"]').click();
     const pairingUrl = await existing
       .locator("[data-pairing-url]")
       .getAttribute("data-pairing-url");

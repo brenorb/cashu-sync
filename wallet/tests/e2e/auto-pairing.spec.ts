@@ -43,7 +43,6 @@ test.describe("automatic one-QR pairing", () => {
     await existing
       .locator('[data-pairing-action="open-pairing-screen"]')
       .click();
-    await existing.locator('[data-pairing-action="create-pairing"]').click();
     const qr = existing.locator("[data-pairing-url]");
     await expect(qr).toBeVisible();
     const pairingUrl = await qr.getAttribute("data-pairing-url");
@@ -88,7 +87,6 @@ test.describe("automatic one-QR pairing", () => {
     await existing
       .locator('[data-pairing-action="open-pairing-screen"]')
       .click();
-    await existing.locator('[data-pairing-action="create-pairing"]').click();
     const replacementUrl = await existing
       .locator("[data-pairing-url]")
       .getAttribute("data-pairing-url");

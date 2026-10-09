@@ -119,17 +119,6 @@
             readonly
             autogrow
             label="Payment invoice"
-            @click="claimMintQuote"
-          />
-          <q-btn
-            data-v0-action="simulate-mint-payment"
-            class="full-width"
-            color="primary"
-            no-caps
-            unelevated
-            :loading="dialogBusy"
-            label="I've paid — update balance"
-            @click="claimMintQuote"
           />
         </q-card-section>
         <q-card-section v-if="dialogError" class="v0-dialog-error" role="alert">
@@ -365,6 +354,7 @@ export default defineComponent({
       }
     },
     async runDialog(operation: () => Promise<void>) {
+      if (this.dialogBusy) return;
       this.dialogBusy = true;
       this.dialogError = "";
       try {
@@ -393,7 +383,7 @@ export default defineComponent({
         );
         if (result.status !== "completed") {
           throw new Error(
-            "Your payment is still being recovered. Keep this window open and try Update balance again shortly."
+            "Your payment is still being recovered. The balance will update automatically."
           );
         }
         this.syncMessage = "Credits bought and synchronized.";

@@ -11,7 +11,7 @@
       incomingPairing
         ? 'Connecting this wallet securely.'
         : creatingPairingScreen
-        ? 'Create a one-time QR for another wallet.'
+        ? 'Scan this QR with the other phone.'
         : 'Keep every wallet you control aligned.'
     "
   >
@@ -45,7 +45,7 @@
     </section>
 
     <template v-else>
-      <SettingsSection title="Pairing status">
+      <SettingsSection v-if="!creatingPairingScreen" title="Pairing status">
         <q-item class="column items-stretch q-pa-lg settings-card-content">
           <div class="sync-status" role="status" aria-live="polite">
             <span class="sync-status__mark" aria-hidden="true"></span>
@@ -79,30 +79,20 @@
             color="primary"
             no-caps
             unelevated
-            label="Open pairing screen"
+            label="Show pairing QR"
             @click="$router.push('/settings/sync/pairing')"
           />
           <p class="sync-copy">
-            Open a separate screen before generating a one-time pairing QR.
+            Show a one-time QR for another wallet you control.
           </p>
         </q-item>
       </SettingsSection>
 
       <SettingsSection v-else-if="configured" title="Create pairing QR">
         <q-item class="column items-stretch q-pa-lg settings-card-content">
-          <p class="sync-copy">
-            Generate the QR only when the other phone is ready to scan it. It
-            expires after three minutes and can be used once.
+          <p v-if="busy && !pairingUrl" class="sync-copy" role="status">
+            Creating pairing QR…
           </p>
-          <q-btn
-            data-pairing-action="create-pairing"
-            color="primary"
-            no-caps
-            unelevated
-            label="Generate one-time QR"
-            :loading="busy"
-            @click="createPairing"
-          />
           <template v-if="pairingUrl">
             <button
               class="pairing-qr"
@@ -118,17 +108,19 @@
             </button>
             <small class="pairing-qr-hint">Tap the QR code to enlarge it</small>
             <p class="sync-copy">
-              Scan this once with the other phone. The QR contains only a
-              short-lived pairing session; the wallet authority is sent directly
-              through the encrypted relay.
+              Scan this once with the other phone. It expires after three
+              minutes.
             </p>
           </template>
           <q-btn
-            data-pairing-action="back-sync"
-            flat
+            v-if="pairingUrl || failed"
+            data-pairing-action="create-pairing"
+            color="primary"
             no-caps
-            label="Back to sync devices"
-            @click="$router.replace('/settings/sync')"
+            outline
+            :label="pairingUrl ? 'Generate new QR' : 'Try again'"
+            :loading="busy"
+            @click="createPairing"
           />
         </q-item>
       </SettingsSection>
@@ -294,6 +286,7 @@ export default defineComponent({
       pairingHost: null as AutoPairingHostSession | null,
       pairingJoin: null as AutoPairingJoinSession | null,
       pairingSuccessTimer: null as number | null,
+      pairingScreenActive: true,
     };
   },
   computed: {
@@ -323,6 +316,12 @@ export default defineComponent({
       this.failed = true;
       this.message =
         "This pairing QR is outdated. Create a new pairing QR from the existing wallet.";
+    } else if (
+      this.creatingPairingScreen &&
+      this.configured &&
+      !this.incomingPairing
+    ) {
+      void this.createPairing();
     }
   },
   methods: {
@@ -357,15 +356,18 @@ export default defineComponent({
       await this.run(async () => {
         const runtime = useSyncRuntimeService();
         const session = runtime.runtime.currentSession();
+        const authority = await runtime.exportAuthority();
+        if (!this.pairingScreenActive) return;
         this.stopPairingWatcher();
         this.pairingHost?.destroy();
+        this.showPairingQr = false;
         this.pairingHost = AutoPairingHostSession.create({
           relayUrl: process.env.CASHU_SYNC_PAIRING_RELAY_URL,
           hooks: { allowLoopbackHttp: runtime.allowLoopbackHttp },
         });
         this.pairingPayload = JSON.stringify(this.pairingHost.qr);
         this.pairingHost.start(
-          await runtime.exportAuthority(),
+          authority,
           () => {
             this.pairingHost?.destroy();
             this.pairingHost = null;
@@ -381,6 +383,7 @@ export default defineComponent({
         );
         if (session !== null) {
           const baseline = await session.repository.exportSnapshot();
+          if (!this.pairingScreenActive || this.pairingHost === null) return;
           this.pairingWatchStop = session.sync.watchCurrent((event) => {
             if (event.id === baseline.previous_event_id) return;
             this.stopPairingWatcher();
@@ -467,7 +470,10 @@ export default defineComponent({
       this.pairingSuccessTimer = window.setTimeout(() => {
         this.pairingSuccess = false;
         this.pairingSuccessTimer = null;
-        if (this.$route.path === "/settings/sync") {
+        if (
+          this.$route.path === "/settings/sync" ||
+          this.creatingPairingScreen
+        ) {
           void this.$router.replace("/wallet");
         }
       }, 2800);
@@ -477,6 +483,7 @@ export default defineComponent({
       this.pairingWatchStop = null;
     },
     async run(operation: () => Promise<void>) {
+      if (this.busy) return;
       this.busy = true;
       this.failed = false;
       this.message = "";
@@ -492,6 +499,7 @@ export default defineComponent({
     },
   },
   beforeUnmount() {
+    this.pairingScreenActive = false;
     this.stopPairingWatcher();
     this.pairingHost?.destroy();
     this.pairingJoin?.destroy();
