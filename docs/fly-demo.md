@@ -121,3 +121,17 @@ text, Wallet ID row spacing, QR, error and success screens. Disposable demo
 wallet pairing completed with no uncaught page errors. HTTP cache headers were
 confirmed on the public entry files. Scope and phone-update limitations are in
 [the layout report](qa/mobile-pairing-layout-2026-10-09.md).
+
+## Mobile layout audit deployment — 2026-10-09
+
+Published merge `e8937ae495995db882de4568af38b72b80293772` from a clean Git archive.
+Image: `registry.fly.io/cashu-sync-wallet:deployment-01M4FD19XAHPQ9H3NPZW6745RH`.
+Manifest digest: `sha256:aa2fb30078d467451ecb41d0aca5f3db881fd2acd31fdb88baa595e655a4abcb`.
+Both Amsterdam machines are started; Fly deployment checks and
+[GitHub Actions](https://github.com/brenorb/cashu-sync/actions/runs/37881747127) passed.
+
+Public review passed 71 layout cases across active screens,
+small widths, enlarged text, tall/landscape views, dialogs and long display
+values, with no uncaught page errors. No payments were submitted during the
+review. Scope, fixes and coverage limits are in
+[the layout audit](qa/mobile-layout-audit-2026-10-09.md).
