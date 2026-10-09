@@ -474,18 +474,58 @@ describe("SyncRelayClient", () => {
     const rejection = expect(query).rejects.toMatchObject({ code: "timeout" });
     const socket = sockets[0];
     socket.open();
-    await vi.advanceTimersByTimeAsync(101);
+    await vi.advanceTimersByTimeAsync(301);
     await rejection;
-    expect(socket.closed).toBe(true);
+    expect(sockets).toHaveLength(3);
+    expect(sockets.every((value) => value.closed)).toBe(true);
 
-    vi.useRealTimers();
     const disconnectedFixture = fixture();
     const disconnected = disconnectedFixture.client.queryCurrent();
-    const disconnectedSocket = disconnectedFixture.sockets[0];
-    disconnectedSocket.open();
-    disconnectedSocket.disconnect();
-    await expect(disconnected).rejects.toMatchObject({ code: "disconnected" });
+    const disconnectedRejection = expect(disconnected).rejects.toMatchObject({
+      code: "disconnected",
+    });
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const disconnectedSocket = disconnectedFixture.sockets[attempt];
+      disconnectedSocket.open();
+      disconnectedSocket.disconnect();
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    await disconnectedRejection;
+    expect(disconnectedFixture.sockets.every((value) => value.closed)).toBe(
+      true
+    );
   });
+
+  it.each(["current", "recent"])(
+    "automatically recovers a %s read after timeout and disconnect without publishing",
+    async (kind) => {
+      vi.useFakeTimers();
+      const { client, sockets } = fixture({ timeoutMs: 100 });
+      const query =
+        kind === "current" ? client.queryCurrent() : client.queryRecent(8);
+      sockets[0].open();
+      await vi.advanceTimersByTimeAsync(101);
+      sockets[1].open();
+      sockets[1].disconnect();
+      await vi.advanceTimersByTimeAsync(0);
+      const recovered = sockets[2];
+      recovered.open();
+      authenticate(recovered);
+      const subscriptionId = sentEnvelope(recovered, 3)[1];
+      const head = syncEvent();
+      recovered.receive(["EVENT", subscriptionId, head]);
+      recovered.receive(["EOSE", subscriptionId]);
+      await expect(query).resolves.toEqual(
+        JSON.parse(JSON.stringify(kind === "current" ? head : [head]))
+      );
+      expect(sockets.every((value) => value.closed)).toBe(true);
+      expect(
+        sockets.some((value) =>
+          value.sent.some((raw) => raw.startsWith('["EVENT"'))
+        )
+      ).toBe(false);
+    }
+  );
 
   it("requires wss except for explicitly allowed loopback ws", () => {
     expect(

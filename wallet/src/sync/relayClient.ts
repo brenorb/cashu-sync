@@ -105,7 +105,7 @@ export class SyncRelayClient {
   }
 
   queryCurrent(): Promise<Event | null> {
-    return this.run({ type: "query" }) as Promise<Event | null>;
+    return this.queryWithRetry({ type: "query" }) as Promise<Event | null>;
   }
 
   queryRecent(limit: number): Promise<Event[]> {
@@ -115,7 +115,29 @@ export class SyncRelayClient {
         "retained-history limit must be between 1 and 100"
       );
     }
-    return this.run({ type: "query-recent", limit }) as Promise<Event[]>;
+    return this.queryWithRetry({ type: "query-recent", limit }) as Promise<
+      Event[]
+    >;
+  }
+
+  private async queryWithRetry(
+    operation: Extract<Operation, { type: "query" | "query-recent" }>
+  ): Promise<OperationResult> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.run(operation);
+      } catch (error) {
+        // Reads are safe to repeat on a fresh connection. A temporary failed
+        // head query must not strand an otherwise recoverable payment. Never
+        // retry authentication, invalid events, or monetary publications here.
+        if (
+          attempt >= 2 ||
+          !(error instanceof SyncRelayClientError) ||
+          !["timeout", "disconnected"].includes(error.code)
+        )
+          throw error;
+      }
+    }
   }
 
   publish(event: Event): Promise<RelayPublishResult> {
