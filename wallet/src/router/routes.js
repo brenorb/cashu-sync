@@ -53,10 +53,7 @@ const routes = [
   },
   {
     path: "/terms",
-    component: () => import("layouts/FullscreenLayout.vue"),
-    children: [
-      { path: "", component: () => import("src/pages/TermsPage.vue") },
-    ],
+    redirect: "/settings/about",
   },
   {
     path: "/:pathMatch(.*)*",
