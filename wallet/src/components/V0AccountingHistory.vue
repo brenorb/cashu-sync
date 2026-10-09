@@ -78,6 +78,8 @@ export default defineComponent({
 
 <style scoped lang="scss">
 .accounting {
+  min-width: 0;
+  overflow-wrap: anywhere;
   border: 1px solid #2c2c2c;
   border-radius: 8px;
   background: #111;
@@ -85,10 +87,15 @@ export default defineComponent({
 
 .accounting-header {
   display: flex;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid #292929;
   padding: 18px 20px;
+}
+
+.accounting-header > * {
+  min-width: 0;
 }
 
 .accounting-eyebrow {
@@ -104,6 +111,7 @@ h2 {
   margin: 0;
   color: #fff;
   font-size: 1.15rem;
+  line-height: 1.3;
   font-weight: 700;
 }
 
@@ -122,7 +130,8 @@ h2 {
 }
 
 .accounting-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -137,7 +146,7 @@ h2 {
 
 .accounting-row__body {
   display: grid;
-  grid-template-columns: auto auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 2px 8px;
   min-width: 0;
 }
@@ -155,10 +164,13 @@ h2 {
 }
 
 .accounting-amount {
-  flex: none;
+  justify-self: end;
+  min-width: 0;
+  max-width: 100%;
+  text-align: right;
   color: #fff;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .accounting-amount--mint {

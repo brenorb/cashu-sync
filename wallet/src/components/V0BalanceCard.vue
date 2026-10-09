@@ -37,6 +37,8 @@ export default defineComponent({
 
 <style scoped lang="scss">
 .balance-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   position: relative;
   overflow: hidden;
   border: 1px solid #343434;
@@ -70,7 +72,7 @@ export default defineComponent({
   font-size: clamp(2.5rem, 14vw, 4rem);
   font-weight: 700;
   letter-spacing: -0.045em;
-  line-height: 1;
+  line-height: 1.15;
 }
 
 .mint-status {
@@ -82,6 +84,7 @@ export default defineComponent({
 }
 
 .mint-status__mark {
+  flex-shrink: 0;
   width: 7px;
   height: 7px;
   background: var(--sl-color-orange-500, #ff5c00);
