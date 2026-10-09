@@ -183,4 +183,10 @@ h2 {
   color: #898989;
   text-align: center;
 }
+@media (max-width: 480px) {
+  .accounting-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
 </style>

@@ -1,7 +1,12 @@
 <template>
   <section class="balance-card" aria-labelledby="v0-balance-title">
     <p id="v0-balance-title" class="balance-eyebrow">Available balance</p>
-    <p class="balance-value" role="status" aria-live="polite">
+    <p
+      class="balance-value"
+      :class="{ 'balance-value--long': formattedBalance.length > 9 }"
+      role="status"
+      aria-live="polite"
+    >
       {{ formattedBalance }}
     </p>
     <div class="mint-status">
@@ -73,6 +78,10 @@ export default defineComponent({
   font-weight: 700;
   letter-spacing: -0.045em;
   line-height: 1.15;
+}
+
+.balance-value--long {
+  font-size: clamp(1.25rem, 8vw, 2.5rem);
 }
 
 .mint-status {
