@@ -17,7 +17,7 @@
   >
     <section
       v-if="incomingPairing"
-      class="pairing-incoming q-pa-xl"
+      class="pairing-incoming"
       role="status"
       aria-live="polite"
     >
@@ -513,11 +513,28 @@ export default defineComponent({
 <style scoped lang="scss">
 .pairing-incoming {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
+  padding: clamp(16px, 4vw, 32px);
   gap: 1rem;
   min-height: 18rem;
   text-align: center;
   align-content: center;
+}
+
+.pairing-incoming > * {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pairing-incoming h2 {
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
 .pairing-incoming__mark {
@@ -603,10 +620,21 @@ export default defineComponent({
 
 .wallet-id {
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  gap: 10px;
   border-left: 3px solid var(--sl-color-orange-500, #ff5c00);
   padding: 10px 12px;
   background: rgba(255, 157, 32, 0.06);
+}
+
+.wallet-id > *,
+.pairing-success__id > * {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 
 .wallet-id__label,
@@ -642,7 +670,9 @@ export default defineComponent({
 
 .overwrite-dialog h2 {
   margin: 0 0 10px;
-  font-size: 1.55rem;
+  font-size: clamp(1.25rem, 6vw, 1.55rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
   letter-spacing: -0.02em;
 }
 
@@ -654,11 +684,24 @@ export default defineComponent({
 
 .overwrite-dialog :deep(.q-card__actions) {
   gap: 8px;
+  flex-wrap: wrap;
   border-top: 1px solid #2d2d2d;
   padding: 14px 24px 20px;
 }
 
+.overwrite-dialog :deep(.q-btn) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.overwrite-dialog :deep(.q-btn__content) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .pairing-message {
+  overflow-wrap: anywhere;
+  line-height: 1.5;
   margin: 20px 4px;
   border-left: 3px solid var(--sl-color-orange-500, #ff5c00);
   padding: 10px 12px;
@@ -675,10 +718,12 @@ export default defineComponent({
   z-index: 20;
   inset: 0;
   display: grid;
-  place-content: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: safe center;
   justify-items: center;
   gap: 10px;
-  padding: 32px;
+  overflow-y: auto;
+  padding: clamp(16px, 4vw, 32px);
   color: #fff;
   text-align: center;
   background: radial-gradient(
@@ -687,6 +732,12 @@ export default defineComponent({
       transparent 32%
     ),
     rgba(9, 9, 9, 0.97);
+}
+
+.pairing-success > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .pairing-success__signal {
@@ -745,8 +796,9 @@ export default defineComponent({
 
 .pairing-success h2 {
   margin: 0;
-  font-size: clamp(2rem, 9vw, 3rem);
-  line-height: 1;
+  font-size: clamp(1.5rem, 7vw, 2.5rem);
+  line-height: 1.2;
+  text-wrap: balance;
 }
 
 .pairing-success > p:last-child {
@@ -756,8 +808,9 @@ export default defineComponent({
 
 .pairing-success__id {
   display: grid;
-  gap: 6px;
-  max-width: 32rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  width: min(100%, 32rem);
   margin-top: 8px;
   padding: 12px 16px;
   border: 1px solid rgba(255, 157, 32, 0.45);
