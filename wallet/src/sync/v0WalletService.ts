@@ -59,6 +59,7 @@ export type MeltQuoteView = {
 };
 
 type BrowserWalletPort = {
+  mnemonic?: string;
   activeWallet(updateKeysets?: boolean): Promise<Wallet>;
   getKeyset(mintUrl?: string | null, unit?: string | null): string;
 };
@@ -545,6 +546,11 @@ export class V0WalletService {
   private async ensureWallet(): Promise<Wallet> {
     const session = this.requireSession();
     if (this.wallet === null || this.coordinatorSession !== session) {
+      if ("mnemonic" in this.walletPort) {
+        this.walletPort.mnemonic = (
+          await this.runtimeService.exportAuthority()
+        ).mnemonic;
+      }
       this.wallet = await this.walletPort.activeWallet(true);
     }
     return this.wallet;

@@ -54,6 +54,8 @@ const MNEMONIC =
 beforeEach(async () => {
   setActivePinia(createPinia());
   vi.clearAllMocks();
+  runtimeImport.mockReset();
+  bootstrapAuthorityMint.mockReset().mockResolvedValue(undefined);
   authorityLoad.mockReturnValue(null);
   Object.assign(mintStore, {
     mints: [],
@@ -67,6 +69,86 @@ beforeEach(async () => {
 });
 
 describe("SyncRuntimeService", () => {
+  it("re-pairs the same funded authority without deleting local proofs or its checkpoint", async () => {
+    const authority = {
+      schema: 0,
+      mnemonic: MNEMONIC,
+      sync_secret: "1".repeat(64),
+      mint_url: "http://127.0.0.1:3338",
+      relay_url: "ws://127.0.0.1:3344",
+      head_event_id: "a".repeat(64),
+    };
+    authorityLoad.mockReturnValue(authority);
+    await cashuDb.proofs.put({
+      id: "00c0ffee",
+      amount: 100,
+      secret: "local-proof",
+      C: "02aa",
+      reserved: false,
+    });
+    const state = {
+      id: "wallet" as const,
+      revision: 4,
+      head_event_id: authority.head_event_id,
+      counters: { "00c0ffee": 8 },
+      pending_operation: null,
+    };
+    await cashuDb.walletSyncState.put(state);
+    const service = new SyncRuntimeService({
+      storage: new MapStorage(),
+      allowLoopbackHttp: true,
+    });
+
+    await expect(
+      service.replaceEmptyAndStart({
+        ...authority,
+        head_event_id: "b".repeat(64),
+      })
+    ).resolves.toMatchObject({ sync: { status: "ready" } });
+
+    expect(await cashuDb.proofs.get("local-proof")).toMatchObject({
+      amount: 100,
+    });
+    expect(await cashuDb.walletSyncState.get("wallet")).toEqual(state);
+    expect(authorityClear).not.toHaveBeenCalled();
+    expect(runtimeImport).not.toHaveBeenCalled();
+    expect(runtimeStart).toHaveBeenCalledOnce();
+  });
+
+  it("never erases a funded wallet when a different authority cannot be imported", async () => {
+    const authority = {
+      schema: 0,
+      mnemonic: MNEMONIC,
+      sync_secret: "1".repeat(64),
+      mint_url: "http://127.0.0.1:3338",
+      relay_url: "ws://127.0.0.1:3344",
+      head_event_id: "a".repeat(64),
+    };
+    authorityLoad.mockReturnValue(authority);
+    await cashuDb.proofs.put({
+      id: "00c0ffee",
+      amount: 100,
+      secret: "local-proof",
+      C: "02aa",
+      reserved: false,
+    });
+    runtimeImport.mockRejectedValueOnce(new Error("relay unavailable"));
+    const service = new SyncRuntimeService({
+      storage: new MapStorage(),
+      allowLoopbackHttp: true,
+    });
+    await expect(
+      service.replaceEmptyAndStart({
+        ...authority,
+        sync_secret: "2".repeat(64),
+      })
+    ).rejects.toThrow();
+    expect(await cashuDb.proofs.get("local-proof")).toMatchObject({
+      amount: 100,
+    });
+    expect(authorityClear).not.toHaveBeenCalled();
+  });
+
   it("boots an already configured cached USD mint without a network bootstrap", async () => {
     const mintUrl = "http://127.0.0.1:3338";
     authorityLoad.mockReturnValue({
@@ -192,7 +274,7 @@ describe("SyncRuntimeService", () => {
     );
   });
 
-  it("allows an explicit overwrite after the local wallet warning", async () => {
+  it("refuses to replace a different funded wallet", async () => {
     const imported = {
       schema: 0,
       mnemonic: MNEMONIC,
@@ -214,13 +296,11 @@ describe("SyncRuntimeService", () => {
       reserved: false,
     });
 
-    await expect(
-      service.replaceEmptyAndStart(imported, { overwrite: true })
-    ).resolves.toMatchObject({
-      authority: imported,
-      sync: { status: "ready" },
-    });
-    expect(await cashuDb.proofs.count()).toBe(0);
+    await expect(service.replaceEmptyAndStart(imported)).rejects.toThrow(
+      /empty local wallet/
+    );
+    expect(await cashuDb.proofs.count()).toBe(1);
+    expect(runtimeImport).not.toHaveBeenCalled();
   });
 
   it("restores the exact mint state when first-time recovery fails", async () => {

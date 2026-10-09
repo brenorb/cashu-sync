@@ -194,57 +194,27 @@
       <q-card class="overwrite-dialog">
         <q-card-section>
           <p class="v0-eyebrow">WALLET FOUND</p>
-          <h2>Replace this wallet?</h2>
+          <h2>Keep this wallet safe</h2>
           <p class="sync-copy">
-            This phone already has local wallet data. Pairing will replace it
-            with the wallet from the other phone.
+            This QR belongs to a different wallet. Your local funds and recovery
+            data are preserved. To reconnect this wallet, scan a QR from a phone
+            with the same Wallet ID.
           </p>
-        </q-card-section>
-        <q-card-section class="overwrite-dialog__backup">
-          <q-input
-            v-model="backupPassphrase"
-            data-pairing-field="backup-passphrase"
-            dark
-            outlined
-            type="password"
-            label="Backup passphrase"
-            hint="Optional: save an encrypted copy before replacing"
-          />
-          <q-input
-            v-if="backupPassphrase"
-            v-model="backupConfirmation"
-            data-pairing-field="backup-confirmation"
-            dark
-            outlined
-            type="password"
-            label="Confirm passphrase"
-          />
-          <q-btn
-            data-pairing-action="save-local-backup"
-            outline
-            color="primary"
-            no-caps
-            :loading="backupBusy"
-            label="Save encrypted backup"
-            @click="saveLocalBackup"
-          />
         </q-card-section>
         <q-card-actions align="right">
           <q-btn
             data-pairing-action="cancel-overwrite"
             flat
             no-caps
-            label="Cancel"
+            label="Keep this wallet"
             @click="cancelOverwrite"
           />
           <q-btn
-            data-pairing-action="overwrite-and-pair"
+            outline
             color="primary"
             no-caps
-            unelevated
-            :loading="busy"
-            label="Replace and pair"
-            @click="overwriteExistingWallet"
+            label="Recovery & backup"
+            @click="$router.push('/settings/recovery')"
           />
         </q-card-actions>
       </q-card>
@@ -288,7 +258,6 @@ import {
   AutoPairingJoinSession,
   createAutoPairingUrl,
 } from "src/sync/automaticPairing";
-import { encryptRecoveryBundleV0 } from "src/sync/recoveryBundle";
 import type { AuthorityPayloadV0 } from "src/sync/authorityPayload";
 import { deriveWalletIdWords } from "src/sync/walletIdentity";
 import { useSyncRuntimeService } from "src/sync/syncRuntimeService";
@@ -317,10 +286,6 @@ export default defineComponent({
       showPairingQr: false,
       showOverwriteDialog: false,
       busy: false,
-      backupBusy: false,
-      backupPassphrase: "",
-      backupConfirmation: "",
-      pendingPairAuthority: null as AuthorityPayloadV0 | null,
       failed: false,
       message: "",
       pairingSuccess: false,
@@ -439,7 +404,6 @@ export default defineComponent({
           void this.pairingJoin!.start(
             async (authority) => {
               try {
-                this.pendingPairAuthority = authority;
                 await this.applyPairing(authority);
                 resolve();
               } catch (error) {
@@ -450,7 +414,7 @@ export default defineComponent({
                 ) {
                   this.showOverwriteDialog = true;
                   this.message =
-                    "This phone already has a wallet. Choose whether to save it or replace it.";
+                    "This QR belongs to another wallet. Your current wallet is preserved.";
                   resolve();
                   return;
                 }
@@ -462,9 +426,9 @@ export default defineComponent({
         });
       });
     },
-    async applyPairing(authority: AuthorityPayloadV0, overwrite = false) {
+    async applyPairing(authority: AuthorityPayloadV0) {
       const runtime = useSyncRuntimeService();
-      await runtime.replaceEmptyAndStart(authority, { overwrite });
+      await runtime.replaceEmptyAndStart(authority);
       resetV0WalletService();
       let recoveryPending = false;
       try {
@@ -491,57 +455,8 @@ export default defineComponent({
     },
     cancelOverwrite() {
       this.showOverwriteDialog = false;
-      this.pendingPairAuthority = null;
       this.incomingPairing = false;
-      this.backupPassphrase = "";
-      this.backupConfirmation = "";
       this.message = "Pairing cancelled. This wallet was not changed.";
-    },
-    async saveLocalBackup() {
-      this.backupBusy = true;
-      this.failed = false;
-      try {
-        if (this.backupPassphrase !== this.backupConfirmation) {
-          throw new Error("backup passphrases do not match");
-        }
-        const runtime = useSyncRuntimeService();
-        const bundle = await encryptRecoveryBundleV0(
-          await runtime.exportAuthority(),
-          this.backupPassphrase,
-          { allowLoopbackHttp: runtime.allowLoopbackHttp }
-        );
-        const url = URL.createObjectURL(
-          new Blob([bundle], { type: "application/json" })
-        );
-        try {
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = `silent-link-wallet-backup-${new Date()
-            .toISOString()
-            .slice(0, 10)}.json`;
-          link.click();
-        } finally {
-          URL.revokeObjectURL(url);
-        }
-        this.message =
-          "Encrypted backup downloaded. You can now replace this wallet.";
-        this.backupPassphrase = "";
-        this.backupConfirmation = "";
-      } catch (error) {
-        this.failed = true;
-        this.message = error instanceof Error ? error.message : "Backup failed";
-      } finally {
-        this.backupBusy = false;
-      }
-    },
-    async overwriteExistingWallet() {
-      const authority = this.pendingPairAuthority;
-      if (authority === null) return;
-      await this.run(async () => {
-        await this.applyPairing(authority, true);
-        this.showOverwriteDialog = false;
-        this.pendingPairAuthority = null;
-      });
     },
     showPairingSuccess() {
       if (this.walletIdWords.length === 0) void this.loadWalletId();

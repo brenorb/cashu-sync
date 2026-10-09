@@ -92,6 +92,29 @@ afterEach(async () => {
 });
 
 describe("V0WalletService quote fencing", () => {
+  it("binds the in-memory Cashu seed to the imported authority before constructing outputs", async () => {
+    const mnemonic =
+      "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const port = {
+      mnemonic: "old local mnemonic",
+      activeWallet: vi.fn(async () => {
+        expect(port.mnemonic).toBe(mnemonic);
+        return walletMock({
+          createMintQuoteBolt11: vi.fn(async () => mintQuote),
+        });
+      }),
+      getKeyset: () => "00c0ffee",
+    };
+    const service = new V0WalletService(
+      {
+        ...runtimeService,
+        exportAuthority: async () => ({ mnemonic }),
+      } as never,
+      port
+    );
+    await service.requestMintQuote(25);
+  });
+
   it("does not initialize the mint when the relay resolves the pending operation", async () => {
     session.repository.exportSnapshot.mockResolvedValue({
       pending_operation: {
