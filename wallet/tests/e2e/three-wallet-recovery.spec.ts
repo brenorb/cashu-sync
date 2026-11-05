@@ -277,9 +277,10 @@ test("three wallets preserve money through races, lost responses, stale history 
         process.env.CASHU_SYNC_PAIRING_RELAY_URL ||
           "wss://cashu-sync-pairing-relay.fly.dev",
       ];
-      if (!allowed.includes(socket.url().replace(/\/$/, "")))
+      if (!allowed.includes(socket.url().replace(/\/$/, ""))) {
         unexpectedDestinations.add(new URL(socket.url()).origin);
-      if (!socket.url().includes("relay")) return;
+        return;
+      }
       socket.on("framesent", ({ payload }) => frames.push(String(payload)));
     });
     page.setDefaultTimeout(30_000);

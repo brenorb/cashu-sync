@@ -1,0 +1,97 @@
+name: Wallet recovery
+
+on:
+  pull_request:
+    paths:
+      - "wallet/**"
+      - "relay/**"
+      - "integration/nutshell/**"
+      - ".github/workflows/recovery.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recovery-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  browser-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CASHU_SYNC_NUTSHELL_PROJECT: recovery-${{ github.run_id }}
+      CASHU_SYNC_NUTSHELL_URL: http://127.0.0.1:3338
+      CASHU_SYNC_MINT_URL: http://127.0.0.1:3338
+      CASHU_SYNC_RELAY_URL: ws://127.0.0.1:3334
+      CASHU_SYNC_PAIRING_RELAY_URL: ws://127.0.0.1:3335
+      CASHU_SYNC_ALLOW_INSECURE_LOOPBACK: "true"
+      CASHU_SYNC_TOPUP_MODE: internal-demo
+      CASHU_SYNC_E2E_REQUIRE_LIVE: "1"
+      CASHU_SYNC_E2E_THREE_WALLETS: "1"
+      PLAYWRIGHT_CHANNEL: chromium
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+          cache-dependency-path: wallet/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: relay/go.mod
+          cache-dependency-path: relay/go.sum
+      - name: Install wallet and browser dependencies
+        working-directory: wallet
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Start pinned disposable FakeWallet mint
+        run: ./integration/nutshell/nutshell.sh up
+      - name: Build local relays
+        working-directory: relay
+        run: |
+          go build -o "$RUNNER_TEMP/sync-relay" ./cmd/cashu-sync-relay
+          go build -o "$RUNNER_TEMP/pairing-relay" ./cmd/cashu-sync-pairing-relay
+      - name: Start local relays
+        run: |
+          CASHU_SYNC_ADMISSION_MODE=open \
+            CASHU_SYNC_DB_PATH="$RUNNER_TEMP/recovery.db" \
+            CASHU_SYNC_LISTEN_ADDR=127.0.0.1:3334 \
+            "$RUNNER_TEMP/sync-relay" > "$RUNNER_TEMP/sync-relay.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/sync-relay.pid"
+          CASHU_SYNC_PAIRING_LISTEN_ADDR=127.0.0.1:3335 \
+            "$RUNNER_TEMP/pairing-relay" > "$RUNNER_TEMP/pairing-relay.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/pairing-relay.pid"
+          python3 - <<'PY'
+          import time
+          import urllib.request
+          for port in (3334, 3335):
+              for attempt in range(60):
+                  try:
+                      with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=1) as response:
+                          if response.status == 200:
+                              break
+                  except OSError:
+                      pass
+                  time.sleep(1)
+              else:
+                  raise SystemExit(f"Local relay on port {port} did not become ready")
+          PY
+      - name: Build the local test wallet
+        working-directory: wallet
+        run: npm run build:pwa:e2e
+      - name: Verify stale wallets, concurrent operations and lost responses
+        working-directory: wallet
+        run: npx playwright test tests/e2e/three-wallet-recovery.spec.ts --reporter=line
+      - name: Stop disposable services
+        if: always()
+        run: |
+          for service in sync-relay pairing-relay; do
+            if test -f "$RUNNER_TEMP/$service.pid"; then
+              kill "$(cat "$RUNNER_TEMP/$service.pid")" 2>/dev/null || true
+            fi
+          done
+          ./integration/nutshell/nutshell.sh down
