@@ -743,6 +743,149 @@ describe("SnapshotSyncCoordinator pending journal protection", () => {
 });
 
 describe("SnapshotSyncCoordinator pruned-history recovery", () => {
+  it.each(["rejected", "disconnected"] as const)(
+    "preserves local state when recovery publication is %s without a winner",
+    async (failure) => {
+      const local = snapshot(2, HEAD_A);
+      local.proofs = [
+        { id: "k", secret: "local-only", C: "c", amount: 500, reserved: false },
+      ];
+      const value = fixture(local);
+      value.relay.current = event(HEAD_B, "e".repeat(64));
+      value.crypto.decrypted.set(HEAD_B, snapshot(30, "e".repeat(64)));
+      value.relay.publishResult =
+        failure === "rejected"
+          ? {
+              status: "rejected",
+              reason: "relay unavailable",
+              category: "relay",
+            }
+          : { status: "ambiguous", cause: "disconnected" };
+      const coordinator = new SnapshotSyncCoordinator({
+        relay: value.relay,
+        repository: value.repository,
+        crypto: value.crypto,
+        syncSecret: SECRET,
+        configuredMint: MINT,
+        reconcileProofs: async (proofs) => proofs,
+      });
+
+      if (failure === "rejected") {
+        await expect(coordinator.pull()).rejects.toMatchObject({
+          code: "publish-rejected",
+        });
+      } else {
+        await expect(coordinator.pull()).resolves.toMatchObject({
+          status: "recovery-pending",
+        });
+      }
+      expect(value.repository.state).toEqual(local);
+      expect(value.repository.applied).toHaveLength(0);
+    }
+  );
+
+  it("recovers a remotely accepted union after local persistence fails", async () => {
+    const local = snapshot(2, HEAD_A);
+    local.proofs = [
+      { id: "k", secret: "local-only", C: "c", amount: 500, reserved: false },
+    ];
+    const value = fixture(local);
+    value.relay.current = event(HEAD_B, "e".repeat(64));
+    value.crypto.decrypted.set(HEAD_B, snapshot(30, "e".repeat(64)));
+    value.relay.publish.mockImplementationOnce(async (candidate) => {
+      value.relay.current = candidate;
+      return { status: "accepted", reason: "stored" };
+    });
+    vi.spyOn(value.repository, "applySnapshot").mockRejectedValueOnce(
+      new Error("storage unavailable")
+    );
+    const createCoordinator = () =>
+      new SnapshotSyncCoordinator({
+        relay: value.relay,
+        repository: value.repository,
+        crypto: value.crypto,
+        syncSecret: SECRET,
+        configuredMint: MINT,
+        reconcileProofs: async (proofs) => proofs,
+      });
+
+    await expect(createCoordinator().pull()).rejects.toMatchObject({
+      code: "local-apply",
+      acceptedEventId: HEAD_C,
+    });
+    expect(value.repository.state).toEqual(local);
+    await expect(createCoordinator().pull()).resolves.toMatchObject({
+      status: "applied",
+      eventId: HEAD_C,
+      revision: 31,
+    });
+    expect(value.repository.state.proofs).toEqual(local.proofs);
+    expect(value.relay.publish).toHaveBeenCalledOnce();
+  });
+
+  it.each(["conflict", "timeout", "disconnected"] as const)(
+    "preserves the old checkpoint across recovery publication %s and reload",
+    async (outcome) => {
+      const local = snapshot(2, HEAD_A);
+      local.proofs = [
+        { id: "k", secret: "local-only", C: "c", amount: 500, reserved: false },
+      ];
+      local.counters = { k: 20 };
+      const remote = snapshot(30, "e".repeat(64));
+      remote.proofs = [
+        { id: "k", secret: "remote", C: "d", amount: 9000, reserved: false },
+      ];
+      remote.counters = { k: 10 };
+      const value = fixture(local);
+      value.relay.current = event(HEAD_B, remote.previous_event_id);
+      value.crypto.decrypted.set(HEAD_B, remote);
+      const winnerId = "d".repeat(64);
+      value.relay.publish.mockImplementationOnce(async () => {
+        // A paired device advances the relay while this device checks the mint.
+        value.relay.current = event(winnerId, HEAD_B);
+        value.crypto.decrypted.set(winnerId, {
+          ...remote,
+          revision: 31,
+          previous_event_id: HEAD_B,
+        });
+        return outcome === "conflict"
+          ? { status: "conflict", reason: "stale previous event" }
+          : { status: "ambiguous", cause: outcome };
+      });
+      const createCoordinator = () =>
+        new SnapshotSyncCoordinator({
+          relay: value.relay,
+          repository: value.repository,
+          crypto: value.crypto,
+          syncSecret: SECRET,
+          configuredMint: MINT,
+          reconcileProofs: async (proofs) => proofs,
+        });
+
+      const first = await createCoordinator().pull();
+      const beforeReload = structuredClone(value.repository.state);
+      const applicationsBeforeReload = value.repository.applied.length;
+
+      // A new coordinator models a reload. It must reconcile the local-only
+      // proof again instead of accepting the winner as an ordinary direct child.
+      const second = await createCoordinator().pull();
+      expect(value.repository.state.proofs).toEqual([
+        ...remote.proofs,
+        ...local.proofs,
+      ]);
+      expect(value.repository.state.counters.k).toBe(20);
+      expect(first).toMatchObject({
+        status: "recovery-pending",
+        eventId: HEAD_A,
+        revision: 2,
+      });
+      expect(beforeReload).toEqual(local);
+      expect(applicationsBeforeReload).toBe(0);
+      expect(second).toMatchObject({ status: "applied", revision: 32 });
+      expect(value.repository.applied).toHaveLength(1);
+    }
+  );
+
   it("replaces an entirely spent old balance with mint-confirmed current tokens", async () => {
     const local = snapshot(2, HEAD_A);
     local.proofs = [
