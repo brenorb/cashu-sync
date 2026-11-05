@@ -4,6 +4,9 @@ import { SYNC_EVENT_D_TAG_V0, SYNC_EVENT_KIND_V0 } from "src/sync/types";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_TIMEOUT_MS = 30_000;
+const WATCH_RECONNECT_MS = 1_000;
+// The sync relay's read quota uses a fixed one-minute window.
+const WATCH_RATE_LIMIT_RECONNECT_MS = 60_000;
 const MAX_CIPHERTEXT_CHARS_V0 = 100_000;
 const HEX_EVENT_ID = /^[0-9a-f]{64}$/;
 
@@ -174,12 +177,12 @@ export class SyncRelayClient {
       }
     };
 
-    const scheduleReconnect = (): void => {
+    const scheduleReconnect = (delayMs = WATCH_RECONNECT_MS): void => {
       if (stopped || reconnectTimer !== null) return;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
         connect();
-      }, 1_000);
+      }, delayMs);
     };
 
     const closeConnection = (): void => {
@@ -200,11 +203,11 @@ export class SyncRelayClient {
       socket = null;
     };
 
-    const reconnect = (): void => {
+    const reconnect = (delayMs = WATCH_RECONNECT_MS): void => {
       if (stopped) return;
       reportStatus("disconnected");
       closeConnection();
-      scheduleReconnect();
+      scheduleReconnect(delayMs);
     };
 
     const send = (envelope: unknown[]): boolean => {
@@ -246,8 +249,8 @@ export class SyncRelayClient {
       subscriptionId = null;
       const currentSocket = socket;
       currentSocket.onopen = request;
-      currentSocket.onclose = reconnect;
-      currentSocket.onerror = reconnect;
+      currentSocket.onclose = () => reconnect();
+      currentSocket.onerror = () => reconnect();
       currentSocket.onmessage = ({ data }) => {
         if (stopped || currentSocket !== socket || typeof data !== "string") {
           return;
@@ -318,9 +321,14 @@ export class SyncRelayClient {
             return;
           }
           case "CLOSED": {
+            if (envelope[1] !== subscriptionId) return;
             const reason = typeof envelope[2] === "string" ? envelope[2] : "";
             if (!authenticated && reason.startsWith("auth-required:")) return;
-            reconnect();
+            reconnect(
+              authenticated && reason.startsWith("rate-limited:")
+                ? WATCH_RATE_LIMIT_RECONNECT_MS
+                : WATCH_RECONNECT_MS
+            );
             return;
           }
         }

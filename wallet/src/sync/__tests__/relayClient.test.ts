@@ -191,6 +191,152 @@ describe("SyncRelayClient", () => {
     stop();
   });
 
+  it("waits for the read quota window before reconnecting and receives new events", () => {
+    vi.useFakeTimers();
+    const { client, sockets } = fixture();
+    const received: Event[] = [];
+    const statuses: string[] = [];
+    const stop = client.watchCurrent(
+      (event) => received.push(event),
+      (status) => statuses.push(status)
+    );
+    const first = sockets[0];
+    first.open();
+    authenticate(first);
+    first.receive([
+      "CLOSED",
+      sentEnvelope(first, 3)[1],
+      "rate-limited: too many snapshot requests",
+    ]);
+    expect(first.closed).toBe(true);
+    expect(statuses.at(-1)).toBe("disconnected");
+
+    vi.advanceTimersByTime(1_000);
+    expect(sockets).toHaveLength(1);
+    vi.advanceTimersByTime(58_999);
+    expect(sockets).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(sockets).toHaveLength(2);
+    const recovered = sockets[1];
+    recovered.open();
+    authenticate(recovered);
+    const event = syncEvent();
+    recovered.receive(["EVENT", sentEnvelope(recovered, 3)[1], event]);
+    expect(received).toEqual([JSON.parse(JSON.stringify(event))]);
+    expect(statuses.at(-1)).toBe("connected");
+    recovered.disconnect();
+    vi.advanceTimersByTime(999);
+    expect(sockets).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(sockets).toHaveLength(3);
+    stop();
+  });
+
+  it("keeps repeated quota rejections bounded to one reconnect per minute", () => {
+    vi.useFakeTimers();
+    const { client, sockets } = fixture();
+    const stop = client.watchCurrent(() => undefined);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const socket = sockets[attempt];
+      socket.open();
+      authenticate(socket);
+      socket.receive([
+        "CLOSED",
+        sentEnvelope(socket, 3)[1],
+        "rate-limited: too many snapshot requests",
+      ]);
+      vi.advanceTimersByTime(59_999);
+      expect(sockets).toHaveLength(attempt + 1);
+      vi.advanceTimersByTime(1);
+      expect(sockets).toHaveLength(attempt + 2);
+    }
+    stop();
+  });
+
+  it.each([
+    ["close", "onclose"],
+    ["error", "onerror"],
+  ] as const)(
+    "keeps the normal retry delay when a native %s event is delivered",
+    (type, handler) => {
+      vi.useFakeTimers();
+      const { client, sockets } = fixture();
+      const stop = client.watchCurrent(() => undefined);
+      const socket = sockets[0];
+      socket.open();
+      authenticate(socket);
+      Reflect.apply(socket[handler]!, socket, [{ type }]);
+      vi.advanceTimersByTime(999);
+      expect(sockets).toHaveLength(1);
+      vi.advanceTimersByTime(1);
+      expect(sockets).toHaveLength(2);
+      stop();
+    }
+  );
+
+  it("cancels a pending quota delay when explicitly stopped", () => {
+    vi.useFakeTimers();
+    const { client, sockets } = fixture();
+    const stop = client.watchCurrent(() => undefined);
+    const socket = sockets[0];
+    socket.open();
+    authenticate(socket);
+    const lateClose = socket.onclose!;
+    socket.receive([
+      "CLOSED",
+      sentEnvelope(socket, 3)[1],
+      "rate-limited: too many snapshot requests",
+    ]);
+    vi.advanceTimersByTime(30_000);
+    expect(sockets).toHaveLength(1);
+    stop();
+    Reflect.apply(lateClose, socket, [{ type: "close" }]);
+    vi.advanceTimersByTime(120_000);
+    expect(sockets).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("ignores quota rejections for another subscription", () => {
+    vi.useFakeTimers();
+    const { client, sockets } = fixture();
+    const received: Event[] = [];
+    const stop = client.watchCurrent((event) => received.push(event));
+    const socket = sockets[0];
+    socket.open();
+    authenticate(socket);
+    socket.receive([
+      "CLOSED",
+      "unrelated-subscription",
+      "rate-limited: too many snapshot requests",
+    ]);
+    expect(socket.closed).toBe(false);
+    const event = syncEvent();
+    socket.receive(["EVENT", sentEnvelope(socket, 3)[1], event]);
+    expect(received).toHaveLength(1);
+    vi.advanceTimersByTime(60_000);
+    expect(sockets).toHaveLength(1);
+    stop();
+  });
+
+  it("keeps the normal retry delay for other matching subscription rejections", () => {
+    vi.useFakeTimers();
+    const { client, sockets } = fixture();
+    const stop = client.watchCurrent(() => undefined);
+    const socket = sockets[0];
+    socket.open();
+    authenticate(socket);
+    socket.receive([
+      "CLOSED",
+      sentEnvelope(socket, 3)[1],
+      "error: unavailable",
+    ]);
+    vi.advanceTimersByTime(999);
+    expect(sockets).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(sockets).toHaveLength(2);
+    stop();
+  });
+
   it("returns null on matching EOSE and rejects a wrong schema envelope", async () => {
     const emptyFixture = fixture();
     const emptyQuery = emptyFixture.client.queryCurrent();
