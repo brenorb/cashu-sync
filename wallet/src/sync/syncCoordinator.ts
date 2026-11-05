@@ -70,6 +70,7 @@ export type PublishCandidateOptions = { applyAccepted?: boolean };
 export type PullOutcome =
   | { status: "empty" }
   | { status: "noop"; eventId: string; revision: number }
+  | { status: "recovery-pending"; eventId: string; revision: number }
   | {
       status: "applied";
       mode: "genesis" | "child" | "bootstrap";
@@ -308,11 +309,14 @@ export class SnapshotSyncCoordinator {
     for (const [key, value] of Object.entries(local.counters)) {
       recovered.counters[key] = Math.max(value, recovered.counters[key] ?? 0);
     }
-    await this.applyLocal(recovered, eventId);
-    // Publish any preserved local tokens or mint corrections through normal CAS.
-    // A conflict leaves the reconciled local material durable for the next pull.
+    // Keep the old durable checkpoint until the merged state wins CAS. Advancing
+    // it first would let a competing direct child erase local-only tokens on
+    // the next pull, including after a reload.
     if (!sameSnapshot(recovered, incoming)) {
-      const published = await this.publishUnlocked();
+      const published = await this.publishUnlocked(undefined, true, {
+        ...recovered,
+        previous_event_id: eventId,
+      });
       if (published.status === "accepted") {
         return {
           status: "applied",
@@ -321,7 +325,13 @@ export class SnapshotSyncCoordinator {
           revision: published.revision,
         };
       }
+      return {
+        status: "recovery-pending",
+        eventId: local.previous_event_id,
+        revision: local.revision,
+      };
     }
+    await this.applyLocal(recovered, eventId);
     return {
       status: "applied",
       mode: "child",
@@ -461,9 +471,10 @@ export class SnapshotSyncCoordinator {
 
   private async publishUnlocked(
     suppliedCandidate?: SnapshotV0,
-    applyAccepted = true
+    applyAccepted = true,
+    recoveryBaseline?: SnapshotV0
   ): Promise<PublishOutcome> {
-    const local = await this.repository.exportSnapshot();
+    const local = recoveryBaseline ?? (await this.repository.exportSnapshot());
     this.assertLocalBaseline(local);
     if (local.revision >= Number.MAX_SAFE_INTEGER) {
       throw new SnapshotSyncCoordinatorError(

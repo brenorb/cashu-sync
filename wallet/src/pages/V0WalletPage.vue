@@ -315,6 +315,22 @@ export default defineComponent({
             this.mintQuote = null;
           }
         }
+        const meltQuoteId = this.meltQuote?.quote;
+        if (meltQuoteId) {
+          const quote = await cashuDb.meltQuotes.get(meltQuoteId);
+          if (
+            quote?.state === "PAID" &&
+            this.meltQuote?.quote === meltQuoteId
+          ) {
+            this.syncMessage = "Credits spent and synchronized.";
+            this.showMeltDialog = false;
+            this.meltQuote = null;
+            this.meltAmount = "1";
+            this.meltRequest = "";
+            this.meltInvoiceMode = false;
+            this.dialogError = "";
+          }
+        }
       } catch {
         // Network recovery and paid-invoice claiming continue on the next tick.
       } finally {

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	syncrelay "github.com/silentlink/cashu-sync/relay/internal/relay"
 )
 
 func TestLoadDefaults(t *testing.T) {
@@ -16,6 +18,37 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if config.Host != "127.0.0.1" || config.Port != 3334 || config.DatabasePath != "./data/cashu-sync.db" || config.MaxHistory != 8 || config.AdmissionMode != AdmissionOpen {
 		t.Fatalf("unexpected defaults: %+v", config)
+	}
+	policyDefaults := syncrelay.DefaultConfig()
+	if config.WritesPerMinute != 60 || config.RequestsPerMinute != 120 ||
+		config.WritesPerMinute != policyDefaults.WritesPerMinute || config.RequestsPerMinute != policyDefaults.RequestsPerMinute {
+		t.Fatalf("rate defaults drifted from policy: app=%d/%d policy=%d/%d", config.WritesPerMinute, config.RequestsPerMinute, policyDefaults.WritesPerMinute, policyDefaults.RequestsPerMinute)
+	}
+}
+
+func TestLoadPositiveRateLimits(t *testing.T) {
+	config, err := Load(mapLookup(map[string]string{
+		"CASHU_SYNC_WRITES_PER_MINUTE":   "17",
+		"CASHU_SYNC_REQUESTS_PER_MINUTE": "29",
+	}))
+	if err != nil {
+		t.Fatalf("load rate overrides: %v", err)
+	}
+	if config.WritesPerMinute != 17 || config.RequestsPerMinute != 29 {
+		t.Fatalf("rate overrides not loaded: %+v", config)
+	}
+}
+
+func TestLoadRejectsInvalidRateLimits(t *testing.T) {
+	for _, name := range []string{"CASHU_SYNC_WRITES_PER_MINUTE", "CASHU_SYNC_REQUESTS_PER_MINUTE"} {
+		for _, value := range []string{"", " ", "invalid", "1.5", "0", "-1", "99999999999999999999999999999999999999"} {
+			t.Run(name+"/"+value, func(t *testing.T) {
+				_, err := Load(mapLookup(map[string]string{name: value}))
+				if err == nil || !strings.Contains(err.Error(), name+" must be a positive integer") {
+					t.Fatalf("invalid rate %q accepted or wrong error: %v", value, err)
+				}
+			})
+		}
 	}
 }
 
@@ -84,12 +117,14 @@ func TestLoadAllowlistMode(t *testing.T) {
 		t.Fatalf("write allowlist: %v", err)
 	}
 	values := map[string]string{
-		"CASHU_SYNC_ADMISSION_MODE": string(AdmissionAllowlist),
-		"CASHU_SYNC_LISTEN_ADDR":    "127.0.0.1:8080",
-		"CASHU_SYNC_DB_PATH":        "/var/lib/cashu-sync/relay.db",
-		"CASHU_SYNC_MAX_HISTORY":    "3",
-		"CASHU_SYNC_ALLOWLIST_PATH": allowlist,
-		"CASHU_SYNC_SERVICE_URL":    "wss://sync.example.com/",
+		"CASHU_SYNC_ADMISSION_MODE":      string(AdmissionAllowlist),
+		"CASHU_SYNC_LISTEN_ADDR":         "127.0.0.1:8080",
+		"CASHU_SYNC_DB_PATH":             "/var/lib/cashu-sync/relay.db",
+		"CASHU_SYNC_MAX_HISTORY":         "3",
+		"CASHU_SYNC_ALLOWLIST_PATH":      allowlist,
+		"CASHU_SYNC_SERVICE_URL":         "wss://sync.example.com/",
+		"CASHU_SYNC_WRITES_PER_MINUTE":   "31",
+		"CASHU_SYNC_REQUESTS_PER_MINUTE": "47",
 	}
 	config, err := Load(mapLookup(values))
 	if err != nil {
@@ -103,6 +138,9 @@ func TestLoadAllowlistMode(t *testing.T) {
 	}
 	if len(config.AllowedPubkeys) != 2 {
 		t.Fatalf("allowed pubkeys = %v", config.AllowedPubkeys)
+	}
+	if config.WritesPerMinute != 31 || config.RequestsPerMinute != 47 {
+		t.Fatalf("allowlist rate overrides not loaded: %+v", config)
 	}
 	if _, ok := config.AllowedPubkeys[pubkeyA]; !ok {
 		t.Fatal("first pubkey not loaded")

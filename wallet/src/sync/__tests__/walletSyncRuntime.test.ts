@@ -95,6 +95,31 @@ afterEach(async () => {
 });
 
 describe("WalletSyncRuntime", () => {
+  it("keeps the established wallet available while a recovery publication is pending", async () => {
+    authorityRepository.importAuthority(authority(HEAD));
+    const session = fakeSession(
+      snapshot({ revision: 3, previous_event_id: HEAD })
+    );
+    vi.mocked(session.sync.pull).mockResolvedValue({
+      status: "recovery-pending",
+      eventId: HEAD,
+      revision: 3,
+    });
+    const runtime = new WalletSyncRuntime({
+      authority: authorityRepository,
+      createSession: () => session,
+    });
+
+    await expect(runtime.start()).resolves.toEqual({
+      status: "ready",
+      sync: "recovery-pending",
+      eventId: HEAD,
+      revision: 3,
+    });
+    expect(runtime.currentSession()).toBe(session);
+    expect(session.sync.publishCurrent).not.toHaveBeenCalled();
+  });
+
   it.each(["prepared", "submitted", "response_recorded"] as const)(
     "hands a durable %s journal to recovery before any destructive startup pull",
     async (phase) => {
