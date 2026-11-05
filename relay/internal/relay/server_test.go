@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -201,6 +202,52 @@ func TestWriteRateLimitFollowsPubkeyAcrossIPChanges(t *testing.T) {
 	if response.OK || !strings.HasPrefix(response.Reason, "rate-limited:") {
 		t.Fatalf("second IP bypassed pubkey rate limit: ok=%v reason=%q", response.OK, response.Reason)
 	}
+}
+
+func TestReadRateLimitSharesBudgetAndResetsAtWindowBoundary(t *testing.T) {
+	key := nostr.GeneratePrivateKey()
+	config := allowlistConfig(t, key)
+	config.RequestsPerMinute = 2
+	var clock atomic.Int64
+	clock.Store(time.Now().UnixNano())
+	config.Now = func() time.Time { return time.Unix(0, clock.Load()) }
+	websocketURL, _, _ := protocolServer(t, config)
+	clientA := dialProtocol(t, websocketURL, http.Header{"X-Forwarded-For": {"198.51.100.10"}})
+	clientB := dialProtocol(t, websocketURL, http.Header{"X-Forwarded-For": {"203.0.113.20"}})
+	authenticate(t, clientA, "wss://sync.example.com", key)
+	authenticate(t, clientB, "wss://sync.example.com", key)
+	genesis := testEvent(t, key, config, "", "genesis")
+	publishOK(t, clientA, genesis)
+
+	read := func(client *websocket.Conn, subscription string, allowed bool) {
+		t.Helper()
+		writeEnvelope(t, client, &nostr.ReqEnvelope{
+			SubscriptionID: subscription,
+			Filters:        []nostr.Filter{walletFilter(mustPublicKey(t, key))},
+		})
+		if !allowed {
+			closed := readUntil[*nostr.ClosedEnvelope](t, client)
+			if closed.SubscriptionID != subscription || closed.Reason != "rate-limited: too many snapshot requests" {
+				t.Fatalf("unexpected read rejection: %+v", closed)
+			}
+			return
+		}
+		stored := readUntil[*nostr.EventEnvelope](t, client)
+		if stored.Event.ID != genesis.ID {
+			t.Fatalf("admitted read returned %s, want %s", stored.Event.ID, genesis.ID)
+		}
+		readUntil[*nostr.EOSEEnvelope](t, client)
+	}
+
+	read(clientA, "first", true)
+	read(clientB, "second", true)
+	read(clientA, "third", false)
+	clock.Add(int64(time.Minute - time.Nanosecond))
+	read(clientB, "before-reset", false)
+	clock.Add(1)
+	read(clientA, "after-reset-first", true)
+	read(clientB, "after-reset-second", true)
+	read(clientB, "after-reset-third", false)
 }
 
 func TestCanonicalServiceURLIgnoresForwardedHostSpoofing(t *testing.T) {

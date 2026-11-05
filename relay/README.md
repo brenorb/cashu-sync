@@ -20,6 +20,8 @@ The process reads these environment variables:
 | `CASHU_SYNC_LISTEN_ADDR` | `127.0.0.1:3334` | HTTP/WebSocket bind address |
 | `CASHU_SYNC_DB_PATH` | `./data/cashu-sync.db` | Persistent SQLite database |
 | `CASHU_SYNC_MAX_HISTORY` | `8` | Revisions retained per wallet (1-100) |
+| `CASHU_SYNC_WRITES_PER_MINUTE` | `60` | Positive integer snapshot-write budget per authenticated wallet pubkey |
+| `CASHU_SYNC_REQUESTS_PER_MINUTE` | `120` | Positive integer snapshot-read budget per authenticated wallet pubkey |
 | `CASHU_SYNC_ADMISSION_MODE` | `open` | `open` for loopback-only local testing or `allowlist` for production |
 | `CASHU_SYNC_DEMO_PUBLIC_OPEN` | unset | `true` explicitly permits public `open` mode for disposable demos; unsafe |
 | `CASHU_SYNC_SERVICE_URL` | none | Canonical public HTTPS or WSS origin; required in allowlist mode |
@@ -31,6 +33,18 @@ starting with `#` are ignored. It must contain at least one unique pubkey. Updat
 the file requires a relay restart; removing a key blocks access but does not delete
 its encrypted snapshots. Paired wallets share one sync key, so enroll the wallet
 once, not each device.
+
+Read and write budgets use separate fixed one-minute windows, starting with the
+pubkey's first admitted request. Paired devices share each budget, and the full
+budget can be used in a burst. Authenticated CAS conflicts consume write budget.
+At the end of a window, the next request starts a new window with a full budget.
+An explicitly empty, non-integer, zero, negative, or overflowing budget fails
+startup with `<VARIABLE> must be a positive integer`; correct the named variable
+or unset it to restore the default. A budget can't disable the limiter.
+
+The isolated recovery CI provisions higher budgets for its rapid multi-device
+scenario. This tests money recovery with available relay capacity; it doesn't
+establish client recovery under default-budget throttling.
 
 `open` mode is only for local end-to-end tests and refuses wildcard, LAN, and public
 bind addresses. `allowlist` mode admits only listed NIP-42 pubkeys and fixes Khatru's

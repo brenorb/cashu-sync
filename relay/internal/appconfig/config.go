@@ -13,9 +13,11 @@ import (
 )
 
 const (
-	defaultListenAddress = "127.0.0.1:3334"
-	defaultDatabasePath  = "./data/cashu-sync.db"
-	defaultMaxHistory    = 8
+	defaultListenAddress     = "127.0.0.1:3334"
+	defaultDatabasePath      = "./data/cashu-sync.db"
+	defaultMaxHistory        = 8
+	defaultWritesPerMinute   = 60
+	defaultRequestsPerMinute = 120
 )
 
 type AdmissionMode string
@@ -28,13 +30,15 @@ const (
 var lowercasePubkey = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type Config struct {
-	Host           string
-	Port           int
-	DatabasePath   string
-	MaxHistory     int
-	AdmissionMode  AdmissionMode
-	ServiceURL     string
-	AllowedPubkeys map[string]struct{}
+	Host              string
+	Port              int
+	DatabasePath      string
+	MaxHistory        int
+	WritesPerMinute   int
+	RequestsPerMinute int
+	AdmissionMode     AdmissionMode
+	ServiceURL        string
+	AllowedPubkeys    map[string]struct{}
 }
 
 type LookupEnv func(string) (string, bool)
@@ -65,14 +69,24 @@ func load(lookup LookupEnv, lookupIP lookupIPFunc) (Config, error) {
 	if err != nil || maxHistory < 1 || maxHistory > 100 {
 		return Config{}, errors.New("CASHU_SYNC_MAX_HISTORY must be between 1 and 100")
 	}
+	writesPerMinute, err := positiveInteger(lookup, "CASHU_SYNC_WRITES_PER_MINUTE", defaultWritesPerMinute)
+	if err != nil {
+		return Config{}, err
+	}
+	requestsPerMinute, err := positiveInteger(lookup, "CASHU_SYNC_REQUESTS_PER_MINUTE", defaultRequestsPerMinute)
+	if err != nil {
+		return Config{}, err
+	}
 
 	mode := AdmissionMode(envOrDefault(lookup, "CASHU_SYNC_ADMISSION_MODE", string(AdmissionOpen)))
 	config := Config{
-		Host:          host,
-		Port:          port,
-		DatabasePath:  databasePath,
-		MaxHistory:    maxHistory,
-		AdmissionMode: mode,
+		Host:              host,
+		Port:              port,
+		DatabasePath:      databasePath,
+		MaxHistory:        maxHistory,
+		WritesPerMinute:   writesPerMinute,
+		RequestsPerMinute: requestsPerMinute,
+		AdmissionMode:     mode,
 	}
 	switch mode {
 	case AdmissionOpen:
@@ -101,6 +115,14 @@ func load(lookup LookupEnv, lookupIP lookupIPFunc) (Config, error) {
 	}
 
 	return config, nil
+}
+
+func positiveInteger(lookup LookupEnv, name string, fallback int) (int, error) {
+	value, err := strconv.Atoi(envOrDefault(lookup, name, strconv.Itoa(fallback)))
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer", name)
+	}
+	return value, nil
 }
 
 func demoPublicOpen(lookup LookupEnv) bool {

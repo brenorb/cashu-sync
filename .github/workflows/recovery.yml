@@ -57,7 +57,10 @@ jobs:
           go build -o "$RUNNER_TEMP/pairing-relay" ./cmd/cashu-sync-pairing-relay
       - name: Start local relays
         run: |
+          # Exercise money recovery with headroom; default-budget client backoff remains separate.
           CASHU_SYNC_ADMISSION_MODE=open \
+            CASHU_SYNC_REQUESTS_PER_MINUTE=6000 \
+            CASHU_SYNC_WRITES_PER_MINUTE=600 \
             CASHU_SYNC_DB_PATH="$RUNNER_TEMP/recovery.db" \
             CASHU_SYNC_LISTEN_ADDR=127.0.0.1:3334 \
             "$RUNNER_TEMP/sync-relay" > "$RUNNER_TEMP/sync-relay.log" 2>&1 &

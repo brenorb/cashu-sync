@@ -40,13 +40,7 @@ func run() error {
 	}
 	defer repository.Close()
 
-	relayConfig := syncrelay.DefaultConfig()
-	if config.AdmissionMode == appconfig.AdmissionAllowlist {
-		relayConfig.AdmissionMode = syncrelay.AdmissionAllowlist
-		relayConfig.AllowedPubkeys = config.AllowedPubkeys
-		relayConfig.ServiceURL = config.ServiceURL
-	}
-	server := syncrelay.New(repository, relayConfig)
+	server := syncrelay.New(repository, relayConfig(config))
 	started := make(chan bool)
 	serveErr := make(chan error, 1)
 	go func() {
@@ -83,4 +77,16 @@ func run() error {
 	case <-shutdownContext.Done():
 		return errors.New("relay shutdown timed out")
 	}
+}
+
+func relayConfig(config appconfig.Config) syncrelay.Config {
+	policy := syncrelay.DefaultConfig()
+	policy.WritesPerMinute = config.WritesPerMinute
+	policy.RequestsPerMinute = config.RequestsPerMinute
+	if config.AdmissionMode == appconfig.AdmissionAllowlist {
+		policy.AdmissionMode = syncrelay.AdmissionAllowlist
+		policy.AllowedPubkeys = config.AllowedPubkeys
+		policy.ServiceURL = config.ServiceURL
+	}
+	return policy
 }
