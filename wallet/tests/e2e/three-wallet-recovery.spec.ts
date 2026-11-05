@@ -43,6 +43,10 @@ async function stored(page: Page) {
     proofs,
     history,
     sync,
+    mintQuoteStates: db.stores.mintQuotes.map((value) => {
+      const quote = value as { amount: number; state: string };
+      return { amount: quote.amount, state: quote.state };
+    }),
     balance: proofs
       .filter((proof) => !proof.reserved)
       .reduce((total, proof) => total + proof.amount, 0),
@@ -263,6 +267,14 @@ test("three wallets preserve money through races, lost responses, stale history 
     restore: [] as number[],
     checkstate: [] as number[],
   }));
+  const relayRejections = pages.map(() => ({
+    writeRateLimit: 0,
+    readRateLimit: 0,
+    conflict: 0,
+    auth: 0,
+    admission: 0,
+    other: 0,
+  }));
   for (const [pageIndex, page] of pages.entries()) {
     page.on("pageerror", (error) => pageErrors.push(error.message));
     page.on("request", (request) => {
@@ -301,6 +313,42 @@ test("three wallets preserve money through races, lost responses, stale history 
         return;
       }
       socket.on("framesent", ({ payload }) => frames.push(String(payload)));
+      if (socket.url().replace(/\/$/, "") === allowed[0]) {
+        socket.on("framereceived", ({ payload }) => {
+          const text = String(payload);
+          if (text.length > 1024) return;
+          let envelope: unknown;
+          try {
+            envelope = JSON.parse(text);
+          } catch {
+            return;
+          }
+          if (!Array.isArray(envelope)) return;
+          const reason =
+            envelope[0] === "OK" && envelope[2] === false
+              ? envelope[3]
+              : envelope[0] === "CLOSED"
+              ? envelope[2]
+              : null;
+          if (typeof reason !== "string") return;
+          const category =
+            envelope[0] === "OK" &&
+            reason === "rate-limited: too many snapshot writes"
+              ? "writeRateLimit"
+              : envelope[0] === "CLOSED" &&
+                reason === "rate-limited: too many snapshot requests"
+              ? "readRateLimit"
+              : reason.startsWith("conflict:")
+              ? "conflict"
+              : reason.startsWith("auth-required:")
+              ? "auth"
+              : reason.startsWith("restricted:")
+              ? "admission"
+              : "other";
+          const counts = relayRejections[pageIndex];
+          counts[category] = Math.min(counts[category] + 1, 10_000);
+        });
+      }
     });
     page.setDefaultTimeout(30_000);
   }
@@ -505,6 +553,26 @@ test("three wallets preserve money through races, lost responses, stale history 
         operation_id?: string;
       } | null;
       const dialog = pages[i].locator('[data-v0-dialog="melt"]');
+      const mintDialog = pages[i].locator('[data-v0-dialog="mint"]');
+      const mintErrorCategory = await mintDialog
+        .locator('[role="alert"]')
+        .evaluateAll((elements) => {
+          const message = elements
+            .map((element) => element.textContent)
+            .join(" ");
+          if (!message) return "none";
+          if (/rate-limited: too many snapshot (writes|requests)/.test(message))
+            return "relay-rate-limit";
+          if (/quote is not stored in this wallet/.test(message))
+            return "missing-quote";
+          if (/wallet changed/.test(message)) return "conflict";
+          if (/still being recovered/.test(message)) return "pending-recovery";
+          if (/acknowledgement is ambiguous/.test(message))
+            return "ambiguous-ack";
+          if (/ConstraintError/.test(message)) return "storage-constraint";
+          return "other";
+        })
+        .catch(() => "unavailable");
       const dialogState =
         (await dialog.count()) === 0
           ? null
@@ -539,6 +607,26 @@ test("three wallets preserve money through races, lost responses, stale history 
           dialogState,
           recoveryRequests: recoveryRequests[i],
           recoveryResponses: recoveryResponses[i],
+          relayRejections: relayRejections[i],
+          relayRateLimited:
+            relayRejections[i].writeRateLimit > 0 ||
+            relayRejections[i].readRateLimit > 0,
+          mintDialogVisible: await mintDialog.isVisible(),
+          mintClaimVisible: await pages[i]
+            .locator('[data-v0-action="claim-mint-quote"]')
+            .isVisible(),
+          mintCreateVisible: await pages[i]
+            .locator('[data-v0-action="create-mint-quote"]')
+            .isVisible(),
+          mintErrorCategory,
+          mintQuoteStates: state.mintQuoteStates,
+          pendingHistory: state.history
+            .filter((entry) => entry.status !== "paid")
+            .map((entry) => ({
+              direction: entry.direction,
+              amount: entry.amount,
+              status: entry.status,
+            })),
         })
       );
       await testInfo.attach(`wallet-${i + 1}-final-accounting`, {
