@@ -258,10 +258,21 @@ test("three wallets preserve money through races, lost responses, stale history 
     paid: number;
     revisions: number[];
   }[] = [];
-  for (const page of pages) {
+  const recoveryRequests = pages.map(() => ({ restore: 0, checkstate: 0 }));
+  const recoveryResponses = pages.map(() => ({
+    restore: [] as number[],
+    checkstate: [] as number[],
+  }));
+  for (const [pageIndex, page] of pages.entries()) {
     page.on("pageerror", (error) => pageErrors.push(error.message));
     page.on("request", (request) => {
       const url = new URL(request.url());
+      if (url.origin === new URL(mintUrl).origin) {
+        if (url.pathname.endsWith("/v1/restore"))
+          recoveryRequests[pageIndex].restore++;
+        if (url.pathname.endsWith("/v1/checkstate"))
+          recoveryRequests[pageIndex].checkstate++;
+      }
       if (url.protocol === "data:" || url.protocol === "blob:") return;
       if (
         ![new URL(server.baseUrl).origin, new URL(mintUrl).origin].includes(
@@ -270,6 +281,14 @@ test("three wallets preserve money through races, lost responses, stale history 
       ) {
         unexpectedDestinations.add(url.origin);
       }
+    });
+    page.on("response", (response) => {
+      const url = new URL(response.url());
+      if (url.origin !== new URL(mintUrl).origin) return;
+      if (url.pathname.endsWith("/v1/restore"))
+        recoveryResponses[pageIndex].restore.push(response.status());
+      if (url.pathname.endsWith("/v1/checkstate"))
+        recoveryResponses[pageIndex].checkstate.push(response.status());
     });
     page.on("websocket", (socket) => {
       const allowed = [
@@ -485,6 +504,43 @@ test("three wallets preserve money through races, lost responses, stale history 
         phase?: string;
         operation_id?: string;
       } | null;
+      const dialog = pages[i].locator('[data-v0-dialog="melt"]');
+      const dialogState =
+        (await dialog.count()) === 0
+          ? null
+          : await dialog
+              .evaluate((element) => {
+                const classes = [];
+                for (
+                  let node: Element | null = element;
+                  node && classes.length < 4;
+                  node = node.parentElement
+                )
+                  classes.push(node.className);
+                return {
+                  classes,
+                  visibility: document.visibilityState,
+                };
+              })
+              .catch(() => null);
+      console.log(
+        "three-wallet summary",
+        JSON.stringify({
+          wallet: i + 1,
+          balance: state.balance,
+          revision: state.sync.revision,
+          pending: pending && { type: pending.type, phase: pending.phase },
+          paid: state.history.filter((entry) => entry.status === "paid").length,
+          paidMelts: state.history.filter(
+            (entry) => entry.direction === "melt" && entry.status === "paid"
+          ).length,
+          reservedProofs: state.proofs.filter((proof) => proof.reserved).length,
+          dialogVisible: await dialog.isVisible(),
+          dialogState,
+          recoveryRequests: recoveryRequests[i],
+          recoveryResponses: recoveryResponses[i],
+        })
+      );
       await testInfo.attach(`wallet-${i + 1}-final-accounting`, {
         body: JSON.stringify(
           {
