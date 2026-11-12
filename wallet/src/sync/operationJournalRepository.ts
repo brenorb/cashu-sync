@@ -159,31 +159,65 @@ export class OperationJournalRepository {
     );
   }
 
-  async markSubmitted(
+  async candidateForSubmission(
     operationId: string,
     type: "mint" | "melt",
     timestamp: number
-  ): Promise<void> {
+  ): Promise<SnapshotV0> {
     assertOperationId(operationId);
-    await this.db.transaction("rw", [this.db.walletSyncState], async () => {
+    const current = await this.walletRepository.exportSnapshot();
+    const pending = current.pending_operation;
+    if (!pending || pending.operation_id !== operationId || pending.type !== type) {
+      throw new OperationJournalError(
+        "operation-mismatch",
+        "pending operation does not match the submission"
+      );
+    }
+    return decodeSnapshotV0({
+      ...current,
+      revision: current.revision + 1,
+      pending_operation: this.submittedOperation(pending, timestamp),
+    }, this.decodeOptions);
+  }
+
+  async acceptSubmission(candidate: SnapshotV0, eventId: string): Promise<void> {
+    if (!EVENT_ID.test(eventId) || candidate.pending_operation?.phase !== "submitted") {
+      throw new OperationJournalError("stale-candidate", "invalid accepted submission");
+    }
+    const submitted = candidate.pending_operation;
+    await this.db.transaction("rw", this.db.walletSyncState, async () => {
       const state = await this.getState();
-      const pending = requirePending(state, operationId, type);
-      if (pending.phase !== "prepared") {
+      const pending = requirePending(state, submitted.operation_id, submitted.type);
+      if (
+        candidate.revision !== state.revision + 1 ||
+        candidate.previous_event_id !== state.head_event_id ||
+        canonicalJson(submitted) !== canonicalJson(this.submittedOperation(pending, submitted.updated_at))
+      ) {
         throw new OperationJournalError(
-          "invalid-transition",
-          "markSubmitted requires a prepared operation"
+          "stale-candidate",
+          "accepted submission does not extend the current local journal"
         );
       }
-      timestamp = monotonicTimestamp(pending, timestamp);
-      const next = this.validatePending({
-        ...pending,
-        phase: "submitted",
-        updated_at: timestamp,
-      });
       await this.db.walletSyncState.put({
         ...state,
-        pending_operation: next,
+        revision: candidate.revision,
+        head_event_id: eventId,
+        pending_operation: submitted,
       });
+    });
+  }
+
+  private submittedOperation(pending: PendingOperationV0, timestamp: number) {
+    if (pending.phase !== "prepared") {
+      throw new OperationJournalError(
+        "invalid-transition",
+        "submission requires a prepared operation"
+      );
+    }
+    return this.validatePending({
+      ...pending,
+      phase: "submitted",
+      updated_at: monotonicTimestamp(pending, timestamp),
     });
   }
 

@@ -294,8 +294,20 @@ export class CashuTsOperationGateway
       }
       return null;
     }
-    const quote = await wallet.checkMeltQuoteBolt11(exact.quote.quote);
+    let quote = await wallet.checkMeltQuoteBolt11(exact.quote.quote);
     requireUsdMeltQuote(quote);
+    if (quote.state === MeltQuoteState.UNPAID) {
+      // An unpaid lookup can race the initial submit, or follow a crash before
+      // the request was sent. Nutshell locks the exact quote and its inputs
+      // before attempting payment, so recover using the same request.
+      try {
+        return await this.submitMelt(exactPreview);
+      } catch {
+        quote = await wallet.checkMeltQuoteBolt11(exact.quote.quote);
+        requireUsdMeltQuote(quote);
+        if (quote.state === MeltQuoteState.UNPAID) return null;
+      }
+    }
     if (quote.state !== MeltQuoteState.PAID) {
       return meltResponse(quote, []);
     }

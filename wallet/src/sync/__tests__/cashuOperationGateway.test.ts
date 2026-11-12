@@ -368,9 +368,8 @@ describe("CashuTsOperationGateway", () => {
     ).resolves.toBeNull();
   });
 
-  it.each([MeltQuoteState.UNPAID, MeltQuoteState.PENDING])(
-    "reconciles %s melt state read-only without change",
-    async (state) => {
+  it("reconciles a pending melt read-only without change", async () => {
+      const state = MeltQuoteState.PENDING;
       const quote = meltQuote();
       const preview = serializeMeltPreviewV0({
         method: "bolt11",
@@ -391,8 +390,33 @@ describe("CashuTsOperationGateway", () => {
         change: [],
       });
       expect(wallet.createMeltChangeProofs).not.toHaveBeenCalled();
-    }
-  );
+  });
+
+  it("does not release inputs on a bare unpaid lookup after a lost melt reply", async () => {
+    const preview = serializeMeltPreviewV0({
+      method: "bolt11",
+      keysetId: KEYSET,
+      quote: meltQuote(),
+      inputs: [proof(30, "input")],
+      outputData: [output(0, 3)],
+    });
+    const completeMelt = vi.fn().mockRejectedValue(new Error("reply lost"));
+    const checkMeltQuoteBolt11 = vi.fn(async () => meltQuote());
+    const wallet = walletMock({ completeMelt, checkMeltQuoteBolt11 });
+
+    await expect(
+      new CashuTsOperationGateway(wallet).reconcileMelt(preview)
+    ).resolves.toBeNull();
+    expect(completeMelt).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        quote: expect.objectContaining({ quote: preview.quote.quote }),
+        inputs: [proof(30, "input")],
+      }),
+      undefined,
+      { preferAsync: preview.request.prefer_async }
+    );
+    expect(checkMeltQuoteBolt11).toHaveBeenCalledTimes(2);
+  });
 
   it("reconstructs paid melt change from the persisted output data", async () => {
     const quote = meltQuote();

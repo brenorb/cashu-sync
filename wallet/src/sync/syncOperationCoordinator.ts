@@ -17,7 +17,6 @@ import type {
 
 export interface SnapshotSyncPort {
   pull(): Promise<PullOutcome>;
-  publishCurrent(): Promise<PublishOutcome>;
   publishCandidate(
     candidate: SnapshotV0,
     options: { applyAccepted: false }
@@ -41,11 +40,12 @@ export interface OperationJournalPort {
     preview: SerializedMintPreviewV0,
     timestamp: number
   ): Promise<void>;
-  markSubmitted(
+  candidateForSubmission(
     operationId: string,
     type: "mint" | "melt",
     timestamp: number
-  ): Promise<void>;
+  ): Promise<SnapshotV0>;
+  acceptSubmission(candidate: SnapshotV0, eventId: string): Promise<void>;
   recordMintResponse(
     operationId: string,
     response: PendingMintResponseV0,
@@ -231,8 +231,8 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
   ): Promise<SyncOperationOutcome> {
     switch (pending.phase) {
       case "prepared":
-        // Republishing is safe even if an earlier prepared publication won: it
-        // creates another journaled revision and still precedes any Cashu call.
+        // A prepared request, including one from an older snapshot, still
+        // needs to win the submission CAS.
         return this.publishPreparedAndSubmit(pending);
       case "submitted":
       case "needs_reconciliation":
@@ -255,9 +255,14 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
   private async publishPreparedAndSubmit(
     pending: PendingMintV0 | PendingMeltV0
   ): Promise<SyncOperationOutcome> {
+    const candidate = await this.journal.candidateForSubmission(
+      pending.operation_id,
+      pending.type,
+      this.now()
+    );
     let published: PublishOutcome;
     try {
-      published = await this.sync.publishCurrent();
+      published = await this.sync.publishCandidate(candidate, { applyAccepted: false });
     } catch (error) {
       if (!isPublishRejection(error)) throw error;
       await this.journal.abortPrepared(pending.operation_id, pending.type);
@@ -281,12 +286,11 @@ export class SyncOperationCoordinator<MintIntent, MeltIntent> {
       return needs(pending, "prepared-publish", "ambiguous");
     }
 
-    if (pending.phase === "prepared") {
-      await this.journal.markSubmitted(
-        pending.operation_id,
-        pending.type,
-        this.now()
-      );
+    await this.journal.acceptSubmission(candidate, published.eventId);
+    if (published.resolution !== "direct") {
+      // A confirmed publication after a lost acknowledgement is recoverable,
+      // but only the direct winner of the CAS may start the initial request.
+      return this.recoverFromRelay(pending);
     }
     if (pending.type === "mint") {
       let response: PendingMintResponseV0;

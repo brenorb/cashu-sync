@@ -124,6 +124,16 @@ afterEach(async () => {
   await Dexie.delete(dbName);
 });
 
+async function acceptSubmission(
+  journal: OperationJournalRepository,
+  operationId: string,
+  type: "mint" | "melt",
+  timestamp: number
+) {
+  const candidate = await journal.candidateForSubmission(operationId, type, timestamp);
+  await journal.acceptSubmission(candidate, NEXT_HEAD);
+}
+
 async function seedMintRows() {
   await db.mintQuotes.put({
     quote: "mint-q",
@@ -258,7 +268,7 @@ describe("OperationJournalRepository transitions", () => {
   it("records a melt result after the clock moves backwards", async () => {
     await seedMeltRows();
     await repository.prepareMelt(MELT_OPERATION, meltPreview, NOW);
-    await repository.markSubmitted(MELT_OPERATION, "melt", NOW + 1);
+    await acceptSubmission(repository, MELT_OPERATION, "melt", NOW + 1);
     await repository.recordMeltResponse(
       MELT_OPERATION,
       {
@@ -288,9 +298,9 @@ describe("OperationJournalRepository transitions", () => {
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
     const resumed = new OperationJournalRepository(db, MINT);
-    await resumed.markSubmitted(MINT_OPERATION, "mint", NOW - 60);
+    await acceptSubmission(resumed, MINT_OPERATION, "mint", NOW - 60);
     await resumed.reprepareMint(MINT_OPERATION, mintPreview, NOW - 90);
-    await resumed.markSubmitted(MINT_OPERATION, "mint", NOW - 120);
+    await acceptSubmission(resumed, MINT_OPERATION, "mint", NOW - 120);
     await resumed.recordMintResponse(MINT_OPERATION, mintResponse, NOW - 180);
     expect(
       (await db.walletSyncState.get("wallet"))?.pending_operation
@@ -308,13 +318,16 @@ describe("OperationJournalRepository transitions", () => {
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
     await expect(
-      repository.markSubmitted(MINT_OPERATION, "melt", NOW + 1)
+      acceptSubmission(repository, MINT_OPERATION, "melt", NOW + 1)
     ).rejects.toMatchObject({ code: "operation-mismatch" });
     await expect(
-      repository.markSubmitted(MINT_OPERATION, "mint", Number.NaN)
+      acceptSubmission(repository, MINT_OPERATION, "mint", Number.NaN)
     ).rejects.toMatchObject({ code: "timestamp" });
 
-    await repository.markSubmitted(MINT_OPERATION, "mint", NOW + 1);
+    const candidate = await repository.candidateForSubmission(MINT_OPERATION, "mint", NOW + 1);
+    expect((await db.walletSyncState.get("wallet"))?.pending_operation?.phase).toBe("prepared");
+    await repository.acceptSubmission(candidate, NEXT_HEAD);
+    expect((await db.walletSyncState.get("wallet"))?.head_event_id).toBe(NEXT_HEAD);
     expect(
       (await db.walletSyncState.get("wallet"))?.pending_operation
     ).toMatchObject({
@@ -322,7 +335,7 @@ describe("OperationJournalRepository transitions", () => {
       updated_at: NOW + 1,
     });
     await expect(
-      repository.markSubmitted(MINT_OPERATION, "mint", NOW + 2)
+      acceptSubmission(repository, MINT_OPERATION, "mint", NOW + 2)
     ).rejects.toMatchObject({ code: "invalid-transition" });
   });
 });
@@ -331,7 +344,7 @@ describe("OperationJournalRepository responses", () => {
   it("restores exact issued outputs even when a peer already advanced quote accounting", async () => {
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
-    await repository.markSubmitted(MINT_OPERATION, "mint", NOW + 1);
+    await acceptSubmission(repository, MINT_OPERATION, "mint", NOW + 1);
     await db.mintQuotes.update("mint-q", { state: "ISSUED" });
     await db.paymentHistory.update("mint:mint-q", { status: "paid" });
     await repository.recordMintResponse(MINT_OPERATION, mintResponse, NOW + 2);
@@ -355,7 +368,7 @@ describe("OperationJournalRepository responses", () => {
   it("records mint proofs, quote, history, and response in one commit", async () => {
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW);
-    await repository.markSubmitted(MINT_OPERATION, "mint", NOW + 1);
+    await acceptSubmission(repository, MINT_OPERATION, "mint", NOW + 1);
     await repository.recordMintResponse(MINT_OPERATION, mintResponse, NOW + 2);
 
     expect(
@@ -476,7 +489,7 @@ describe("OperationJournalRepository responses", () => {
   it("durably records PAID change before consuming exact melt inputs", async () => {
     await seedMeltRows();
     await repository.prepareMelt(MELT_OPERATION, meltPreview, NOW);
-    await repository.markSubmitted(MELT_OPERATION, "melt", NOW + 1);
+    await acceptSubmission(repository, MELT_OPERATION, "melt", NOW + 1);
     const response: PendingMeltResponseV0 = {
       state: "PAID",
       payment_preimage: "preimage",
@@ -675,7 +688,7 @@ describe("OperationJournalRepository CAS finalization", () => {
 
     await seedMintRows();
     await repository.prepareMint(MINT_OPERATION, mintPreview, NOW + 1);
-    await repository.markSubmitted(MINT_OPERATION, "mint", NOW + 2);
+    await acceptSubmission(repository, MINT_OPERATION, "mint", NOW + 2);
     await expect(
       repository.abortPrepared(MINT_OPERATION, "mint")
     ).rejects.toMatchObject({ code: "invalid-transition" });
@@ -775,7 +788,8 @@ describe("relay recovery with the durable journal", () => {
         await seedMeltRows();
         await repository.prepareMelt(operationId, meltPreview, NOW);
       }
-      await repository.markSubmitted(
+      await acceptSubmission(
+        repository,
         operationId,
         mint ? "mint" : "melt",
         NOW + 1
@@ -810,7 +824,7 @@ describe("relay recovery with the durable journal", () => {
       const event = createSyncEventV0(completed, secret, {
         expectedMint: MINT,
       });
-      await local.applySnapshot(interrupted, HEAD);
+      await local.applySnapshot(interrupted, interrupted.previous_event_id);
       const relay = {
         queryRecent: vi.fn(async () => [event]),
         queryCurrent: vi.fn(async () => event),

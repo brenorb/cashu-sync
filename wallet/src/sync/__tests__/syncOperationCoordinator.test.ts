@@ -137,11 +137,10 @@ class FakeSync implements SnapshotSyncPort {
     revision: 6,
   };
   pull = vi.fn(async () => this.pullResult);
-  publishCurrent = vi.fn(async () => this.preparedResult);
   confirmCandidate = vi.fn(async () => this.confirmedResult);
   publishCandidate = vi.fn(
-    async (_candidate: SnapshotV0, _options: { applyAccepted: false }) =>
-      this.finalResult
+    async (candidate: SnapshotV0, _options: { applyAccepted: false }) =>
+      candidate.pending_operation ? this.preparedResult : this.finalResult
   );
 }
 
@@ -177,19 +176,20 @@ class FakeJournal implements OperationJournalPort, OperationStateReader {
       };
     }
   );
-  markSubmitted = vi.fn(
-    async (id: string, type: "mint" | "melt", at: number) => {
-      this.calls.push("markSubmitted");
-      const current = this.state.pending_operation!;
-      this.state.pending_operation = {
-        ...current,
-        operation_id: id,
-        type,
+  candidateForSubmission = vi.fn(
+    async (_id: string, _type: "mint" | "melt", at: number): Promise<SnapshotV0> => ({
+      ...structuredClone(this.state),
+      revision: this.state.revision + 1,
+      pending_operation: {
+        ...structuredClone(this.state.pending_operation!),
         phase: "submitted",
         updated_at: at,
-      } as PendingOperationV0;
-    }
+      },
+    })
   );
+  acceptSubmission = vi.fn(async (candidate: SnapshotV0, eventId: string) => {
+    this.state = { ...structuredClone(candidate), previous_event_id: eventId };
+  });
   reprepareMint = vi.fn(
     async (id: string, preview: SerializedMintPreviewV0, at: number) => {
       this.calls.push("reprepareMint");
@@ -316,17 +316,24 @@ describe("SyncOperationCoordinator new operations", () => {
       value.sync.pull,
       value.gateway.createMintPreview,
       value.journal.prepareMint,
-      value.sync.publishCurrent,
-      value.journal.markSubmitted,
+      value.journal.candidateForSubmission,
+      value.sync.publishCandidate,
+      value.journal.acceptSubmission,
       value.gateway.submitMint,
       value.journal.recordMintResponse,
       value.journal.candidateWithClearedOperation,
-      value.sync.publishCandidate,
       value.journal.finalizeAcceptedSnapshot,
     ].map((mock) => mock.mock.invocationCallOrder[0]);
     expect(order).toEqual([...order].sort((left, right) => left - right));
     expect(value.gateway.submitMint).toHaveBeenCalledWith(mintPreview);
-    expect(value.sync.publishCandidate).toHaveBeenCalledWith(
+    expect(value.sync.publishCandidate).toHaveBeenNthCalledWith(1,
+      expect.objectContaining({
+        previous_event_id: HEAD,
+        pending_operation: expect.objectContaining({ phase: "submitted" }),
+      }),
+      { applyAccepted: false }
+    );
+    expect(value.sync.publishCandidate).toHaveBeenNthCalledWith(2,
       expect.objectContaining({ pending_operation: null }),
       { applyAccepted: false }
     );
@@ -380,7 +387,7 @@ describe("SyncOperationCoordinator new operations", () => {
 
   it("aborts explicit prepared relay rejection before submit", async () => {
     const value = fixture();
-    value.sync.publishCurrent.mockRejectedValueOnce(
+    value.sync.publishCandidate.mockRejectedValueOnce(
       Object.assign(new Error("not admitted"), { code: "publish-rejected" })
     );
 
@@ -413,6 +420,24 @@ describe("SyncOperationCoordinator new operations", () => {
     });
   });
 
+  it("recovers a confirmed fence without entering the initial submission path", async () => {
+    const value = fixture();
+    value.sync.preparedResult = {
+      status: "accepted",
+      resolution: "confirmed",
+      eventId: PREPARED_HEAD,
+      revision: 5,
+    };
+
+    await expect(value.coordinator.mint("intent")).resolves.toMatchObject({
+      status: "needs-reconciliation",
+      stage: "gateway-reconcile",
+    });
+    expect(value.journal.state.pending_operation?.phase).toBe("submitted");
+    expect(value.gateway.submitMint).not.toHaveBeenCalled();
+    expect(value.gateway.reconcileMint).toHaveBeenCalledWith(mintPreview);
+  });
+
   it("keeps submitted journal when gateway result is unknown", async () => {
     const value = fixture();
     value.gateway.submitMint.mockRejectedValueOnce(new Error("disconnect"));
@@ -425,12 +450,12 @@ describe("SyncOperationCoordinator new operations", () => {
     expect(value.journal.state.pending_operation).toMatchObject({
       phase: "submitted",
     });
-    expect(value.sync.publishCandidate).not.toHaveBeenCalled();
+    expect(value.sync.publishCandidate).toHaveBeenCalledOnce();
   });
 
-  it("never submits if marking submitted is not durable", async () => {
+  it("never submits if the accepted fence is not durable locally", async () => {
     const value = fixture();
-    value.journal.markSubmitted.mockRejectedValueOnce(
+    value.journal.acceptSubmission.mockRejectedValueOnce(
       new Error("submitted phase write failed")
     );
 
@@ -450,7 +475,7 @@ describe("SyncOperationCoordinator new operations", () => {
       "indexeddb transaction failed"
     );
     expect(value.gateway.submitMint).toHaveBeenCalledOnce();
-    expect(value.sync.publishCandidate).not.toHaveBeenCalled();
+    expect(value.sync.publishCandidate).toHaveBeenCalledOnce();
   });
 
   it("accepts a matching monetary result published by another device after final CAS conflict", async () => {
@@ -520,7 +545,7 @@ describe("SyncOperationCoordinator new operations", () => {
 });
 
 describe("SyncOperationCoordinator resume", () => {
-  it("re-publishes prepared state before first submit", async () => {
+  it("fences the prepared state before first submit", async () => {
     const value = fixture();
     value.journal.state.pending_operation = pendingMint("prepared");
 
@@ -529,7 +554,7 @@ describe("SyncOperationCoordinator resume", () => {
       type: "mint",
     });
     expect(value.gateway.createMintPreview).not.toHaveBeenCalled();
-    expect(value.sync.publishCurrent).toHaveBeenCalledOnce();
+    expect(value.sync.publishCandidate).toHaveBeenCalledTimes(2);
     expect(value.gateway.submitMint).toHaveBeenCalledWith(mintPreview);
   });
 
@@ -539,7 +564,7 @@ describe("SyncOperationCoordinator resume", () => {
 
     await value.coordinator.resume();
     expect(value.sync.pull).not.toHaveBeenCalled();
-    expect(value.sync.publishCurrent).toHaveBeenCalledOnce();
+    expect(value.sync.publishCandidate).toHaveBeenCalledTimes(2);
   });
 
   it.each(["submitted", "needs_reconciliation"] as const)(

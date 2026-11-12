@@ -37,9 +37,9 @@ CASES = {
         vitest("localPersistence", "reserves disjoint ranges concurrently and persists across restart"),
     ),
     "operation-journal": (
-        SYNC + "syncOperationCoordinator.ts", 'if (pending.phase === "prepared") {',
-        'if (false && pending.phase === "prepared") {',
-        vitest("syncOperationCoordinator", "never submits if marking submitted is not durable"),
+        SYNC + "syncOperationCoordinator.ts", 'await this.journal.acceptSubmission(candidate, published.eventId);',
+        '// Deliberately bypass the local submission write in this scratch copy.',
+        vitest("syncOperationCoordinator", "never submits if the accepted fence is not durable locally"),
     ),
     "pairing": (
         SYNC + "syncRuntimeService.ts", "if (hasLocalWalletData) {",
