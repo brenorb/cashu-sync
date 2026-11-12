@@ -31,7 +31,16 @@ cp "$here/$subsystem/$module.tla" "$here/$subsystem/$module.cfg" "$scratch/"
 cd "$scratch"
 status=0
 "${JAVA:-java}" -Xmx512m -XX:+UseParallelGC -cp verified.jar tlc2.TLC -workers 1 -continue -config "$module.cfg" "$module.tla" > tlc.out 2>&1 || status=$?
-cat tlc.out
+# TLC can print the same invariant trace for several states with -continue.
+if ! grep -q '^Error: Invariant ' tlc.out; then
+  cat tlc.out
+  exit "$status"
+fi
+awk '
+  /^Error: Invariant .* is violated/ { skip = seen[$0]++ }
+  /^Model checking completed|^[0-9]+ states generated|^Finished in/ { skip = 0 }
+  !skip && !/^Model checking completed. No error has been found/ { print }
+' tlc.out
 if [ "$status" -eq 0 ] && grep -q "^Error: Invariant " tlc.out; then
   exit 12
 fi

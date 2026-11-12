@@ -1,21 +1,21 @@
 ---- MODULE BrowserLifecycle ----
 EXTENDS Naturals, Sequences, FiniteSets
 VARIABLE s
-Init == \E init_pending \in BOOLEAN: s = [phase |-> "starting", pending |-> init_pending, badge |-> "starting", scanner |-> "closed", update |-> "none"]
+Init == \E init_pending \in BOOLEAN: s = [phase |-> "starting", pending |-> init_pending, badge |-> "starting", scanner |-> "closed", update |-> "none", watcher |-> FALSE]
 NotConfigured == /\ s.phase = "starting"
                  /\ s' = [s EXCEPT !.phase = "unconfigured", !.badge = "pair-or-restore"]
 BootReady == /\ s.phase = "starting" /\ ~s.pending
-             /\ s' = [s EXCEPT !.phase = "ready", !.badge = "synchronized"]
+             /\ s' = [s EXCEPT !.phase = "ready", !.badge = "synchronized", !.watcher = TRUE]
 BootPending == /\ s.phase = "starting" /\ s.pending
-               /\ s' = [s EXCEPT !.phase = "recovering", !.badge = "recovering"]
+               /\ s' = [s EXCEPT !.phase = "recovering", !.badge = "recovering", !.watcher = TRUE]
 BootError == /\ s.phase = "starting"
              /\ s' = [s EXCEPT !.phase = "recovering", !.badge = "error"]
-WatchDisconnected == /\ s.phase \in {"ready","recovering"}
+WatchDisconnected == /\ s.watcher
                      /\ s' = [s EXCEPT !.badge = "reconnecting"]
-WatchConnected == /\ s.phase \in {"ready","recovering"}
+WatchConnected == /\ s.watcher
                   /\ s' = [s EXCEPT !.badge = "synchronized"]
 ResumeSettled == /\ s.phase = "recovering"
-                 /\ s' = [s EXCEPT !.phase = "ready", !.pending = FALSE, !.badge = "synchronized"]
+                 /\ s' = [s EXCEPT !.phase = "ready", !.pending = FALSE, !.badge = "synchronized", !.watcher = TRUE]
 AskCamera == /\ s.scanner = "closed"
              /\ s' = [s EXCEPT !.scanner = "requesting"]
 AllowCamera == /\ s.scanner = "requesting"
@@ -27,7 +27,7 @@ CloseCamera == /\ s.scanner # "closed"
 WorkerInstalled == /\ s.update = "none"
                    /\ s' = [s EXCEPT !.update = "waiting"]
 ReloadUpdatedPage == /\ s.update = "waiting"
-                     /\ s' = [s EXCEPT !.update = "applied", !.phase = "starting", !.badge = "starting", !.scanner = "closed"]
+                     /\ s' = [s EXCEPT !.update = "applied", !.phase = "starting", !.badge = "starting", !.scanner = "closed", !.watcher = FALSE]
 Done == UNCHANGED s
 Next ==
   \/ NotConfigured

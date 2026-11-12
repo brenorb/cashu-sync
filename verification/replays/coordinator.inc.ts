@@ -22,10 +22,14 @@ it("audit: two devices can POST the same published prepared request", async () =
     // The test ends at the POST boundary; both simulated replies are lost.
     device.gateway.submitMint.mockRejectedValue(new Error("reply lost"));
   }
+  a.gateway.submitMint.mockImplementationOnce(async () => {
+    await b.coordinator.resume();
+    throw new Error("reply lost");
+  });
   const originalMark = a.journal.markSubmitted.getMockImplementation()!;
   a.journal.markSubmitted.mockImplementationOnce(async (...args) => {
     expect(remote.pending_operation?.phase).toBe("prepared");
-    await b.coordinator.resume();
+    await b.sync.pull();
     await originalMark(...args);
   });
   await a.coordinator.mint("intent");
