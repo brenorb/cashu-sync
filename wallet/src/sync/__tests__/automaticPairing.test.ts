@@ -80,6 +80,7 @@ describe("automatic one-QR pairing", () => {
     await join.start(
       async (authority) => {
         imported = authority;
+        return true;
       },
       (error) => {
         throw error;
@@ -103,6 +104,7 @@ describe("automatic one-QR pairing", () => {
     await secondJoin.start(
       async () => {
         secondImported = true;
+        return true;
       },
       (error) => {
         secondError = error.message;

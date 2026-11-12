@@ -7,7 +7,7 @@ import * as service from "../v0WalletService";
 vi.mock("../../components/QrcodeReader.vue", () => ({ default: {} }));
 
 
-it("audit: the receiving screen preserves its wallet but the host gets an ACK", async () => {
+it("audit: the receiving screen preserves its wallet and withholds the ACK", async () => {
   const relay = new MemoryPairingRelay();
   const host = AutoPairingHostSession.create({
     relayUrl: "ws://127.0.0.1:3335", relay, hooks,
@@ -36,7 +36,7 @@ it("audit: the receiving screen preserves its wallet but the host gets an ACK", 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(context.showOverwriteDialog).toBe(true);
     expect(context.message).toContain("preserved");
-    expect(done).toHaveBeenCalledOnce();
+    expect(done).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
   } finally {
     host.destroy();

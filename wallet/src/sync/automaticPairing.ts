@@ -767,8 +767,9 @@ export class AutoPairingJoinSession {
   }
 
   async start(
-    onAuthority: (authority: AuthorityPayloadV0) => Promise<void>,
-    onError: (error: Error) => void
+    onAuthority: (authority: AuthorityPayloadV0) => Promise<boolean>,
+    onError: (error: Error) => void,
+    onResult?: (imported: boolean) => void
   ): Promise<void> {
     if (this.completed)
       throw new AutomaticPairingError("pairing session already used");
@@ -804,16 +805,19 @@ export class AutoPairingJoinSession {
             );
             this.completed = true;
             void onAuthority(authority)
-              .then(async () => {
-                await this.relay.publish(
-                  giftWrap(
-                    { ...request, type: ACK_TYPE },
-                    this.secret,
-                    this.qr.request_pubkey,
-                    this.hooks
-                  )
-                );
+              .then(async (imported) => {
+                if (imported) {
+                  await this.relay.publish(
+                    giftWrap(
+                      { ...request, type: ACK_TYPE },
+                      this.secret,
+                      this.qr.request_pubkey,
+                      this.hooks
+                    )
+                  );
+                }
                 this.destroy();
+                onResult?.(imported);
               })
               .catch((error) => {
                 this.destroy();

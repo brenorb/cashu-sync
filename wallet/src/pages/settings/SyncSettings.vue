@@ -403,30 +403,44 @@ export default defineComponent({
         this.pairingJoin = AutoPairingJoinSession.fromQr(payload, {
           hooks: { allowLoopbackHttp: runtime.allowLoopbackHttp },
         });
-        await new Promise<void>((resolve, reject) => {
-          void this.pairingJoin!.start(
-            async (authority) => {
-              try {
-                await this.applyPairing(authority);
-                resolve();
-              } catch (error) {
-                if (
-                  error instanceof Error &&
-                  error.message ===
-                    "pairing or recovery requires an empty local wallet"
-                ) {
-                  this.showOverwriteDialog = true;
-                  this.message =
-                    "This QR belongs to another wallet. Your current wallet is preserved.";
-                  resolve();
-                  return;
+        const join = this.pairingJoin;
+        let imported = false;
+        try {
+          await new Promise<boolean>((resolve, reject) => {
+            void join.start(
+              async (authority) => {
+                try {
+                  await this.applyPairing(authority);
+                  imported = true;
+                  return true;
+                } catch (error) {
+                  if (
+                    error instanceof Error &&
+                    error.message ===
+                      "pairing or recovery requires an empty local wallet"
+                  ) {
+                    this.showOverwriteDialog = true;
+                    this.message =
+                      "This QR belongs to another wallet. Your current wallet is preserved.";
+                    return false;
+                  }
+                  throw error;
                 }
-                reject(error);
-              }
-            },
-            (error) => reject(error)
-          );
-        });
+              },
+              reject,
+              resolve
+            ).catch(reject);
+          });
+        } catch (error) {
+          if (!imported) throw error;
+          this.message =
+            "Wallet imported. The other device may still be waiting for confirmation.";
+          return;
+        }
+        if (imported && this.pairingScreenActive) {
+          this.showPairingSuccess();
+          await this.$router.replace({ path: "/settings/sync" });
+        }
       });
     },
     async applyPairing(authority: AuthorityPayloadV0) {
@@ -453,8 +467,6 @@ export default defineComponent({
       this.message = recoveryPending
         ? "Paired. Recovery will continue automatically."
         : "Paired. This wallet is synchronized.";
-      this.showPairingSuccess();
-      await this.$router.replace({ path: "/settings/sync" });
     },
     cancelOverwrite() {
       this.showOverwriteDialog = false;
