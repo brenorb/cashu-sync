@@ -416,13 +416,20 @@ export default defineComponent({
     async payMeltQuote() {
       if (!this.meltQuote) return;
       await this.runDialog(async () => {
-        const result = await useV0WalletService().payMeltQuote(
-          this.meltQuote!.quote
-        );
-        if (result.status !== "completed") {
+        const quoteId = this.meltQuote!.quote;
+        const result = await useV0WalletService().payMeltQuote(quoteId);
+        if (result.status !== "completed" || result.quoteId !== quoteId) {
           throw new Error(
             "Your spend is still being recovered. Keep this window open and try again shortly."
           );
+        }
+        const settled = await cashuDb.meltQuotes.get(quoteId);
+        if (settled?.state === "UNPAID") {
+          this.dialogError = "The invoice was not paid. You can try again.";
+          return;
+        }
+        if (settled?.state !== "PAID") {
+          throw new Error("The wallet could not confirm this payment. Retry sync before paying again.");
         }
         this.syncMessage = "Credits spent and synchronized.";
         this.showMeltDialog = false;

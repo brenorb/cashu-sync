@@ -4,6 +4,7 @@ import WalletPage from "../../pages/V0WalletPage.vue";
 import { vi } from "vitest";
 import * as runtime from "../syncRuntimeService";
 import * as service from "../v0WalletService";
+import { cashuDb } from "src/stores/dexie";
 vi.mock("../../components/QrcodeReader.vue", () => ({ default: {} }));
 
 
@@ -76,20 +77,32 @@ it("audit: a changed head cannot confirm pairing", async () => {
   }
 });
 
-it("audit: the spend dialog reports success for a completed UNPAID journal", async () => {
+it.each(["UNPAID", "PAID"] as const)(
+  "audit: the spend dialog checks the terminal %s quote before reporting success",
+  async (state) => {
   const useService = vi.spyOn(service, "useV0WalletService").mockReturnValue({
     payMeltQuote: async () => ({ status: "completed", quoteId: "melt-q" }),
   } as never);
-  const context = { runDialog: async (fn: () => Promise<void>) => fn(),
-    meltQuote: { quote: "melt-q" }, showMeltDialog: true, syncMessage: "" };
-  try {
-    await WalletPage.methods!.payMeltQuote.call(context as never);
-    expect(context.syncMessage).toBe("Credits spent and synchronized.");
-    expect(context.showMeltDialog).toBe(false);
-  } finally {
-    useService.mockRestore();
+    const getQuote = vi.spyOn(cashuDb.meltQuotes, "get").mockResolvedValue({
+      quote: "melt-q", state,
+    } as never);
+    const context = { runDialog: async (fn: () => Promise<void>) => fn(),
+      meltQuote: { quote: "melt-q" }, showMeltDialog: true, syncMessage: "", dialogError: "" };
+    try {
+      await WalletPage.methods!.payMeltQuote.call(context as never);
+      expect(context.showMeltDialog).toBe(state === "UNPAID");
+      if (state === "UNPAID") {
+        expect(context.dialogError).toContain("invoice was not paid");
+        expect(context.syncMessage).toBe("");
+      } else {
+        expect(context.syncMessage).toBe("Credits spent and synchronized.");
+      }
+    } finally {
+      useService.mockRestore();
+      getQuote.mockRestore();
+    }
   }
-});
+);
 
 it("audit: watch connection says synchronized while wallet recovery is unresolved", () => {
   const useService = vi.spyOn(service, "useV0WalletService").mockReturnValue({
