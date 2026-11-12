@@ -1,37 +1,45 @@
 ---- MODULE Pairing ----
-VARIABLES host, join, imported, confirmed, cause, funded
-vars == <<host,join,imported,confirmed,cause,funded>>
-Init == /\ host = "idle" /\ join = "idle" /\ imported = FALSE /\ confirmed = FALSE
-        /\ cause = "none" /\ funded \in BOOLEAN
+VARIABLES host, join, imported, ackSent, confirmed, headChanged, funded
+vars == <<host,join,imported,ackSent,confirmed,headChanged,funded>>
+Init == /\ host = "idle" /\ join = "idle"
+        /\ imported = FALSE /\ ackSent = FALSE /\ confirmed = FALSE
+        /\ headChanged = FALSE /\ funded \in BOOLEAN
 CreateQR == /\ host = "idle" /\ host' = "qr"
-            /\ UNCHANGED <<join,imported,confirmed,cause,funded>>
+            /\ UNCHANGED <<join,imported,ackSent,confirmed,headChanged,funded>>
 OpenQR == /\ host = "qr" /\ join = "idle" /\ join' = "waiting"
-          /\ UNCHANGED <<host,imported,confirmed,cause,funded>>
+          /\ UNCHANGED <<host,imported,ackSent,confirmed,headChanged,funded>>
 BadQR == /\ join = "idle" /\ join' = "failed"
-         /\ UNCHANGED <<host,imported,confirmed,cause,funded>>
+         /\ UNCHANGED <<host,imported,ackSent,confirmed,headChanged,funded>>
 ServeAuthority == /\ host = "qr" /\ join = "waiting"
                   /\ host' = "wait-ack" /\ join' = "importing"
-                  /\ UNCHANGED <<imported,confirmed,cause,funded>>
+                  /\ UNCHANGED <<imported,ackSent,confirmed,headChanged,funded>>
 Import == /\ join = "importing" /\ ~funded
-          /\ join' = "paired" /\ imported' = TRUE /\ UNCHANGED <<host,confirmed,cause,funded>>
+          /\ join' = "imported" /\ imported' = TRUE
+          /\ UNCHANGED <<host,ackSent,confirmed,headChanged,funded>>
 RefuseReplacement == /\ join = "importing" /\ funded /\ join' = "preserved"
-                     /\ UNCHANGED <<host,imported,confirmed,cause,funded>>
+                     /\ UNCHANGED <<host,imported,ackSent,confirmed,headChanged,funded>>
+ImportError == /\ join = "importing" /\ join' = "failed"
+               /\ UNCHANGED <<host,imported,ackSent,confirmed,headChanged,funded>>
 CancelReplacement == /\ join = "preserved" /\ join' = "cancelled"
-                     /\ UNCHANGED <<host,imported,confirmed,cause,funded>>
-Ack == /\ host = "wait-ack" /\ join \in {"paired","preserved","cancelled"}
-       /\ host' = "success" /\ confirmed' = TRUE /\ cause' = "ack"
-       /\ UNCHANGED <<join,imported,funded>>
-HeadAdvance == /\ host \in {"qr","wait-ack"}
-               /\ host' = "success" /\ cause' = "head"
-               /\ UNCHANGED <<join,imported,confirmed,funded>>
+                     /\ UNCHANGED <<host,imported,ackSent,confirmed,headChanged,funded>>
+PublishAck == /\ join = "imported" /\ join' = "ack-sent" /\ ackSent' = TRUE
+              /\ UNCHANGED <<host,imported,confirmed,headChanged,funded>>
+AckFailure == /\ join = "imported" /\ join' = "unconfirmed"
+              /\ UNCHANGED <<host,imported,ackSent,confirmed,headChanged,funded>>
+Ack == /\ host = "wait-ack" /\ ackSent
+       /\ host' = "success" /\ confirmed' = TRUE
+       /\ UNCHANGED <<join,imported,ackSent,headChanged,funded>>
+HeadAdvance == /\ host \in {"qr","wait-ack"} /\ ~headChanged /\ headChanged' = TRUE
+               /\ UNCHANGED <<host,join,imported,ackSent,confirmed,funded>>
 Timeout == /\ join = "waiting" /\ join' = "failed"
-           /\ UNCHANGED <<host,imported,confirmed,cause,funded>>
+           /\ UNCHANGED <<host,imported,ackSent,confirmed,headChanged,funded>>
 CloseHost == /\ host \in {"qr","wait-ack"} /\ host' = "closed"
-             /\ UNCHANGED <<join,imported,confirmed,cause,funded>>
+             /\ UNCHANGED <<join,imported,ackSent,confirmed,headChanged,funded>>
 Done == UNCHANGED vars
 Next == CreateQR \/ OpenQR \/ BadQR \/ ServeAuthority \/ Import \/ RefuseReplacement
-        \/ CancelReplacement \/ Ack \/ HeadAdvance \/ Timeout \/ CloseHost \/ Done
+        \/ ImportError \/ CancelReplacement \/ PublishAck \/ AckFailure \/ Ack
+        \/ HeadAdvance \/ Timeout \/ CloseHost \/ Done
 FundedWalletPreserved == funded => ~imported
-AckMeansImported == confirmed => imported
-HeadSuccessMeansImported == cause = "head" => imported
+AckMeansImported == ackSent => imported
+HeadSuccessMeansImported == host = "success" => confirmed /\ imported
 ====

@@ -39,7 +39,7 @@ Silent Link operates one private, purpose-built Nostr-compatible relay backed by
 1. The Cashu mint is authoritative for monetary state.
 2. The relay is authoritative only for which encrypted snapshot event is the current synchronization head.
 3. Every state-changing mint or melt begins from the current relay head and a current USD Bolt11 quote.
-4. A wallet MUST obtain a successful relay compare-and-swap for a prepared pending operation before submitting that state-changing request to the mint.
+4. A wallet MUST obtain a successful relay compare-and-swap that publishes the prepared request in phase `submitted` before the initial request to the mint. The direct CAS winner durably saves the accepted revision locally before sending.
 5. At most one unresolved mint or melt operation exists in a snapshot.
 6. A failed or stale compare-and-swap causes zero state-changing mint, melt, or swap submissions. Read-only quote and reconciliation calls may occur before it.
 7. Proofs, seed material, quote IDs, amounts, history, and operation details are encrypted before leaving a wallet for the relay.
@@ -185,8 +185,8 @@ Another wallet encountering a pending operation reconciles it before starting an
 3. Obtain or refresh the Nutshell mint quote.
 4. Reserve NUT-13 counters and deterministic blinded outputs.
 5. Persist the prepared journal locally.
-6. Publish a snapshot containing the prepared operation with `prev = current head`.
-7. Continue only after relay `OK true`.
+6. Publish the prepared request in phase `submitted` with `prev = current head`.
+7. After direct relay `OK true`, durably record the accepted head and the submitted phase locally. A peer that reads this phase, or a wallet that confirms a lost acknowledgement, follows recovery.
 8. Submit the exact mint request to Nutshell.
 9. Persist the response and new proofs locally.
 10. Publish a final snapshot containing the new state and clearing the pending operation.
@@ -200,8 +200,8 @@ If the final snapshot conflicts, the wallet fetches the new head and reconciles;
 3. Obtain or refresh the Nutshell melt quote.
 4. Select reconciled input proofs and deterministic change outputs.
 5. Persist the prepared journal locally.
-6. Publish a snapshot containing the prepared operation with `prev = current head`.
-7. Continue only after relay `OK true`.
+6. Publish the prepared request in phase `submitted` with `prev = current head`.
+7. After direct relay `OK true`, durably record the accepted head and the submitted phase locally. A peer that reads this phase, or a wallet that confirms a lost acknowledgement, follows recovery.
 8. Submit the exact melt request to Nutshell.
 9. Persist the response and change proofs before marking inputs spent locally.
 10. Publish a final snapshot containing the new state and clearing the pending operation.
@@ -210,7 +210,7 @@ The reference Nutshell profile enables NUT-19 with a one-hour TTL. Within that w
 
 ## 12. Recovery
 
-Mint recovery automatically replays the exact journaled request when the quote is `PAID`, without allocating new outputs or counters. If replay fails, it rechecks the quote once and restores the exact outputs through NUT-09 when `ISSUED`. An unpaid, unavailable, or still inconclusive result preserves the pending journal; melt recovery remains read-only. Successful recovery follows the normal durable-response and final relay CAS steps.
+Mint recovery automatically replays the exact journaled request when the quote is `PAID`, without allocating new outputs or counters. If replay fails, it rechecks the quote once and restores the exact outputs through NUT-09 when `ISSUED`. An unpaid, unavailable or inconclusive mint result preserves the pending journal. Bolt11 melt recovery reads the existing quote and reconstructs paid change. If the quote is unpaid, it can retry the exact authorized request against the same quote and inputs. Nutshell locks the quote and proofs in one transaction before payment. If a retry fails and the quote is still unpaid, keep the journal for reconciliation. Successful recovery follows the normal durable-response and final relay CAS steps.
 
 ### Existing wallet restart
 
@@ -270,7 +270,7 @@ The v0 test boundary covers:
 - NIP-44 round trip, tamper rejection, wrong-key rejection, and official vector compatibility;
 - schema validation and atomic local snapshot import;
 - pairing success, invalid challenge, replay rejection, and cleanup;
-- prepared journal reaches the relay before its state-changing Nutshell submission;
+- submitted fence reaches the relay and is recorded locally before the initial Nutshell submission;
 - a failed CAS produces zero state-changing `/v1/mint/bolt11`, `/v1/melt/bolt11`, or `/v1/swap` submissions;
 - crash recovery at every mint/melt boundary;
 - exact-output NUT-09 recovery and quote reconciliation for interrupted journaled operations against the reference Nutshell mint;

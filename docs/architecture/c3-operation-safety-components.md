@@ -35,13 +35,14 @@ The relay and Nutshell do not participate in a distributed transaction. Safety c
 
 ```text
 local prepared journal
-  → accepted pending-operation snapshot
-  → exact Nutshell request
+  → accepted submitted-operation snapshot
+  → local durable submission checkpoint
+  → exact Nutshell request by the CAS winner
   → local durable response/outputs
   → accepted completed snapshot
 ```
 
-A relay conflict before the Nutshell request is a clean retry. A crash or conflict after the request requires reconciliation; the wallet preserves all request, counter, response, and proof material until the result is known.
+Only a direct relay acknowledgement permits the first request. A peer that reads a submitted snapshot enters recovery. A relay conflict before the Nutshell request is a clean retry. A crash or conflict after the request requires reconciliation; the wallet preserves all request, counter, response, and proof material until the result is known.
 
 An unresolved operation does not expire automatically and blocks a new operation across paired wallets. The next wallet uses quote state, plus the already journaled wallet-side NUT-13 material and mint-side NUT-09 restoration for exact prepared mint outputs, to finish or safely clear it. The reference profile's one-hour NUT-19 cache permits exact-request replay but is not a durable source of truth after expiry.
 

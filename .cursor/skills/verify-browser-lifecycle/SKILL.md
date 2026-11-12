@@ -15,12 +15,15 @@ and one service-worker update; scanner is a separate parallel region.
 Local money persists across reload. The page's badge and wallet readiness
 are separate; these are user signals, not server availability.
 
-`SynchronizedMeansNoPendingJournal` fails: a connected socket can set the synchronized badge during operation recovery. It does not make the wallet ready.
+`SynchronizedMeansNoPendingJournal` should pass. A connection starts a
+check. The badge reflects the journal read after startup, retry or live sync.
 
-Source correspondence (last compared at `a9b401ec6618c969b3d4e3aaeffac785d4aa0617`):
+Source correspondence (last compared at `b3527a383007a989a5d76cea7ca340c1ec7c5292`):
 
 - `wallet/src/pages/V0WalletPage.vue`: `created`, `resumeAutomatically`,
-  `startWatchingWallet`, `beforeUnmount`; onStatus connected updates the badge.
+  `startWatchingWallet`, `showSyncResult`, `beforeUnmount`.
+- `wallet/src/sync/v0WalletService.ts`: `startLiveSync`, `syncNowUnlocked`,
+  `resumeForDisplay` and `journalSyncStatus`.
 - `wallet/src/components/QrcodeReader.vue`: mount, permission error, scan,
   paste, unmount cleanup; `wallet/src/stores/camera.ts`: show/close.
 - `wallet/src-pwa/register-service-worker.js`: registration update request
@@ -31,7 +34,8 @@ Source correspondence (last compared at `a9b401ec6618c969b3d4e3aaeffac785d4aa061
 
 Recheck real code: `cd wallet && npm run test:ci -- test/vitest/__tests__/v0-ui-surface.test.js test/vitest/__tests__/pages-packaging.test.js`.
 
-Mutation witness: treat a disconnected watcher as connected; the callback replay must fail.
+Mutation witness: mark the wallet synchronized when the socket connects.
+The callback replay must fail while the journal remains pending.
 
 Scratch source guard check: `python3 verification/replays/run.py browser-lifecycle`.
 

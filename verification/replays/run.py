@@ -27,9 +27,9 @@ CASES = {
         vitest("walletSyncRuntime", "fails closed when a remembered recovery head is absent"),
     ),
     "browser-lifecycle": (
-        V0, 'status === "disconnected" || status === "connecting"',
-        'false && (status === "disconnected" || status === "connecting")',
-        vitest("automaticPairing", "audit: a disconnected watcher reports reconnecting"),
+        V0, 'this.syncMessage = "Checking wallet sync…";',
+        'this.syncMessage = "Wallet synchronized.";',
+        vitest("automaticPairing", "audit: connecting and checking a pending journal"),
     ),
     "local-persistence": (
         SYNC + "durableCounterSource.ts", "counters: { ...state.counters, [id]: next }",
@@ -45,6 +45,30 @@ CASES = {
         SYNC + "syncRuntimeService.ts", "if (hasLocalWalletData) {",
         "if (false && hasLocalWalletData) {",
         vitest("syncRuntimeService", "refuses to replace a different funded wallet"),
+    ),
+    "pairing-ack": (
+        SYNC + "automaticPairing.ts", "if (imported) {",
+        "if (true) {",
+        vitest("automaticPairing", "audit: the receiving screen preserves its wallet and withholds the ACK"),
+    ),
+    "pairing-head": (
+        "wallet/src/pages/settings/SyncSettings.vue",
+        '        this.message = "Pairing QR ready. It expires after three minutes.";\n',
+        '        runtime.runtime.currentSession()?.sync.watchCurrent(() => this.showPairingSuccess());\n'
+        '        this.message = "Pairing QR ready. It expires after three minutes.";\n',
+        vitest("automaticPairing", "audit: a changed head cannot confirm pairing"),
+    ),
+    "spend-paid": (
+        V0, '        if (settled?.state === "UNPAID") {',
+        '        if (settled?.state === "UNPAID") {\n'
+        '          this.syncMessage = "Credits spent and synchronized.";\n'
+        '          this.showMeltDialog = false;',
+        vitest("automaticPairing", "audit: the spend dialog checks the terminal UNPAID quote"),
+    ),
+    "operation-direct": (
+        SYNC + "syncOperationCoordinator.ts", 'if (published.resolution !== "direct") {',
+        'if (false && published.resolution !== "direct") {',
+        vitest("syncOperationCoordinator", "recovers a confirmed fence without entering the initial submission path"),
     ),
     "pairing-relay": (
         "relay/internal/pairingrelay/server.go", "s.prune(time.Now())",

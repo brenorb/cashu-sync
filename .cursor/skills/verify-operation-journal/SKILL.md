@@ -10,36 +10,41 @@ It uses TLC 1.7.4 with Java 11+ and the checked-in config. Set
 `TLA2TOOLS` to the pinned jar or let the runner download it. Use pstack
 `/statechart` to read the result as a statechart and shortest paths.
 
-Two devices, one operation ID, one initial relay head, at most one initial
-POST per device. The second device can import a published prepared snapshot
-and advance it before the first POST. Each durable write or remote acceptance
-is a separate step. Gateway recovery abstracts exact mint replay, restore,
-melt status and demo swap proof checks as a separate recovery path. This
-checks initial submissions, not mint idempotence or accounting amounts.
+Two devices, one operation and one exact prepared request. The starting
+relay head can be empty of operations or contain a legacy prepared request.
+The accepted submitted snapshot fences the initial request. Only the direct
+CAS winner can send it after saving the fence locally. A peer, lost
+acknowledgement or interrupted caller uses the recovery path. Each durable
+local write and remote acceptance is a separate step.
 
-The durability and terminal rules should pass. `OneInitialPostPerOperation`
-is a product finding: another wallet can pick up the published prepared
-operation and both clients can call the gateway. A second call is not evidence
-that the mint pays twice. See the replay and shortest path in the audit.
+All three rules should pass. The initial submission rule applies to the exact
+request under this client version. Gateway recovery abstracts exact retry,
+quote locking at the mint, restore and proof checks. The model assumes those
+mint rules and a shared terminal result. A regenerated mint preview after a
+signed-output rejection is a different exact request.
 
-Source correspondence (last compared at `a9b401ec6618c969b3d4e3aaeffac785d4aa0617`):
+Source correspondence (last compared at `b3527a383007a989a5d76cea7ca340c1ec7c5292`):
 
 - `wallet/src/sync/syncOperationCoordinator.ts`: `startMint`, `startMelt`,
   `resumeUnlocked`, `resumePending`, `publishPreparedAndSubmit`,
   `recoverFromRelay`, `reconcileGateway`, `publishFinal`.
 - `wallet/src/sync/operationJournalRepository.ts`: `prepareMint`,
-  `prepareMelt`, `markSubmitted`, `reprepareMint`, `abortPrepared`,
-  `recordMintResponse`, `recordMeltResponse`, `finalizeAcceptedSnapshot`.
+  `prepareMelt`, `candidateForSubmission`, `acceptSubmission`, `reprepareMint`,
+  `abortPrepared`, response recording and finalization. The acceptance
+  transaction checks the operation, parent and revision, then saves the fence.
 - `wallet/src/sync/cashuOperationGateway.ts`: `submitMint`, `submitMelt`,
-  `reconcileMint`, `reconcileMelt`; remote money semantics are assumed.
-- `wallet/src/sync/syncCoordinator.ts`: `publishCurrent` applies the accepted
-  prepared checkpoint before the local mark; the remote phase is still prepared.
+  `reconcileMint`, `reconcileMelt`. An unpaid lookup alone preserves
+  the inputs. Exact retry uses the pinned Nutshell quote and proof locks.
+- `wallet/src/sync/syncCoordinator.ts`: `publishCandidate` distinguishes the
+  direct acknowledgement from confirmation after an ambiguous publication.
 
 Recheck real code: `cd wallet && npm run test:ci -- src/sync/__tests__/syncOperationCoordinator.test.ts src/sync/__tests__/operationJournalRepository.test.ts`.
 
-Mutation witness: remove the local mark before the first POST; the coordinator's durable order and persistence-failure tests must fail.
+Mutation witnesses bypass the local acceptance write or allow a confirmed
+but non-direct acknowledgement to enter initial submission.
 
-Scratch source guard check: `python3 verification/replays/run.py operation-journal`.
+Scratch source checks use `python3 verification/replays/run.py operation-journal`
+and `python3 verification/replays/run.py operation-direct`.
 
 For an unexpected counterexample, read the earliest failing step, then map
 the trace to the named source functions and replay it against the code. An

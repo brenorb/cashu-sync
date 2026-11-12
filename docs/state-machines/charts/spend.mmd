@@ -2,12 +2,6 @@
 title: "Spend credits or top up an eSIM"
 ---
 stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Breaks SuccessMeansPaid
-    lg1: Path to the SuccessMeansPaid bug
-  }
-  class lg0 breaks
-  class lg1 bugPath
   s0: Wallet
   s1: Enter amount or paste invoice
   s2: Requesting spend quote
@@ -19,7 +13,7 @@ stateDiagram-v2
   s8: Unpaid, journal cleared
   s9: Recovering your spend
   s10: Credits spent and synchronized
-  s11: Credits spent shown for unpaid invoice
+  s11: Invoice unpaid, retry available
   [*] --> s0
   s0 --> s1: Tap Top up or Pay invoice
   s1 --> s2: Get spend quote
@@ -34,17 +28,8 @@ stateDiagram-v2
   s6 --> s8: Mint says unpaid and inputs are released
   s6 --> s9: Payment status still unknown
   s7 --> s10: Wallet closes the spend dialog
-  s8 --> s11: Wallet closes the spend dialog
+  s8 --> s11: Wallet shows the unpaid invoice
   s9 --> s4: Another payment settled first
   s9 --> s7: Mint confirms payment
   s9 --> s8: Mint says unpaid and inputs are released
-  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
-  class s0 bugPath
-  class s1 bugPath
-  class s2 bugPath
-  class s3 bugPath
-  class s4 bugPath
-  class s6 bugPath
-  class s8 bugPath
-  class s11 breaks
-  class s11 bugPath
+  s11 --> s4: Review the quote again

@@ -15,11 +15,11 @@ internal demo swap share the spend confirmation surface. One abstract
 ambiguous outcome or conflict can be retried. Models quote identity and
 settlement truth, not amounts, parsing, key derivation, or retry wall time.
 
-Quote durability should pass. `SuccessMeansPaid` is a product finding:
-the journal can finalize an UNPAID spend, while the dialog treats
-`completed` as paid and closes. This is not evidence that funds were lost.
+Both rules should pass. An unpaid terminal result can clear the journal.
+The dialog checks the stored quote for the requested payment. It stays open
+on an unpaid invoice and closes with success when the quote is paid.
 
-Source correspondence (last compared at `a9b401ec6618c969b3d4e3aaeffac785d4aa0617`):
+Source correspondence (last compared at `b3527a383007a989a5d76cea7ca340c1ec7c5292`):
 
 - `wallet/src/pages/V0WalletPage.vue`: `createMintQuote`, `claimMintQuote`,
   `resumeAutomatically`, `createMeltQuote`, `payMeltQuote`, `runDialog`.
@@ -35,7 +35,8 @@ Recheck real code: `cd wallet && npm run test:ci -- src/sync/__tests__/v0WalletS
 
 Mutation witness: discard the locally saved quote on an ambiguous publish; the service test for an ambiguous relay acknowledgement must fail.
 
-Scratch source guard check: `python3 verification/replays/run.py wallet-payments`.
+Scratch source checks use `python3 verification/replays/run.py wallet-payments`
+and `python3 verification/replays/run.py spend-paid`.
 
 For an unexpected counterexample, read the earliest failing step, then map
 the trace to the named source functions and replay it against the code. An

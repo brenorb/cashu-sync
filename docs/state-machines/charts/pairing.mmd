@@ -2,48 +2,31 @@
 title: "Pair a second device"
 ---
 stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Breaks AckMeansImported or HeadSuccessMeansImported
-    lg1: Path to the AckMeansImported or HeadSuccessMeansImported bug
-  }
-  class lg0 breaks
-  class lg1 bugPath
   s0: Sync devices
   s1: Pairing needs attention
   s2: Pairing QR ready
   s3: Host closed the pairing screen
   s4: Joining wallet waits for a response
-  s5: Host reports success after unrelated activity
-  s6: Joining wallet checks the authority
-  s7: Joining wallet imported
-  s8: Existing wallet preserved
-  s9: Both wallets paired
-  s10: Host reports success after import refused
-  s11: Pairing cancelled on joining wallet
+  s5: Joining wallet checks the authority
+  s6: Joining wallet imported
+  s7: Existing wallet preserved
+  s8: Joining wallet sent confirmation
+  s9: Wallet imported, host confirmation uncertain
+  s10: Pairing cancelled on joining wallet
+  s11: Both wallets paired
   [*] --> s0
   s0 --> s1: Link is invalid or expired
   s0 --> s2: Show pairing QR
   s2 --> s3: Leave pairing screen
   s2 --> s1: Link is invalid or expired
   s2 --> s4: Scan or open the pairing link
-  s2 --> s5: Relay head changes
   s1 --> s3: Leave pairing screen
   s4 --> s1: No response before deadline
-  s4 --> s6: Host sends encrypted wallet authority
-  s6 --> s7: Joining wallet starts with that authority
-  s6 --> s8: Different wallet contains local data
-  s5 --> s9: Joining wallet starts with that authority
-  s7 --> s9: Relay head changes or Host receives acknowledgement
-  s8 --> s10: Host receives acknowledgement
-  s8 --> s11: Keep current wallet
-  s11 --> s10: Host receives acknowledgement
-  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
-  class s0 bugPath
-  class s2 bugPath
-  class s4 bugPath
-  class s5 breaks
-  class s5 bugPath
-  class s6 bugPath
-  class s8 bugPath
-  class s10 breaks
-  class s10 bugPath
+  s4 --> s5: Host sends encrypted wallet authority
+  s5 --> s1: Joining wallet cannot start
+  s5 --> s6: Joining wallet starts with that authority
+  s5 --> s7: Different wallet contains local data
+  s6 --> s8: Joining wallet confirms the import
+  s6 --> s9: Relay could not confirm receipt
+  s7 --> s10: Keep current wallet
+  s8 --> s11: Host receives acknowledgement

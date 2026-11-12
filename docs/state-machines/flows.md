@@ -1,12 +1,12 @@
 # Cashu Sync user flows
 
-These seven diagrams come from the finite model state graphs, projected to what users can do or see. Red means an invariant fails; blue borders mark a shortest route to it. See [results](results.md) for source replays and [the audit](README.md) for the scope.
+The diagrams show what users see and what each wallet does during the checked flows. The individual TLC reports list the rules each chart checks. [Verification results](results.md) · [Source inventory](README.md)
 
 ## Pair a second device
 
-A changed head can show success without a joiner, and an ACK can show success when the joiner kept its existing wallet.
+The host confirms pairing after the joining wallet imports the authority and sends an acknowledgement. A refused replacement preserves the current wallet.
 
-[Open full-size SVG](charts/pairing.svg) · [Mermaid source](charts/pairing.mmd) · [TLC statechart report](charts/pairing-report.md)
+[Open full-size SVG](charts/pairing.svg) · [Mermaid source](charts/pairing.mmd) · [TLC report](charts/pairing-report.md)
 
 ![Pair a second device statechart](charts/pairing.svg)
 
@@ -18,60 +18,43 @@ A changed head can show success without a joiner, and an ACK can show success wh
 title: "Pair a second device"
 ---
 stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Breaks AckMeansImported or HeadSuccessMeansImported
-    lg1: Path to the AckMeansImported or HeadSuccessMeansImported bug
-  }
-  class lg0 breaks
-  class lg1 bugPath
   s0: Sync devices
   s1: Pairing needs attention
   s2: Pairing QR ready
   s3: Host closed the pairing screen
   s4: Joining wallet waits for a response
-  s5: Host reports success after unrelated activity
-  s6: Joining wallet checks the authority
-  s7: Joining wallet imported
-  s8: Existing wallet preserved
-  s9: Both wallets paired
-  s10: Host reports success after import refused
-  s11: Pairing cancelled on joining wallet
+  s5: Joining wallet checks the authority
+  s6: Joining wallet imported
+  s7: Existing wallet preserved
+  s8: Joining wallet sent confirmation
+  s9: Wallet imported, host confirmation uncertain
+  s10: Pairing cancelled on joining wallet
+  s11: Both wallets paired
   [*] --> s0
   s0 --> s1: Link is invalid or expired
   s0 --> s2: Show pairing QR
   s2 --> s3: Leave pairing screen
   s2 --> s1: Link is invalid or expired
   s2 --> s4: Scan or open the pairing link
-  s2 --> s5: Relay head changes
   s1 --> s3: Leave pairing screen
   s4 --> s1: No response before deadline
-  s4 --> s6: Host sends encrypted wallet authority
-  s6 --> s7: Joining wallet starts with that authority
-  s6 --> s8: Different wallet contains local data
-  s5 --> s9: Joining wallet starts with that authority
-  s7 --> s9: Relay head changes or Host receives acknowledgement
-  s8 --> s10: Host receives acknowledgement
-  s8 --> s11: Keep current wallet
-  s11 --> s10: Host receives acknowledgement
-  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
-  class s0 bugPath
-  class s2 bugPath
-  class s4 bugPath
-  class s5 breaks
-  class s5 bugPath
-  class s6 bugPath
-  class s8 bugPath
-  class s10 breaks
-  class s10 bugPath
+  s4 --> s5: Host sends encrypted wallet authority
+  s5 --> s1: Joining wallet cannot start
+  s5 --> s6: Joining wallet starts with that authority
+  s5 --> s7: Different wallet contains local data
+  s6 --> s8: Joining wallet confirms the import
+  s6 --> s9: Relay could not confirm receipt
+  s7 --> s10: Keep current wallet
+  s8 --> s11: Host receives acknowledgement
 ~~~
 
 </details>
 
 ## Buy credits
 
-The invoice has to be paid and credits recorded before the success state. Payment and mint confirmation are external events.
+The wallet shows the invoice, records credits once it is paid and updates the balance and history.
 
-[Open full-size SVG](charts/buy.svg) · [Mermaid source](charts/buy.mmd) · [TLC statechart report](charts/buy-report.md)
+[Open full-size SVG](charts/buy.svg) · [Mermaid source](charts/buy.mmd) · [TLC report](charts/buy-report.md)
 
 ![Buy credits statechart](charts/buy.svg)
 
@@ -116,9 +99,9 @@ stateDiagram-v2
 
 ## Spend credits or top up an eSIM
 
-The red path ends in the same success message after the mint returned UNPAID. The journal was cleared and the inputs released.
+A paid quote closes the dialog. An unpaid quote keeps the dialog open and offers a retry.
 
-[Open full-size SVG](charts/spend.svg) · [Mermaid source](charts/spend.mmd) · [TLC statechart report](charts/spend-report.md)
+[Open full-size SVG](charts/spend.svg) · [Mermaid source](charts/spend.mmd) · [TLC report](charts/spend-report.md)
 
 ![Spend credits or top up an eSIM statechart](charts/spend.svg)
 
@@ -130,12 +113,6 @@ The red path ends in the same success message after the mint returned UNPAID. Th
 title: "Spend credits or top up an eSIM"
 ---
 stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Breaks SuccessMeansPaid
-    lg1: Path to the SuccessMeansPaid bug
-  }
-  class lg0 breaks
-  class lg1 bugPath
   s0: Wallet
   s1: Enter amount or paste invoice
   s2: Requesting spend quote
@@ -147,7 +124,7 @@ stateDiagram-v2
   s8: Unpaid, journal cleared
   s9: Recovering your spend
   s10: Credits spent and synchronized
-  s11: Credits spent shown for unpaid invoice
+  s11: Invoice unpaid, retry available
   [*] --> s0
   s0 --> s1: Tap Top up or Pay invoice
   s1 --> s2: Get spend quote
@@ -162,20 +139,11 @@ stateDiagram-v2
   s6 --> s8: Mint says unpaid and inputs are released
   s6 --> s9: Payment status still unknown
   s7 --> s10: Wallet closes the spend dialog
-  s8 --> s11: Wallet closes the spend dialog
+  s8 --> s11: Wallet shows the unpaid invoice
   s9 --> s4: Another payment settled first
   s9 --> s7: Mint confirms payment
   s9 --> s8: Mint says unpaid and inputs are released
-  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
-  class s0 bugPath
-  class s1 bugPath
-  class s2 bugPath
-  class s3 bugPath
-  class s4 bugPath
-  class s6 bugPath
-  class s8 bugPath
-  class s11 breaks
-  class s11 bugPath
+  s11 --> s4: Review the quote again
 ~~~
 
 </details>
@@ -184,7 +152,7 @@ stateDiagram-v2
 
 When history is pruned, the wallet asks the mint which tokens remain usable. An unconfirmed relay save can leave the correction on the local device.
 
-[Open full-size SVG](charts/snapshot-sync.svg) · [Mermaid source](charts/snapshot-sync.mmd) · [TLC statechart report](charts/snapshot-sync-report.md)
+[Open full-size SVG](charts/snapshot-sync.svg) · [Mermaid source](charts/snapshot-sync.mmd) · [TLC report](charts/snapshot-sync-report.md)
 
 ![Reconnect after missing updates statechart](charts/snapshot-sync.svg)
 
@@ -221,9 +189,9 @@ stateDiagram-v2
 
 ## Back up, restore or remove a wallet
 
-Restore refuses to overwrite a different funded wallet or create an empty replacement for a remembered backup. Removal waits for a confirmed relay save.
+Restore preserves a different funded wallet and needs a usable relay snapshot for a remembered wallet. Removal waits for a confirmed relay save.
 
-[Open full-size SVG](charts/authority-recovery.svg) · [Mermaid source](charts/authority-recovery.mmd) · [TLC statechart report](charts/authority-recovery-report.md)
+[Open full-size SVG](charts/authority-recovery.svg) · [Mermaid source](charts/authority-recovery.mmd) · [TLC report](charts/authority-recovery-report.md)
 
 ![Back up, restore or remove a wallet statechart](charts/authority-recovery.svg)
 
@@ -271,9 +239,9 @@ stateDiagram-v2
 
 ## Open the wallet and recover a payment
 
-The badge can say synchronized as soon as the relay socket connects, even though the wallet is recovering a payment.
+Connecting to the relay starts a check. The journal result determines whether the wallet shows synchronized or recovering.
 
-[Open full-size SVG](charts/browser-lifecycle.svg) · [Mermaid source](charts/browser-lifecycle.mmd) · [TLC statechart report](charts/browser-lifecycle-report.md)
+[Open full-size SVG](charts/browser-lifecycle.svg) · [Mermaid source](charts/browser-lifecycle.mmd) · [TLC report](charts/browser-lifecycle-report.md)
 
 ![Open the wallet and recover a payment statechart](charts/browser-lifecycle.svg)
 
@@ -285,126 +253,93 @@ The badge can say synchronized as soon as the relay socket connects, even though
 title: "Open the wallet and recover a payment"
 ---
 stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Breaks SynchronizedMeansNoPendingJournal
-    lg1: Path to the SynchronizedMeansNoPendingJournal bug
-  }
-  class lg0 breaks
-  class lg1 bugPath
   s0: Starting synchronized wallet
   s1: Wallet ready
   s2: Startup needs attention
   s3: Recovering previous payment
   s4: Pair or restore this wallet
-  s5: Reconnecting wallet
-  s6: Wallet says synchronized while payment is pending
+  s5: Checking wallet sync
+  s6: Reconnecting wallet
   [*] --> s0
   s0 --> s1: Wallet state is ready
   s0 --> s2: Wallet startup failed
   s0 --> s4: No wallet profile
   s0 --> s3: Find an unfinished payment
-  s1 --> s5: Relay connection drops
+  s1 --> s5: Relay socket connects
+  s1 --> s6: Relay connection drops
   s2 --> s1: Previous payment resolved
   s3 --> s1: Previous payment resolved
-  s3 --> s5: Relay connection drops
-  s3 --> s6: Relay socket connects
-  s5 --> s1: Relay socket connects or Previous payment resolved
+  s3 --> s5: Relay socket connects
+  s3 --> s6: Relay connection drops
+  s5 --> s1: Wallet confirms the journal is clear or Previous payment resolved
+  s5 --> s3: Wallet finds an unresolved payment
+  s5 --> s6: Relay connection drops
+  s6 --> s5: Relay socket connects
   s1 --> s0: App update reloads the page
   s2 --> s0: App update reloads the page
-  s5 --> s6: Relay socket connects
-  s3 --> s0: App update reloads the page
   s6 --> s1: Previous payment resolved
-  s6 --> s5: Relay connection drops
+  s3 --> s0: App update reloads the page
   s4 --> s0: App update reloads the page
   s5 --> s0: App update reloads the page
   s6 --> s0: App update reloads the page
-  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
-  class s0 bugPath
-  class s3 bugPath
-  class s6 breaks
-  class s6 bugPath
 ~~~
 
 </details>
 
-## Two wallets resume the same payment
+## Two wallets coordinate a payment
 
-The red path is two gateway calls for the same prepared request. The replay ends at the gateway boundary.
+One wallet wins the relay write. It saves the accepted checkpoint before sending. A peer reads the submitted request and recovers the result. This chart shows a melt with device A winning the claim. The full check also explores mint, legacy prepared heads and either winner.
 
-[Open full-size SVG](charts/operation-journal.svg) · [Mermaid source](charts/operation-journal.mmd) · [TLC statechart report](charts/operation-journal-report.md)
+[Open full-size SVG](charts/operation-journal.svg) · [Mermaid source](charts/operation-journal.mmd) · [TLC report](charts/operation-journal-report.md)
 
-![Two wallets resume the same payment statechart](charts/operation-journal.svg)
+![Two wallets coordinate a payment statechart](charts/operation-journal.svg)
 
 <details>
 <summary>Mermaid text</summary>
 
 ~~~mermaid
 ---
-title: "What two devices can do with the same pending payment"
+title: "How paired wallets coordinate a payment"
 ---
 stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Breaks OneInitialPostPerOperation
-    lg1: Path to the OneInitialPostPerOperation bug
-  }
-  class lg0 breaks
-  class lg1 bugPath
   s0: Wallet ready
   s1: Payment prepared
   s2: Stopped before sending
-  s3: First wallet can send payment
-  s4: Waiting to confirm relay save
-  s5: Second wallet also allowed to send
-  s6: One request sent to mint
-  s7: Recovering the payment
-  s8: Mint result saved
-  s9: Relay saved the result
-  s10: Mint reports payment pending
-  s11: Result recorded on device
-  s12: Both wallets sent the same request
+  s3: Relay accepted the submission
+  s4: Waiting to confirm the relay save
+  s5: Winning wallet saved its submission locally
+  s6: A wallet is recovering the payment
+  s7: Mint reports payment pending
+  s8: Mint result saved locally
+  s9: Payment request sent
+  s10: Relay saved the result
+  s11: Payment result recorded on device
   [*] --> s0
   s0 --> s1: Prepare payment
-  s1 --> s2: Intent rejected or superseded
-  s1 --> s3: Save payment intent to relay
-  s1 --> s4: Save payment intent to relay
-  s3 --> s3: Second wallet loads the saved payment or First wallet records that it will send
-  s4 --> s3: Confirm previous save
-  s3 --> s5: Other wallet resumes and saves the same intent
-  s4 --> s5: Other wallet resumes and saves the same intent
-  s3 --> s6: Send payment request
-  s3 --> s7: Payment result unknown after interruption
-  s6 --> s8: Record mint result
-  s6 --> s7: Payment result unknown after interruption
-  s7 --> s8: Record mint result
-  s5 --> s6: Send payment request
-  s6 --> s6: Other wallet resumes and saves the same intent or Second wallet records that it will send
-  s8 --> s9: Save final result to relay
-  s8 --> s10: Wait for settlement
-  s7 --> s5: Other wallet resumes and saves the same intent
-  s9 --> s11: Update device from saved result
-  s6 --> s5: Record mint result or Payment result unknown after interruption
-  s10 --> s8: Record mint result
-  s8 --> s5: Other wallet resumes and saves the same intent
-  s6 --> s12: Send payment request
-  s10 --> s5: Other wallet resumes and saves the same intent
-  s5 --> s7: Send payment request
-  s5 --> s12: Send payment request
-  s5 --> s8: Send payment request
-  s5 --> s10: Send payment request
-  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
-  class s0 bugPath
-  class s1 bugPath
-  class s3 bugPath
-  class s6 bugPath
-  class s12 breaks
-  class s12 bugPath
+  s1 --> s2: Relay rejected the submission
+  s1 --> s3: One wallet wins the relay write
+  s1 --> s4: Relay acknowledgement lost
+  s2 --> s1: Prepare payment
+  s3 --> s5: Save the accepted submission on the winning device
+  s3 --> s6: Read the saved submission and check the mint or Continue from the journal after an interruption
+  s4 --> s6: Read the saved submission and check the mint
+  s5 --> s6: Read the saved submission and check the mint or Continue from the journal after an interruption
+  s5 --> s9: Send the prepared payment
+  s6 --> s7: Record the mint result
+  s6 --> s8: Record the mint result
+  s7 --> s8: Record the mint result
+  s8 --> s10: Save the result to the relay
+  s9 --> s6: Read the saved submission and check the mint or Continue from the journal after an interruption
+  s9 --> s7: Record the mint result
+  s9 --> s8: Record the mint result
+  s10 --> s11: Read the saved result
 ~~~
 
 </details>
 
 ## Regenerate
 
-Use the current pstack `/statechart` entry point. Work in a temporary directory and copy in the relevant subsystem folder. Set `STATECHART` to the installed `scripts/statechart` executable, or use the equivalent command in the skill. To reuse local TLC, set `TLA2TOOLS` and `JAVA` as described in [results](results.md).
+Use pstack `/statechart` in a temporary directory. Set `STATECHART` to the installed `scripts/statechart` executable. The [verification report](results.md) describes how to reuse the pinned TLC jar.
 
 | Flow | Module | Config | View |
 |---|---|---|---|
@@ -414,9 +349,9 @@ Use the current pstack `/statechart` entry point. Work in a temporary directory 
 | Reconnect after missing updates | [SnapshotSync.tla](../../verification/snapshot-sync/SnapshotSync.tla) | [SnapshotSync.cfg](../../verification/snapshot-sync/SnapshotSync.cfg) | [view.mjs](../../verification/snapshot-sync/view.mjs) |
 | Back up, restore or remove a wallet | [AuthorityRecovery.tla](../../verification/authority-recovery/AuthorityRecovery.tla) | [AuthorityRecovery.cfg](../../verification/authority-recovery/AuthorityRecovery.cfg) | [view.mjs](../../verification/authority-recovery/view.mjs) |
 | Open the wallet and recover a payment | [BrowserLifecycle.tla](../../verification/browser-lifecycle/BrowserLifecycle.tla) | [BrowserLifecycle.cfg](../../verification/browser-lifecycle/BrowserLifecycle.cfg) | [view.mjs](../../verification/browser-lifecycle/view.mjs) |
-| Two wallets resume the same payment | [OperationJournal.tla](../../verification/operation-journal/OperationJournal.tla) | [OperationJournal.cfg](../../verification/operation-journal/OperationJournal.cfg) | [view.mjs](../../verification/operation-journal/view.mjs) |
+| Two wallets coordinate a payment | [OperationJournal.tla](../../verification/operation-journal/OperationJournal.tla) | [Chart.cfg](../../verification/operation-journal/Chart.cfg) | [view.mjs](../../verification/operation-journal/view.mjs) |
 
-For example, from the repository root:
+From the repository root:
 
 ~~~sh
 scratch=$(mktemp -d)
@@ -425,4 +360,4 @@ cd "$scratch"
 "$STATECHART" Pairing.tla --config Pairing.cfg --view view.mjs --out "$scratch/output"
 ~~~
 
-A counterexample run may exit nonzero and still emit the diagram and report. The figures use Pele 1.9.0. The views collapse steps that do not change a displayed label and suppress wait stutters. The pairing view suppresses repeated close-screen and unrelated-head arrows while retaining both shortest failure paths. The browser view also suppresses camera and service-worker installation, and the journal view collapses redundant writes where the user sees no change; the numbered reports retain intermediate steps needed to follow a counterexample. No timing or eventual progress is inferred from these charts.
+The SVGs use Pele 1.9.0. The views collapse steps that leave the display unchanged. The pairing view shows screen closure at the QR and error checkpoints. The browser view omits camera and service worker installation steps. The charts describe safety within their configured bounds.

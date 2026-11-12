@@ -15,18 +15,18 @@ advance. The model distinguishes a matching ACK, an unrelated relay head
 change, a real import, and a preserved local wallet. TTL is a timeout
 transition; cryptography, camera transport, and clock skew are abstracted.
 
-The funded-wallet guard should pass. The two success rules have independent
-failure paths: the protected-wallet branch still acknowledges, and a changed
-snapshot head alone can show success. See the audit for replay details.
+All three rules should pass. A joiner sends its ACK after the authority
+import succeeds. An unrelated relay head can change while the host waits.
+Host success requires the ACK for that QR session.
 
-Source correspondence (last compared at `a9b401ec6618c969b3d4e3aaeffac785d4aa0617`):
+Source correspondence (last compared at `b3527a383007a989a5d76cea7ca340c1ec7c5292`):
 
 - `wallet/src/sync/automaticPairing.ts`: `AutoPairingHostSession.start`,
-  `AutoPairingJoinSession.start`, `destroy`; completed callback ACKs after
-  the supplied authority callback fulfills, even if it did not import.
-- `wallet/src/pages/settings/SyncSettings.vue`: `createPairing` watches
-  for any changed head, `finishPairing` returns normally on the funded-wallet
-  refusal, `applyPairing` imports and attempts a publish, `showPairingSuccess`.
+  `AutoPairingJoinSession.start`, `destroy`. The import callback returns
+  true for a successful import and false when it preserves an existing wallet.
+- `wallet/src/pages/settings/SyncSettings.vue`: `createPairing` waits for the
+  pairing ACK. `finishPairing` waits for ACK publication before navigating
+  away. `applyPairing` imports and starts the wallet.
 - `wallet/src/sync/syncRuntimeService.ts`: `replaceEmptyAndStartUnlocked`
   refuses different authority when monetary records or counters exist.
 
@@ -34,7 +34,9 @@ Recheck real code: `cd wallet && npm run test:ci -- src/sync/__tests__/automatic
 
 Mutation witness: bypass the funded-wallet check; the runtime test for a different funded authority must fail.
 
-Scratch source guard check: `python3 verification/replays/run.py pairing`.
+Scratch source checks use `python3 verification/replays/run.py pairing`,
+`python3 verification/replays/run.py pairing-ack` and
+`python3 verification/replays/run.py pairing-head`.
 
 For an unexpected counterexample, read the earliest failing step, then map
 the trace to the named source functions and replay it against the code. An

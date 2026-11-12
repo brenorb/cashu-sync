@@ -63,7 +63,7 @@ contains "$wallet_readme" "no peer-to-peer"
 contains "$relay_readme" "operated by Silent Link"
 contains "$wallet_package" '"build:pwa": "quasar build -m pwa"'
 contains "$wallet_package" '"dev": "quasar dev"'
-contains "$sync_page" 'data-pairing-action="create-auto-pair"'
+contains "$sync_page" 'data-pairing-action="open-pairing-screen"'
 contains "$wallet_page" 'data-v0-action="mint-bolt11"'
 contains "$wallet_page" 'data-v0-action="melt-bolt11"'
 contains "$recovery_page" 'data-recovery-action="restore"'

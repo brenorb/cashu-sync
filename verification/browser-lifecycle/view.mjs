@@ -5,8 +5,8 @@ const states = {
   "ready": "Wallet ready",
   "reconnecting": "Reconnecting wallet",
   "recovering": "Recovering previous payment",
-  "error": "Startup needs attention",
-  "false-ready": "Wallet says synchronized while payment is pending"
+  "checking": "Checking wallet sync",
+  "error": "Startup needs attention"
 };
 const steps = {
   "NotConfigured": "No wallet profile",
@@ -15,8 +15,10 @@ const steps = {
   "BootError": "Wallet startup failed",
   "WatchDisconnected": "Relay connection drops",
   "WatchConnected": "Relay socket connects",
+  "CheckStillPending": "Wallet finds an unresolved payment",
+  "CheckSettled": "Wallet confirms the journal is clear",
   "ResumeSettled": "Previous payment resolved",
   "ReloadUpdatedPage": "App update reloads the page"
 };
-export const state = (v) => states[v.s.badge === "synchronized" && v.s.pending ? "false-ready" : ["reconnecting","error"].includes(v.s.badge) ? v.s.badge : v.s.phase];
+export const state = (v) => states[["reconnecting","checking","error"].includes(v.s.badge) ? v.s.badge : v.s.phase];
 export const step = (action) => steps[action] ?? null;

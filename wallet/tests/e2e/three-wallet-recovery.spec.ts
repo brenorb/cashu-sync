@@ -252,6 +252,12 @@ test("three wallets preserve money through races, lost responses, stale history 
   const seenProofSecrets = new Set<string>();
   const unexpectedDestinations = new Set<string>();
   const pageErrors: string[] = [];
+  const snapshotRelayUrl = new URL(
+    process.env.CASHU_SYNC_RELAY_URL || "wss://cashu-sync-relay.fly.dev"
+  );
+  const pairingRelayUrl = new URL(
+    process.env.CASHU_SYNC_PAIRING_RELAY_URL || "wss://cashu-sync-pairing-relay.fly.dev"
+  );
   const checkpoints: {
     stage: string;
     balance: number;
@@ -272,14 +278,13 @@ test("three wallets preserve money through races, lost responses, stale history 
       }
     });
     page.on("websocket", (socket) => {
-      const allowed = [
-        process.env.CASHU_SYNC_RELAY_URL || "wss://cashu-sync-relay.fly.dev",
-        process.env.CASHU_SYNC_PAIRING_RELAY_URL ||
-          "wss://cashu-sync-pairing-relay.fly.dev",
-      ];
-      if (!allowed.includes(socket.url().replace(/\/$/, "")))
-        unexpectedDestinations.add(new URL(socket.url()).origin);
-      if (!socket.url().includes("relay")) return;
+      const endpoint = new URL(socket.url());
+      if (endpoint.href !== snapshotRelayUrl.href) {
+        if (endpoint.href !== pairingRelayUrl.href) {
+          unexpectedDestinations.add(endpoint.origin);
+        }
+        return;
+      }
       socket.on("framesent", ({ payload }) => frames.push(String(payload)));
     });
     page.setDefaultTimeout(30_000);

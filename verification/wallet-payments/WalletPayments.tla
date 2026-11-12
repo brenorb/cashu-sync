@@ -32,13 +32,17 @@ RecordPaid == /\ phase \in {"settling","recovery"} /\ phase' = "final"
 RecordUnpaid == /\ phase \in {"settling","recovery"} /\ kind = "spend"
                 /\ phase' = "final" /\ result' = "completed" /\ payment' = "unpaid"
                 /\ UNCHANGED <<kind,localQuote>>
-DisplaySuccess == /\ phase = "final" /\ result = "completed" /\ phase' = "success"
-                  /\ UNCHANGED <<kind,result,localQuote,payment>>
+DisplaySuccess == /\ phase = "final" /\ result = "completed" /\ payment = "paid"
+                  /\ phase' = "success" /\ UNCHANGED <<kind,result,localQuote,payment>>
+DisplayUnpaid == /\ phase = "final" /\ kind = "spend" /\ payment = "unpaid"
+                 /\ phase' = "unpaid" /\ UNCHANGED <<kind,result,localQuote,payment>>
+RetrySpend == /\ phase = "unpaid" /\ phase' = "quote"
+              /\ UNCHANGED <<kind,result,localQuote,payment>>
 Done == UNCHANGED vars
 Next == EnterAmount \/ RequestQuote \/ QuoteError \/ StoreQuote \/ RejectQuote
         \/ AmbiguousQuote \/ ShowQuote \/ InvoicePaid \/ Confirm \/ WaitForRecovery
-        \/ FinishOtherQuote \/ RecordPaid \/ RecordUnpaid \/ DisplaySuccess \/ Done
-QuoteBackedByLocalRecord == phase \in {"quote","claimable","settling","recovery","final","success"} => localQuote
+        \/ FinishOtherQuote \/ RecordPaid \/ RecordUnpaid \/ DisplaySuccess \/ DisplayUnpaid \/ RetrySpend \/ Done
+QuoteBackedByLocalRecord == phase \in {"quote","claimable","settling","recovery","final","unpaid","success"} => localQuote
 SuccessMeansPaid == phase = "success" => payment = "paid"
 BuyInit == Init /\ kind = "buy"
 SpendInit == Init /\ kind = "spend"

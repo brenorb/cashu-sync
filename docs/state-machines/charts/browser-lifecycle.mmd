@@ -2,41 +2,32 @@
 title: "Open the wallet and recover a payment"
 ---
 stateDiagram-v2
-  state "Legend" as legend {
-    lg0: Breaks SynchronizedMeansNoPendingJournal
-    lg1: Path to the SynchronizedMeansNoPendingJournal bug
-  }
-  class lg0 breaks
-  class lg1 bugPath
   s0: Starting synchronized wallet
   s1: Wallet ready
   s2: Startup needs attention
   s3: Recovering previous payment
   s4: Pair or restore this wallet
-  s5: Reconnecting wallet
-  s6: Wallet says synchronized while payment is pending
+  s5: Checking wallet sync
+  s6: Reconnecting wallet
   [*] --> s0
   s0 --> s1: Wallet state is ready
   s0 --> s2: Wallet startup failed
   s0 --> s4: No wallet profile
   s0 --> s3: Find an unfinished payment
-  s1 --> s5: Relay connection drops
+  s1 --> s5: Relay socket connects
+  s1 --> s6: Relay connection drops
   s2 --> s1: Previous payment resolved
   s3 --> s1: Previous payment resolved
-  s3 --> s5: Relay connection drops
-  s3 --> s6: Relay socket connects
-  s5 --> s1: Relay socket connects or Previous payment resolved
+  s3 --> s5: Relay socket connects
+  s3 --> s6: Relay connection drops
+  s5 --> s1: Wallet confirms the journal is clear or Previous payment resolved
+  s5 --> s3: Wallet finds an unresolved payment
+  s5 --> s6: Relay connection drops
+  s6 --> s5: Relay socket connects
   s1 --> s0: App update reloads the page
   s2 --> s0: App update reloads the page
-  s5 --> s6: Relay socket connects
-  s3 --> s0: App update reloads the page
   s6 --> s1: Previous payment resolved
-  s6 --> s5: Relay connection drops
+  s3 --> s0: App update reloads the page
   s4 --> s0: App update reloads the page
   s5 --> s0: App update reloads the page
   s6 --> s0: App update reloads the page
-  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
-  class s0 bugPath
-  class s3 bugPath
-  class s6 breaks
-  class s6 bugPath

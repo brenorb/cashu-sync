@@ -1,35 +1,33 @@
-export const title = "What two devices can do with the same pending payment";
-const states = {
-  "idle": "Wallet ready",
-  "prepared": "Payment prepared",
-  "accepted": "First wallet can send payment",
-  "ambiguous": "Waiting to confirm relay save",
-  "aborted": "Stopped before sending",
-  "both-ready": "Second wallet also allowed to send",
-  "one-post": "One request sent to mint",
-  "two-posts": "Both wallets sent the same request",
-  "recovering": "Recovering the payment",
-  "recorded": "Mint result saved",
-  "pending": "Mint reports payment pending",
-  "final-accepted": "Relay saved the result",
-  "done": "Result recorded on device"
+export const title = "How paired wallets coordinate a payment";
+export const state = (v) => {
+  const phases = Object.values(v.phase);
+  if (v.relay === "final") {
+    return phases.includes("done") ? "Payment result recorded on device" : "Relay saved the result";
+  }
+  if (phases.includes("recorded")) return "Mint result saved locally";
+  if (phases.includes("pending")) return "Mint reports payment pending";
+  if (phases.includes("recovering")) return "A wallet is recovering the payment";
+  if (phases.includes("inflight")) return "Payment request sent";
+  if (phases.includes("can-send")) return "Winning wallet saved its submission locally";
+  if (phases.includes("direct")) return "Relay accepted the submission";
+  if (phases.includes("lost")) return "Waiting to confirm the relay save";
+  if (phases.includes("prepared")) return "Payment prepared";
+  if (phases.includes("aborted")) return "Stopped before sending";
+  return "Wallet ready";
 };
 const steps = {
-  "Prepare": "Prepare payment",
-  "PublishA": "Save payment intent to relay",
-  "ConfirmA": "Confirm previous save",
-  "RejectBeforeSubmit": "Intent rejected or superseded",
-  "ImportPeerPrepared": "Second wallet loads the saved payment",
-  "MarkA": "First wallet records that it will send",
-  "MarkB": "Second wallet records that it will send",
-  "PublishB": "Other wallet resumes and saves the same intent",
-  "PostA": "Send payment request",
-  "PostB": "Send payment request",
-  "LoseResponse": "Payment result unknown after interruption",
-  "RecordResponse": "Record mint result",
-  "KeepPending": "Wait for settlement",
-  "FinalCAS": "Save final result to relay",
-  "ApplyFinal": "Update device from saved result"
+  Prepare: "Prepare payment",
+  LoseCAS: "Another wallet won the relay write",
+  Reject: "Relay rejected the submission",
+  AcceptDirect: "Save the accepted submission on the winning device",
+  ResumeFence: "Read the saved submission and check the mint",
+  Interrupt: "Continue from the journal after an interruption",
+  FirstPost: "Send the prepared payment",
+  ObserveResult: "Record the mint result",
+  FinalCAS: "Save the result to the relay",
+  ApplyFinal: "Read the saved result",
 };
-export const state = (v) => states[v.sent.length > 1 ? "two-posts" : ["inflight","accepted","marked","ambiguous","prepared","idle"].includes(v.a) && v.sent.length === 1 ? "one-post" : ["accepted","marked"].includes(v.b) ? "both-ready" : v.a === "marked" ? "accepted" : v.a];
-export const step = (action) => steps[action] ?? null;
+export const step = (action, from, to) =>
+  action === "Fence" ? (Object.values(to.phase).includes("lost")
+    ? "Relay acknowledgement lost" : "One wallet wins the relay write")
+    : steps[action] ?? null;

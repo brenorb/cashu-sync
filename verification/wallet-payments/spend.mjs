@@ -11,7 +11,7 @@ const states = {
   "paid-final": "Payment confirmed",
   "unpaid-final": "Unpaid, journal cleared",
   "paid-success": "Credits spent and synchronized",
-  "unpaid-success": "Credits spent shown for unpaid invoice"
+  "unpaid": "Invoice unpaid, retry available"
 };
 const steps = {
   "EnterAmount": "Tap Top up or Pay invoice",
@@ -26,7 +26,9 @@ const steps = {
   "FinishOtherQuote": "Another payment settled first",
   "RecordPaid": "Mint confirms payment",
   "RecordUnpaid": "Mint says unpaid and inputs are released",
-  "DisplaySuccess": "Wallet closes the spend dialog"
+  "DisplaySuccess": "Wallet closes the spend dialog",
+  "DisplayUnpaid": "Wallet shows the unpaid invoice",
+  "RetrySpend": "Review the quote again"
 };
 export const state = (v) => states[["final","success"].includes(v.phase) ? v.payment + "-" + v.phase : v.phase];
 export const step = (action) => steps[action] ?? null;

@@ -13,7 +13,11 @@ BootError == /\ s.phase = "starting"
 WatchDisconnected == /\ s.watcher
                      /\ s' = [s EXCEPT !.badge = "reconnecting"]
 WatchConnected == /\ s.watcher
-                  /\ s' = [s EXCEPT !.badge = "synchronized"]
+                  /\ s' = [s EXCEPT !.badge = "checking"]
+CheckStillPending == /\ s.watcher /\ s.badge = "checking"
+                     /\ s' = [s EXCEPT !.phase = "recovering", !.pending = TRUE, !.badge = "recovering"]
+CheckSettled == /\ s.watcher /\ s.badge = "checking" /\ ~s.pending
+                /\ s' = [s EXCEPT !.phase = "ready", !.badge = "synchronized"]
 ResumeSettled == /\ s.phase = "recovering"
                  /\ s' = [s EXCEPT !.phase = "ready", !.pending = FALSE, !.badge = "synchronized", !.watcher = TRUE]
 AskCamera == /\ s.scanner = "closed"
@@ -36,6 +40,8 @@ Next ==
   \/ BootError
   \/ WatchDisconnected
   \/ WatchConnected
+  \/ CheckStillPending
+  \/ CheckSettled
   \/ ResumeSettled
   \/ AskCamera
   \/ AllowCamera
