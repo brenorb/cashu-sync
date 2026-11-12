@@ -256,6 +256,7 @@ import {
   useV0WalletService,
   type MeltQuoteView,
   type MintQuoteView,
+  type WalletSyncStatus,
 } from "src/sync/v0WalletService";
 
 export default defineComponent({
@@ -301,12 +302,9 @@ export default defineComponent({
           if (boot.sync.status === "unconfigured") return;
           this.startWatchingWallet();
         }
-        const result = await useV0WalletService().resume();
-        if (result.status !== "idle" && result.status !== "completed") return;
-        this.walletReady = true;
-        this.recoveryNeeded = false;
-        this.syncPending = false;
-        this.syncMessage = "Wallet synchronized.";
+        const status = await useV0WalletService().resumeForDisplay();
+        this.showSyncResult(status);
+        if (status !== "synchronized") return;
         if (this.mintQuote) {
           const quote = await cashuDb.mintQuotes.get(this.mintQuote.quote);
           if (quote?.state === "ISSUED") {
@@ -324,19 +322,24 @@ export default defineComponent({
     retrySync() {
       void this.resumeAutomatically();
     },
+    showSyncResult(status: WalletSyncStatus) {
+      this.walletReady = status === "synchronized";
+      this.recoveryNeeded = status === "recovery-pending";
+      this.syncPending = false;
+      this.syncMessage = this.walletReady
+        ? "Wallet synchronized."
+        : "Recovering wallet payment…";
+    },
     startWatchingWallet() {
       useV0WalletService().startLiveSync(
-        () => {
-          this.syncMessage = "Wallet synchronized.";
-          this.syncPending = false;
-        },
+        (status) => this.showSyncResult(status),
         (status) => {
           if (status === "disconnected" || status === "connecting") {
             this.syncPending = true;
             this.syncMessage = "Reconnecting wallet…";
           } else {
-            this.syncPending = false;
-            this.syncMessage = "Wallet synchronized.";
+            this.syncPending = true;
+            this.syncMessage = "Checking wallet sync…";
           }
         }
       );
@@ -382,6 +385,9 @@ export default defineComponent({
           this.mintQuote!.quote
         );
         if (result.status !== "completed") {
+          if (result.status === "needs-reconciliation") {
+            this.showSyncResult("recovery-pending");
+          }
           throw new Error(
             "Your payment is still being recovered. The balance will update automatically."
           );
@@ -419,6 +425,9 @@ export default defineComponent({
         const quoteId = this.meltQuote!.quote;
         const result = await useV0WalletService().payMeltQuote(quoteId);
         if (result.status !== "completed" || result.quoteId !== quoteId) {
+          if (result.status === "needs-reconciliation") {
+            this.showSyncResult("recovery-pending");
+          }
           throw new Error(
             "Your spend is still being recovered. Keep this window open and try again shortly."
           );
@@ -476,19 +485,12 @@ export default defineComponent({
         this.syncMessage = "Pair or restore this wallet to enable sync.";
         return;
       }
-      const resumed = await useV0WalletService().resume();
-      this.syncPending = false;
-      this.syncMessage =
-        resumed.status === "idle"
-          ? "Wallet synchronized."
-          : `Recovery status: ${resumed.status}`;
-      this.walletReady =
-        resumed.status === "idle" || resumed.status === "completed";
-      this.recoveryNeeded = !this.walletReady;
+      this.showSyncResult(await useV0WalletService().resumeForDisplay());
       this.visibilityHandler = () => {
         if (document.visibilityState === "visible") {
           void useV0WalletService()
             .syncNow()
+            .then((status) => this.showSyncResult(status))
             .catch((error) => {
               this.syncMessage =
                 error instanceof Error ? error.message : "Sync failed";

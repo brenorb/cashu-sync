@@ -104,15 +104,25 @@ it.each(["UNPAID", "PAID"] as const)(
   }
 );
 
-it("audit: watch connection says synchronized while wallet recovery is unresolved", () => {
+it("audit: connecting and checking a pending journal never say synchronized", () => {
+  let reportResult!: (value: service.WalletSyncStatus) => void;
   const useService = vi.spyOn(service, "useV0WalletService").mockReturnValue({
-    startLiveSync: (_synced: () => void, status: (value: string) => void) => status("connected"),
+    startLiveSync: (result: typeof reportResult, status: (value: string) => void) => {
+      reportResult = result;
+      status("connected");
+    },
   } as never);
-  const context = { walletReady: false, recoveryNeeded: true, syncPending: true, syncMessage: "" };
+  const context = { walletReady: false, recoveryNeeded: true, syncPending: true,
+    syncMessage: "Recovering wallet payment…", showSyncResult: WalletPage.methods!.showSyncResult };
   try {
     WalletPage.methods!.startWatchingWallet.call(context as never);
+    expect(context.syncMessage).toBe("Checking wallet sync…");
     expect(context.recoveryNeeded).toBe(true);
+    reportResult("recovery-pending");
     expect(context.walletReady).toBe(false);
+    expect(context.syncMessage).toBe("Recovering wallet payment…");
+    reportResult("synchronized");
+    expect(context.walletReady).toBe(true);
     expect(context.syncMessage).toBe("Wallet synchronized.");
   } finally {
     useService.mockRestore();

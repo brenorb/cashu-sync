@@ -291,6 +291,26 @@ describe("V0WalletService quote fencing", () => {
     expect(activeWallet).not.toHaveBeenCalled();
   });
 
+  it("keeps the recovery status if a journal remains after resume", async () => {
+    const resume = vi
+      .spyOn(SyncOperationCoordinator.prototype, "resume")
+      .mockResolvedValue({ status: "idle" });
+    const service = new V0WalletService(runtimeService as never, {
+      activeWallet: vi.fn(),
+      getKeyset: () => "00c0ffee",
+    });
+
+    try {
+      session.repository.exportSnapshot.mockResolvedValueOnce({
+        pending_operation: { phase: "prepared", type: "mint" },
+      });
+      await expect(service.resumeForDisplay()).resolves.toBe("recovery-pending");
+      await expect(service.resumeForDisplay()).resolves.toBe("synchronized");
+    } finally {
+      resume.mockRestore();
+    }
+  });
+
   it("resumes a pending operation instead of creating a second mint", async () => {
     session.repository.exportSnapshot.mockResolvedValue({
       pending_operation: { phase: "submitted", type: "mint" },

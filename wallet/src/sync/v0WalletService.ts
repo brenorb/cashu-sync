@@ -43,6 +43,8 @@ class WalletConflictError extends Error {
   }
 }
 
+export type WalletSyncStatus = "synchronized" | "recovery-pending";
+
 export type MintQuoteView = {
   quote: string;
   request: string;
@@ -78,7 +80,7 @@ export class V0WalletService {
   private wallet: Wallet | null = null;
   private queue: Promise<void> = Promise.resolve();
   private liveSyncStop: (() => void) | null = null;
-  private syncInFlight: Promise<void> | null = null;
+  private syncInFlight: Promise<WalletSyncStatus> | null = null;
 
   constructor(
     private readonly runtimeService: SyncRuntimeService,
@@ -110,7 +112,7 @@ export class V0WalletService {
     });
   }
 
-  syncNow(): Promise<void> {
+  syncNow(): Promise<WalletSyncStatus> {
     if (this.syncInFlight !== null) return this.syncInFlight;
     const sync = this.serialize(() => this.syncNowUnlocked());
     this.syncInFlight = sync;
@@ -148,14 +150,14 @@ export class V0WalletService {
   }
 
   startLiveSync(
-    onSynced?: () => void,
+    onSyncResult?: (status: WalletSyncStatus) => void,
     onStatus?: (status: RelayWatchStatus) => void
   ): void {
     this.stopLiveSync();
     const session = this.requireSession();
     this.liveSyncStop = session.sync.watchCurrent(() => {
       void this.syncNow()
-        .then(() => onSynced?.())
+        .then((status) => onSyncResult?.(status))
         .catch(() => {
           // REST/visibility sync remains the fallback when the relay is busy.
         });
@@ -167,7 +169,7 @@ export class V0WalletService {
     this.liveSyncStop = null;
   }
 
-  private async syncNowUnlocked(): Promise<void> {
+  private async syncNowUnlocked(): Promise<WalletSyncStatus> {
     const session = this.requireSession();
     const pending = (await session.repository.exportSnapshot())
       .pending_operation;
@@ -181,10 +183,16 @@ export class V0WalletService {
       if (outcome.status === "idle" || outcome.status === "completed") {
         await this.recoverPaidMintQuotes();
       }
-      return;
+    } else {
+      await this.refreshAfterRemoteChange();
+      await this.recoverPaidMintQuotes();
     }
-    await this.refreshAfterRemoteChange();
-    await this.recoverPaidMintQuotes();
+    return this.journalSyncStatus(session);
+  }
+
+  private async journalSyncStatus(session: RuntimeSession): Promise<WalletSyncStatus> {
+    const snapshot = await session.repository.exportSnapshot();
+    return snapshot.pending_operation === null ? "synchronized" : "recovery-pending";
   }
 
   requestMintQuote(amount: number): Promise<MintQuoteView> {
@@ -477,6 +485,16 @@ export class V0WalletService {
 
   resume(): Promise<SyncOperationOutcome> {
     return this.serialize(() => this.resumeUnlocked());
+  }
+
+  resumeForDisplay(): Promise<WalletSyncStatus> {
+    return this.serialize(async () => {
+      const result = await this.resumeUnlocked();
+      if (result.status !== "idle" && result.status !== "completed") {
+        return "recovery-pending";
+      }
+      return this.journalSyncStatus(this.requireSession());
+    });
   }
 
   private async resumeUnlocked(): Promise<SyncOperationOutcome> {
