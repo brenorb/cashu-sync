@@ -1,0 +1,59 @@
+---
+title: "What two devices can do with the same pending payment"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Breaks OneInitialPostPerOperation
+    lg1: Path to the OneInitialPostPerOperation bug
+  }
+  class lg0 breaks
+  class lg1 bugPath
+  s0: Wallet ready
+  s1: Payment prepared
+  s2: Stopped before sending
+  s3: First wallet can send payment
+  s4: Waiting to confirm relay save
+  s5: Second wallet also allowed to send
+  s6: One request sent to mint
+  s7: Recovering the payment
+  s8: Mint result saved
+  s9: Relay saved the result
+  s10: Mint reports payment pending
+  s11: Result recorded on device
+  s12: Both wallets sent the same request
+  [*] --> s0
+  s0 --> s1: Prepare payment
+  s1 --> s2: Intent rejected or superseded
+  s1 --> s3: Save payment intent to relay
+  s1 --> s4: Save payment intent to relay
+  s3 --> s3: Second wallet loads the saved payment or First wallet records that it will send
+  s4 --> s3: Confirm previous save
+  s3 --> s5: Other wallet resumes and saves the same intent
+  s4 --> s5: Other wallet resumes and saves the same intent
+  s3 --> s6: Send payment request
+  s3 --> s7: Payment result unknown after interruption
+  s6 --> s8: Record mint result
+  s6 --> s7: Payment result unknown after interruption
+  s7 --> s8: Record mint result
+  s5 --> s6: Send payment request
+  s6 --> s6: Other wallet resumes and saves the same intent or Second wallet records that it will send
+  s8 --> s9: Save final result to relay
+  s8 --> s10: Wait for settlement
+  s7 --> s5: Other wallet resumes and saves the same intent
+  s9 --> s11: Update device from saved result
+  s6 --> s5: Record mint result or Payment result unknown after interruption
+  s10 --> s8: Record mint result
+  s8 --> s5: Other wallet resumes and saves the same intent
+  s6 --> s12: Send payment request
+  s10 --> s5: Other wallet resumes and saves the same intent
+  s5 --> s7: Send payment request
+  s5 --> s12: Send payment request
+  s5 --> s8: Send payment request
+  s5 --> s10: Send payment request
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 bugPath
+  class s1 bugPath
+  class s3 bugPath
+  class s6 bugPath
+  class s12 breaks
+  class s12 bugPath

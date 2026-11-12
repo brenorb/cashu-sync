@@ -12,9 +12,8 @@ It uses TLC 1.7.4 with Java 11+ and the checked-in config. Set
 
 One device, one current and one candidate identity, two local-data classes,
 a remembered checkpoint bit and an unresolved journal bit. Encryption is
-represented by decrypt success/failure. Each await across LocalStorage and
-Dexie is a potential crash boundary; this model checks guards and caught
-failure rollback, and marks the interruption window separately.
+represented by decrypt success/failure. The model separates reset and import, and checks guards and caught failure
+rollback. It does not prove crash atomicity across localStorage and Dexie.
 
 All configured rules should pass.
 

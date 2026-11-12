@@ -1,0 +1,31 @@
+---
+title: "Buy credits"
+---
+stateDiagram-v2
+  s0: Wallet
+  s1: Enter amount
+  s2: Requesting invoice
+  s3: Saving invoice
+  s4: Lightning invoice
+  s5: Check sync before paying
+  s6: Invoice paid, ready to claim
+  s7: Claiming credits
+  s8: Credits recorded
+  s9: Recovering your purchase
+  s10: Credits bought and synchronized
+  [*] --> s0
+  s0 --> s1: Tap Buy credits
+  s1 --> s2: Request invoice
+  s2 --> s1: Could not request invoice
+  s2 --> s3: Invoice received
+  s3 --> s1: Wallet changed elsewhere
+  s3 --> s4: Invoice ready
+  s3 --> s5: Relay did not confirm the invoice
+  s4 --> s6: Pay the Lightning invoice
+  s6 --> s7: Claim credits or automatic claim
+  s7 --> s6: Another payment settled first
+  s7 --> s8: Mint confirms credit
+  s7 --> s9: Payment status still unknown
+  s8 --> s10: Balance and history updated
+  s9 --> s6: Another payment settled first
+  s9 --> s8: Mint confirms credit

@@ -7,6 +7,7 @@ Cashu Sync lets one user control the same Silent Link wallet from paired PWA ins
 ## Normative v0 documents
 
 - [V0 protocol specification](./spec.md)
+- [State machine inventory, verification results and user flows](./state-machines/README.md)
 - [C1 — System context](./architecture/c1-system-context.md)
 - [C2 — Containers](./architecture/c2-containers.md)
 - [C3 — Wallet synchronization components](./architecture/c3-wallet-sync-components.md)

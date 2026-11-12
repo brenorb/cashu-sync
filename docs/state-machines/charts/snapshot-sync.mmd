@@ -1,0 +1,23 @@
+---
+title: "Reconnect a wallet after missing updates"
+---
+stateDiagram-v2
+  s0: Local wallet opens
+  s1: Looking for changes from other devices
+  s2: Wallet synchronized
+  s3: Local wallet preserved
+  s4: Old relay history gone, checking tokens
+  s5: Mint confirms spendable tokens
+  s6: Saving reconciled wallet
+  s7: Correction retained on this device
+  [*] --> s0
+  s0 --> s1: Open, reconnect or switch back to wallet
+  s1 --> s2: Apply verified wallet state or No newer wallet state
+  s1 --> s3: Cannot safely verify newer state
+  s1 --> s4: Relay no longer retains the full history
+  s3 --> s1: Retry synchronization
+  s4 --> s3: Cannot safely verify newer state
+  s4 --> s5: Keep usable tokens and quarantine pending ones
+  s5 --> s6: Send correction to relay
+  s6 --> s7: Relay could not confirm correction
+  s6 --> s2: Relay confirms correction

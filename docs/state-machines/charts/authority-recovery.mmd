@@ -1,0 +1,34 @@
+---
+title: "Back up, restore or remove this wallet"
+---
+stateDiagram-v2
+  s0: Recovery settings
+  s1: Reading backup
+  s2: Encrypted backup downloaded
+  s3: Checking wallet before removal
+  s4: Checking the configured mint
+  s5: Wallet preserved, action needs attention
+  s6: Fetching wallet state
+  s7: Relay backup confirmed
+  s8: Wallet restored
+  s9: Preparing empty local wallet
+  s10: Wallet removed from this device
+  s11: Resuming the previous payment
+  [*] --> s0
+  s0 --> s1: Choose backup and enter passphrase
+  s0 --> s2: Download with matching passphrases
+  s0 --> s3: Confirm removal from device
+  s1 --> s4: Device is empty
+  s1 --> s5: Cannot decrypt backup or Device already has a different wallet
+  s1 --> s6: Backup belongs to this wallet
+  s2 --> s1: Choose backup and enter passphrase
+  s3 --> s5: Payment pending or backup unconfirmed
+  s3 --> s7: Relay confirms saved wallet
+  s4 --> s5: Mint unavailable or incompatible
+  s4 --> s9: Mint passed the check
+  s5 --> s1: Choose backup and enter passphrase
+  s6 --> s5: Relay restore failed, retry possible
+  s6 --> s8: Start wallet with no remembered backup or Relay snapshot loaded
+  s7 --> s10: Clear device data
+  s6 --> s11: Local payment still needs recovery
+  s9 --> s6: Open wallet from backup
