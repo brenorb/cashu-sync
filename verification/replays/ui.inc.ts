@@ -46,21 +46,18 @@ it("audit: the receiving screen preserves its wallet and withholds the ACK", asy
   }
 });
 
-it("audit: a changed head alone makes the host screen show pairing success", async () => {
+it("audit: a changed head cannot confirm pairing", async () => {
   const host = AutoPairingHostSession.create({
     relayUrl: "ws://127.0.0.1:3335", relay: new MemoryPairingRelay(), hooks,
   });
   const create = vi.spyOn(AutoPairingHostSession, "create").mockReturnValue(host);
-  let changed: ((event: { id: string }) => void) | undefined;
+  const watchCurrent = vi.fn();
   const useRuntime = vi.spyOn(runtime, "useSyncRuntimeService").mockReturnValue({
     runtime: { currentSession: () => ({
       repository: { exportSnapshot: async () => ({ previous_event_id: "before" }) },
-      sync: { watchCurrent: (callback: typeof changed) => { changed = callback; return () => {}; } },
+      sync: { watchCurrent },
     }) },
     exportAuthority: async () => fixture,
-  } as never);
-  const useService = vi.spyOn(service, "useV0WalletService").mockReturnValue({
-    syncNow: async () => {},
   } as never);
   const context = {
     run: async (fn: () => Promise<void>) => fn(),
@@ -70,17 +67,12 @@ it("audit: a changed head alone makes the host screen show pairing success", asy
   };
   try {
     await SyncSettings.methods!.createPairing.call(context as never);
+    expect(watchCurrent).not.toHaveBeenCalled();
     expect(context.showPairingSuccess).not.toHaveBeenCalled();
-    changed!({ id: "before" });
-    expect(context.showPairingSuccess).not.toHaveBeenCalled();
-    changed!({ id: "unrelated-head" });
-    await Promise.resolve();
-    expect(context.showPairingSuccess).toHaveBeenCalledOnce();
   } finally {
     host.destroy();
     create.mockRestore();
     useRuntime.mockRestore();
-    useService.mockRestore();
   }
 });
 

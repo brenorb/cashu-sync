@@ -282,7 +282,6 @@ export default defineComponent({
       message: "",
       pairingSuccess: false,
       walletIdWords: [] as string[],
-      pairingWatchStop: null as (() => void) | null,
       pairingHost: null as AutoPairingHostSession | null,
       pairingJoin: null as AutoPairingJoinSession | null,
       pairingSuccessTimer: null as number | null,
@@ -355,10 +354,8 @@ export default defineComponent({
     async createPairing() {
       await this.run(async () => {
         const runtime = useSyncRuntimeService();
-        const session = runtime.runtime.currentSession();
         const authority = await runtime.exportAuthority();
         if (!this.pairingScreenActive) return;
-        this.stopPairingWatcher();
         this.pairingHost?.destroy();
         this.showPairingQr = false;
         this.pairingHost = AutoPairingHostSession.create({
@@ -381,18 +378,6 @@ export default defineComponent({
             this.message = error.message;
           }
         );
-        if (session !== null) {
-          const baseline = await session.repository.exportSnapshot();
-          if (!this.pairingScreenActive || this.pairingHost === null) return;
-          this.pairingWatchStop = session.sync.watchCurrent((event) => {
-            if (event.id === baseline.previous_event_id) return;
-            this.stopPairingWatcher();
-            void useV0WalletService()
-              .syncNow()
-              .then(() => this.showPairingSuccess())
-              .catch(() => undefined);
-          });
-        }
         this.message = "Pairing QR ready. It expires after three minutes.";
       });
     },
@@ -454,12 +439,8 @@ export default defineComponent({
       } catch {
         recoveryPending = true;
       }
-      const session = runtime.runtime.currentSession();
-      if (session === null) throw new Error("wallet sync did not start");
-      try {
-        await session.sync.publishCurrent();
-      } catch {
-        // Pairing already imported the authenticated remote snapshot.
+      if (runtime.runtime.currentSession() === null) {
+        throw new Error("wallet sync did not start");
       }
       this.configured = true;
       this.incomingPairing = false;
@@ -490,10 +471,6 @@ export default defineComponent({
         }
       }, 2800);
     },
-    stopPairingWatcher() {
-      this.pairingWatchStop?.();
-      this.pairingWatchStop = null;
-    },
     async run(operation: () => Promise<void>) {
       if (this.busy) return;
       this.busy = true;
@@ -512,7 +489,6 @@ export default defineComponent({
   },
   beforeUnmount() {
     this.pairingScreenActive = false;
-    this.stopPairingWatcher();
     this.pairingHost?.destroy();
     this.pairingJoin?.destroy();
     if (this.pairingSuccessTimer !== null) {
